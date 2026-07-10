@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Viking Force - Treinador \u0026 Aluno",
+  "description": "Plataforma de treino e acompanhamento para atletas e treinadores com foco em Powerlifting e controle de RPE.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

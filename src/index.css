@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-viking-display: "Cinzel Decorative", serif;
+  --font-viking-medieval: "MedievalSharp", cursive;
+
+  --color-viking-dark: #1a1210;
+  --color-viking-darker: #0d0908;
+  --color-viking-silver: #c0b7a8;
+  --color-viking-gold: #d4af37;
+  --color-viking-gold-dark: #b8960f;
+  --color-viking-red: #8b0000;
+  --color-immersive-indigo: #6366f1;
+  --color-immersive-violet: #8b5cf6;
+}
+
+/* Custom scrollbars for the application */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0908;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.6);
+}
+
+/* Immersive neon/glass styling effects */
+.glow-immersive {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
+}
+.glow-immersive-hover:hover {
+  box-shadow: 0 0 30px rgba(212, 175, 55, 0.35);
+}
+.glow-gold-hover:hover {
+  box-shadow: 0 0 25px rgba(212, 175, 55, 0.25);
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(26, 18, 16, 0.35);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.12);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(26, 18, 16, 0.5);
+  border-color: rgba(212, 175, 55, 0.25);
+}
+
+/* Animations and helper styles */
+@keyframes pulse-gold {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.animate-pulse-gold {
+  animation: pulse-gold 2s infinite;
+}
+
+
