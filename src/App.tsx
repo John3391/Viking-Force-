@@ -202,16 +202,10 @@ export default function App() {
       setIsRegisterMode(true);
       setIsLoggedIn(false);
       setCurrentUser(null);
-    } else if (storedUser) {
-      const u = JSON.parse(storedUser);
-      setCurrentUser(u);
-      setIsLoggedIn(true);
-    } else if (!isLoggedOut) {
-      // Auto-login as trainer on initial load to start directly on trainer panel
-      const trainerUser: UserType = { name: 'John Vasques', email: TRAINER_EMAIL, role: 'trainer' };
-      setCurrentUser(trainerUser);
-      setIsLoggedIn(true);
-      localStorage.setItem('viking_current_user', JSON.stringify(trainerUser));
+    } else {
+      setIsRegisterMode(false);
+      setIsLoggedIn(false);
+      setCurrentUser(null);
     }
   }, []);
 
