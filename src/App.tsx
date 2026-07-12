@@ -55,10 +55,17 @@ import {
   fetchProgramFromFirebase, 
   saveProgramToFirebase, 
   fetchPlansFromFirebase, 
-  savePlansToFirebase 
+  savePlansToFirebase,
+  auth
 } from './firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
+import WilksScatterChart from './components/WilksScatterChart';
 
 const TRAINER_EMAIL = 'john.vasquesrodrigues@gmail.com';
 const TRAINER_PASSWORD = '3636';
@@ -737,7 +744,7 @@ export default function App() {
   };
 
   // --- ACTIONS ---
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     const email = loginEmail.trim().toLowerCase();
     const password = loginPassword.trim();
@@ -747,66 +754,106 @@ export default function App() {
       return;
     }
 
-    // Trainer validation
-    if (!isRegisterMode) {
-      if (email === TRAINER_EMAIL && password === TRAINER_PASSWORD) {
-        handleLoginSuccess({ name: 'John Vasques', email, role: 'trainer' });
-        return;
-      }
+    try {
+      if (!isRegisterMode) {
+        // Firebase Auth sign-in
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const fbUser = userCredential.user;
 
-      // Existing Athlete Validation
-      const student = studentsData[email];
-      if (student) {
-        handleLoginSuccess({ name: student.name, email, role: 'student' });
+        // Determine if they are trainer or student
+        const isTrainer = email === TRAINER_EMAIL;
+        
+        if (isTrainer) {
+          showToast('Iniciando sincronização com os deuses do ferro...', 'info');
+          // Automatically load all students from Firestore on trainer login
+          try {
+            const remoteStudents = await fetchStudentsFromFirebase();
+            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+              setStudentsData(remoteStudents);
+              localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+            }
+          } catch (fetchErr) {
+            console.error("Error loading students on trainer login:", fetchErr);
+          }
+          
+          handleLoginSuccess({ name: 'John Vasques', email, role: 'trainer' });
+        } else {
+          // If it's a student, let's check if their profile exists in Firestore / local state
+          const student = studentsData[email];
+          if (student) {
+            handleLoginSuccess({ name: student.name, email, role: 'student' });
+          } else {
+            // Fallback: create dynamic profile in Firestore if it doesn't exist
+            const name = email.split('@')[0];
+            const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+            const newStudent: StudentProfile = {
+              name: formattedName,
+              plan: 'Mensal',
+              status: 'Pago',
+              prs: { squat: null, bench: null, deadlift: null },
+              preferredTime: '18:00',
+              sessions: [],
+              age: 25,
+              bodyWeight: 80,
+              gender: 'male'
+            };
+            const updated = { ...studentsData, [email]: newStudent };
+            saveStudentsToDB(updated);
+            handleLoginSuccess({ name: formattedName, email, role: 'student' });
+          }
+        }
       } else {
-        // Fallback simulate login for any new credentials
-        const name = email.split('@')[0];
-        const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+        // Register Mode with Firebase Auth
+        if (!regName.trim()) {
+          showToast('Por favor, informe seu nome de guerreiro!', 'error');
+          return;
+        }
+
+        // 1. Create Firebase Auth user
+        await createUserWithEmailAndPassword(auth, email, password);
+
+        // 2. Create the athlete profile
         const newStudent: StudentProfile = {
-          name: formattedName,
+          name: regName.trim(),
           plan: 'Mensal',
           status: 'Pago',
-          prs: { squat: null, bench: null, deadlift: null },
-          preferredTime: '18:00',
+          prs: {
+            squat: parseFloat(prSquat) || null,
+            bench: parseFloat(prBench) || null,
+            deadlift: parseFloat(prDeadlift) || null,
+          },
+          preferredTime: regPreferredTime || '18:00',
           sessions: [],
-          age: 25,
-          bodyWeight: 80,
-          gender: 'male'
+          age: parseInt(regAge) || 25,
+          bodyWeight: parseFloat(regBodyWeight) || 80,
+          gender: regGender
         };
+
         const updated = { ...studentsData, [email]: newStudent };
         saveStudentsToDB(updated);
-        handleLoginSuccess({ name: formattedName, email, role: 'student' });
+        handleLoginSuccess({ name: regName.trim(), email, role: 'student' });
       }
-    } else {
-      // Register Mode
-      if (!regName.trim()) {
-        showToast('Por favor, informe seu nome de guerreiro!', 'error');
-        return;
+    } catch (error: any) {
+      console.error("Firebase auth error:", error);
+      // Clean and user-friendly error message in Portuguese
+      let errorMsg = 'Erro de autenticação no templo. Verifique suas credenciais.';
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMsg = 'Senha incorreta ou usuário não encontrado.';
+      } else if (error.code === 'auth/user-not-found') {
+        errorMsg = 'Nenhum guerreiro encontrado com este e-mail.';
+      } else if (error.code === 'auth/email-already-in-use') {
+        errorMsg = 'Este e-mail de guerreiro já está em uso.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMsg = 'A senha fornecida é muito fraca (mínimo de 6 caracteres).';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMsg = 'O formato do e-mail inserido é inválido.';
       }
-      
-      const newStudent: StudentProfile = {
-        name: regName.trim(),
-        plan: 'Mensal',
-        status: 'Pago',
-        prs: {
-          squat: parseFloat(prSquat) || null,
-          bench: parseFloat(prBench) || null,
-          deadlift: parseFloat(prDeadlift) || null,
-        },
-        preferredTime: regPreferredTime || '18:00',
-        sessions: [],
-        age: parseInt(regAge) || 25,
-        bodyWeight: parseFloat(regBodyWeight) || 80,
-        gender: regGender
-      };
-
-      const updated = { ...studentsData, [email]: newStudent };
-      saveStudentsToDB(updated);
-      handleLoginSuccess({ name: regName.trim(), email, role: 'student' });
+      showToast(errorMsg, 'error');
     }
   };
 
   const handleLogout = () => {
+    signOut(auth).catch(err => console.warn("Firebase signout warning:", err));
     setIsLoggedIn(false);
     setCurrentUser(null);
     setActiveTab('home');
@@ -2677,6 +2724,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
 
             </div>
+
+            {/* Wilks Efficiency Scatter Chart */}
+            <WilksScatterChart entries={getLeaderboard()} />
 
             {/* List of Athletes Table Panel */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 overflow-hidden shadow-xl backdrop-blur-md">
