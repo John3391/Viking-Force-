@@ -44,6 +44,7 @@ import {
   Award
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import confetti from 'canvas-confetti';
 import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import VolumeChart from './components/VolumeChart';
@@ -123,6 +124,9 @@ export default function App() {
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
+
+  // PR Celebration state (Student)
+  const [prCelebration, setPrCelebration] = useState<{ lifts: string[] } | null>(null);
 
   // Viking Plans configuration
   const [vikingPlans, setVikingPlans] = useState<VikingPlan[]>(() => {
@@ -796,6 +800,54 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
         {pos}º
       </span>
     );
+  };
+
+  const triggerPrConfetti = () => {
+    // 1. Center explosion
+    confetti({
+      particleCount: 150,
+      spread: 85,
+      origin: { y: 0.6 },
+      colors: ['#d4af37', '#e0d3a8', '#ffffff', '#8b0000', '#0a0a0c'],
+    });
+
+    // 2. Left side explosion
+    setTimeout(() => {
+      confetti({
+        particleCount: 80,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.8 },
+        colors: ['#d4af37', '#e0d3a8', '#ffffff'],
+      });
+    }, 150);
+
+    // 3. Right side explosion
+    setTimeout(() => {
+      confetti({
+        particleCount: 80,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.8 },
+        colors: ['#d4af37', '#e0d3a8', '#ffffff'],
+      });
+    }, 300);
+
+    // 4. Continuously generate some falling confetti for excitement
+    const end = Date.now() + 2500;
+    const interval = setInterval(() => {
+      if (Date.now() > end) {
+        clearInterval(interval);
+        return;
+      }
+      confetti({
+        particleCount: 25,
+        startVelocity: 30,
+        spread: 360,
+        origin: { x: Math.random(), y: Math.random() - 0.2 },
+        colors: ['#d4af37', '#e0d3a8'],
+      });
+    }, 200);
   };
 
   // --- TRAINER LEVEL LOGIC ---
@@ -2708,6 +2760,20 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             deadlift: d !== oldPrs.deadlift ? oldPrs.deadlift : (activeStudentProfile.prevPrs?.deadlift ?? null),
                           };
 
+                          const improvedLifts: string[] = [];
+                          if (s !== null && s > 0 && (oldPrs.squat === null || s > oldPrs.squat)) {
+                            const diff = oldPrs.squat ? s - oldPrs.squat : 0;
+                            improvedLifts.push(`Agachamento: ${s}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                          }
+                          if (b !== null && b > 0 && (oldPrs.bench === null || b > oldPrs.bench)) {
+                            const diff = oldPrs.bench ? b - oldPrs.bench : 0;
+                            improvedLifts.push(`Supino: ${b}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                          }
+                          if (d !== null && d > 0 && (oldPrs.deadlift === null || d > oldPrs.deadlift)) {
+                            const diff = oldPrs.deadlift ? d - oldPrs.deadlift : 0;
+                            improvedLifts.push(`Levantamento Terra: ${d}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                          }
+
                           const updatedProfile = {
                             ...activeStudentProfile,
                             prs: { squat: s, bench: b, deadlift: d },
@@ -2719,7 +2785,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           };
                           saveStudentsToDB({ ...studentsData, [currentUser!.email]: updatedProfile });
                           setDrawerOpen(false);
-                          showToast('Seu perfil de Guerreiro foi atualizado com sucesso!', 'success');
+                          
+                          if (improvedLifts.length > 0) {
+                            triggerPrConfetti();
+                            setPrCelebration({ lifts: improvedLifts });
+                            showToast('¡NOVO RECORDE PESSOAL REGISTRADO! Os deuses do ferro celebram!', 'success');
+                          } else {
+                            showToast('Seu perfil de Guerreiro foi atualizado com sucesso!', 'success');
+                          }
                         }}
                         className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 mt-4 cursor-pointer"
                       >
@@ -3777,6 +3850,91 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   Confirmar Exclusão
                 </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* PR Celebration Modal */}
+      <AnimatePresence>
+        {prCelebration && (
+          <>
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setPrCelebration(null)}
+              className="fixed inset-0 bg-black/90 backdrop-blur-md z-70 flex items-center justify-center p-4"
+            />
+            
+            {/* Modal */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.8, x: '-50%', y: '-48%' }}
+              animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+              exit={{ opacity: 0, scale: 0.8, x: '-50%', y: '-48%' }}
+              transition={{ type: 'spring', damping: 15, stiffness: 200 }}
+              className="fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md bg-gradient-to-b from-[#1c1411] to-[#0a0605] border-2 border-viking-gold rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.35),inset_0_0_25px_rgba(0,0,0,0.95)] backdrop-blur-2xl z-70 p-7 text-[#e0d3a8] text-center overflow-hidden"
+            >
+              {/* Decorative golden corner corners or visual patterns */}
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-viking-gold/40 rounded-tl-xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-viking-gold/40 rounded-tr-xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-viking-gold/40 rounded-bl-xl pointer-events-none" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-viking-gold/40 rounded-br-xl pointer-events-none" />
+
+              <div className="relative z-10">
+                {/* Crown / Trophy Celebration Icon */}
+                <div className="w-20 h-20 bg-viking-gold/15 border-2 border-viking-gold/40 text-viking-gold rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse shadow-[0_0_20px_rgba(212,175,55,0.15)]">
+                  <Crown className="w-10 h-10 animate-bounce" />
+                </div>
+                
+                <h3 className="font-viking-display text-xl sm:text-2xl font-black tracking-widest text-viking-gold mb-1 uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  RECORDE ATINGIDO!
+                </h3>
+                
+                <p className="text-[10px] sm:text-xs font-bold text-viking-silver/80 uppercase tracking-widest font-viking-medieval mb-6">
+                  ⚔️ Os deuses do ferro testemunharam sua força! ⚔️
+                </p>
+
+                <div className="p-4 rounded-2xl bg-black/50 border border-viking-gold/25 shadow-inner space-y-3.5 mb-7 max-w-sm mx-auto">
+                  <p className="text-[11px] font-bold text-viking-silver uppercase tracking-wider text-left border-b border-viking-gold/15 pb-1.5 flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-viking-gold" /> Novas Cargas Registradas:
+                  </p>
+                  <div className="space-y-2">
+                    {prCelebration.lifts.map((lift, idx) => (
+                      <motion.div 
+                        key={idx}
+                        initial={{ opacity: 0, x: -15 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15 + idx * 0.15 }}
+                        className="flex items-center gap-2.5 text-xs font-black text-white bg-viking-gold/5 border border-viking-gold/10 px-3 py-2.5 rounded-xl shadow-sm"
+                      >
+                        <Flame className="w-4 h-4 text-viking-gold shrink-0 animate-pulse" />
+                        <span className="flex-1 text-left text-[#e0d3a8]">{lift}</span>
+                        <span className="text-[10px] uppercase font-black tracking-wider bg-viking-gold text-viking-dark px-1.5 py-0.5 rounded-md">PR!</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-w-sm mx-auto">
+                  <button
+                    onClick={() => {
+                      triggerPrConfetti();
+                    }}
+                    className="w-full py-3 rounded-xl bg-[#140e0c] border border-viking-gold/30 hover:border-viking-gold hover:bg-viking-gold/5 text-viking-gold font-extrabold text-xs uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 animate-pulse"
+                  >
+                    💥 Jogar Mais Confetes!
+                  </button>
+                  
+                  <button
+                    onClick={() => setPrCelebration(null)}
+                    className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/25 cursor-pointer"
+                  >
+                    Retornar ao Templo
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>
