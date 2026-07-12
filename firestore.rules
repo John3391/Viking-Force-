@@ -1,8 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // 1. Global Safety Net
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Common helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\+\\.\\@]+$');
+    }
+
+    // 2. Rules for Students collection
+    match /students/{studentEmail} {
+      allow get, create, update, delete: if isSignedIn() && isValidId(studentEmail);
+      allow list: if isSignedIn();
+    }
+
+    // 3. Rules for Config (program & plans)
+    match /config/{configId} {
+      allow read, write: if isSignedIn() && isValidId(configId);
     }
   }
 }

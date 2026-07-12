@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Viking student/athlete training, progress, and messaging profile.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the athlete"
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["Mensal", "Trimestral", "Semestral", "Anual"],
+          "description": "Active billing or subscription tier"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pago", "Pendente", "Atrasado"],
+          "description": "Current payment status"
+        },
+        "prs": {
+          "type": "object",
+          "description": "Personal records in Squat, Bench, and Deadlift"
+        },
+        "preferredTime": {
+          "type": "string",
+          "description": "Preferred training hours"
+        },
+        "prevPrs": {
+          "type": "object",
+          "description": "Previous personal records for evolution comparison"
+        },
+        "chatHistory": {
+          "type": "array",
+          "description": "Asynchronous chat message history between student and trainer"
+        },
+        "sessions": {
+          "type": "array",
+          "description": "Historical logged workout sessions"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["male", "female"],
+          "description": "Student gender"
+        },
+        "age": {
+          "type": "number",
+          "description": "Student age"
+        },
+        "bodyWeight": {
+          "type": "number",
+          "description": "Current body weight in kg"
+        }
+      },
+      "required": ["name", "plan", "status"]
+    },
+    "TrainingProgram": {
+      "title": "TrainingProgram",
+      "description": "The master multi-week powerlifting/strength schedule.",
+      "type": "object",
+      "properties": {
+        "weeks": {
+          "type": "object",
+          "description": "Dynamic exercise schedule divided into weeks"
+        }
+      },
+      "required": ["weeks"]
+    },
+    "VikingPlan": {
+      "title": "VikingPlan",
+      "description": "Subscription plans offered by the team.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Plan identifier"
+        },
+        "badge": {
+          "type": "string",
+          "description": "Badge icon/emoji"
+        },
+        "name": {
+          "type": "string",
+          "description": "Viking themed plan name"
+        },
+        "price": {
+          "type": "number",
+          "description": "Pricing value"
+        },
+        "period": {
+          "type": "string",
+          "description": "Billing cadence"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of benefits"
+        }
+      },
+      "required": ["id", "name", "price"]
+    }
+  },
+  "firestore": {
+    "students/{studentEmail}": {
+      "schema": "StudentProfile",
+      "description": "Student profiles storing customized schedules, logs, and communication data."
+    },
+    "config/program": {
+      "schema": "TrainingProgram",
+      "description": "The global training routine shared by recruits."
+    },
+    "config/plans": {
+      "schema": {
+        "$ref": "VikingPlan"
+      },
+      "description": "Global custom commercial subscription options"
+    }
+  }
+}
