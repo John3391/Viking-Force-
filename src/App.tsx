@@ -101,6 +101,7 @@ export default function App() {
   // App core database state
   const [trainingProgram, setTrainingProgram] = useState<TrainingProgram>(DEFAULT_PROGRAM);
   const [studentsData, setStudentsData] = useState<Record<string, StudentProfile>>(DEFAULT_STUDENTS);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
 
   // Active UI Navigation state
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -222,6 +223,7 @@ export default function App() {
 
     // 2. Cloud Sync: Fetch fresh data from Firebase Firestore
     async function loadFirebaseData() {
+      let syncSuccess = true;
       try {
         const remoteStudents = await fetchStudentsFromFirebase();
         if (remoteStudents && Object.keys(remoteStudents).length > 0) {
@@ -230,6 +232,7 @@ export default function App() {
         }
       } catch (e) {
         console.warn("Using offline storage for athletes:", e);
+        syncSuccess = false;
       }
 
       try {
@@ -240,6 +243,7 @@ export default function App() {
         }
       } catch (e) {
         console.warn("Using offline storage for training program:", e);
+        syncSuccess = false;
       }
 
       try {
@@ -250,11 +254,58 @@ export default function App() {
         }
       } catch (e) {
         console.warn("Using offline storage for plans:", e);
+        syncSuccess = false;
       }
+
+      setIsOnline(syncSuccess);
     }
 
     loadFirebaseData();
   }, []);
+
+  const handleManualSync = async () => {
+    showToast('Iniciando sincronização com o Templo...', 'info');
+    let syncSuccess = true;
+    try {
+      const remoteStudents = await fetchStudentsFromFirebase();
+      if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+        setStudentsData(remoteStudents);
+        localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+      }
+    } catch (e) {
+      console.warn("Using offline storage for athletes:", e);
+      syncSuccess = false;
+    }
+
+    try {
+      const remoteProgram = await fetchProgramFromFirebase();
+      if (remoteProgram) {
+        setTrainingProgram(remoteProgram);
+        localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+      }
+    } catch (e) {
+      console.warn("Using offline storage for training program:", e);
+      syncSuccess = false;
+    }
+
+    try {
+      const remotePlans = await fetchPlansFromFirebase();
+      if (remotePlans && remotePlans.length > 0) {
+        setVikingPlans(remotePlans);
+        localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+      }
+    } catch (e) {
+      console.warn("Using offline storage for plans:", e);
+      syncSuccess = false;
+    }
+
+    setIsOnline(syncSuccess);
+    if (syncSuccess) {
+      showToast('Dados sincronizados com a nuvem com sucesso!', 'success');
+    } else {
+      showToast('Falha ao conectar ao servidor. Mantendo dados locais.', 'error');
+    }
+  };
 
   const saveProgramToDB = (newProg: TrainingProgram) => {
     setTrainingProgram(newProg);
@@ -1433,6 +1484,20 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           <div className="flex items-center gap-3">
             {isLoggedIn ? (
               <>
+                {/* Sync status button */}
+                <button
+                  onClick={handleManualSync}
+                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                    isOnline 
+                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
+                      : 'border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 animate-pulse'
+                  }`}
+                  title={isOnline ? "Sincronizado com a Nuvem (Firebase). Clique para sincronizar." : "Usando armazenamento local. Clique para tentar conectar ao Firebase."}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span>{isOnline ? 'Modo Online' : 'Modo Offline'}</span>
+                </button>
+
                 <div className="hidden sm:flex items-center gap-3 bg-viking-dark py-1.5 pl-3 pr-4 rounded-xl border border-viking-gold/20">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-viking-gold-dark to-viking-gold p-[2px] shadow-[0_0_10px_rgba(212,175,55,0.2)]">
                     <div className="w-full h-full rounded-full bg-viking-darker flex items-center justify-center">
@@ -1472,9 +1537,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </button>
               </>
             ) : (
-              <div className="text-xs text-viking-gold font-viking-medieval border border-viking-gold/20 px-3.5 py-1.5 rounded-xl bg-viking-gold/5 backdrop-blur-md">
-                🛡️ MODO OFFLINE SEGURO
-              </div>
+              <button
+                onClick={handleManualSync}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-viking-medieval transition-all cursor-pointer text-xs shadow-sm ${
+                  isOnline 
+                    ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10' 
+                    : 'border-amber-500/20 bg-amber-500/5 text-amber-400 hover:bg-amber-500/10 animate-pulse'
+                }`}
+                title={isOnline ? "Sincronizado com a Nuvem (Firebase). Clique para sincronizar." : "Usando armazenamento local. Clique para tentar conectar ao Firebase."}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span>{isOnline ? '🛡️ MODO ONLINE ATIVO' : '🛡️ MODO OFFLINE SEGURO'}</span>
+              </button>
             )}
           </div>
 
