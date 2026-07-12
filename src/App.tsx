@@ -41,12 +41,22 @@ import {
   Video,
   Youtube,
   Crown,
-  Award
+  Award,
+  Sparkles
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
 import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
+import { 
+  fetchStudentsFromFirebase, 
+  saveStudentToFirebase, 
+  deleteStudentFromFirebase, 
+  fetchProgramFromFirebase, 
+  saveProgramToFirebase, 
+  fetchPlansFromFirebase, 
+  savePlansToFirebase 
+} from './firebase';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
 
@@ -94,6 +104,8 @@ export default function App() {
 
   // Active UI Navigation state
   const [activeTab, setActiveTab] = useState<string>('home');
+  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks'>('overview');
+  const [wilksRatios, setWilksRatios] = useState({ squat: 38, bench: 24, deadlift: 38 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   
   // Reuseable Drawer state
@@ -180,14 +192,14 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('viking_plans', JSON.stringify(vikingPlans));
+    savePlansToFirebase(vikingPlans).catch(err => console.error("Firebase save plans error:", err));
   }, [vikingPlans]);
 
-  // --- LOCALSTORAGE SYNC ---
+  // --- LOCALSTORAGE & FIREBASE SYNC ---
   useEffect(() => {
+    // 1. Offline-First: Load local data instantly
     const storedProgram = localStorage.getItem('viking_program');
     const storedStudents = localStorage.getItem('viking_students');
-    const storedUser = localStorage.getItem('viking_current_user');
-    const isLoggedOut = localStorage.getItem('viking_logged_out');
 
     if (storedProgram) setTrainingProgram(JSON.parse(storedProgram));
     if (storedStudents) setStudentsData(JSON.parse(storedStudents));
@@ -207,16 +219,73 @@ export default function App() {
       setIsLoggedIn(false);
       setCurrentUser(null);
     }
+
+    // 2. Cloud Sync: Fetch fresh data from Firebase Firestore
+    async function loadFirebaseData() {
+      try {
+        const remoteStudents = await fetchStudentsFromFirebase();
+        if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+          setStudentsData(remoteStudents);
+          localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+        }
+      } catch (e) {
+        console.warn("Using offline storage for athletes:", e);
+      }
+
+      try {
+        const remoteProgram = await fetchProgramFromFirebase();
+        if (remoteProgram) {
+          setTrainingProgram(remoteProgram);
+          localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+        }
+      } catch (e) {
+        console.warn("Using offline storage for training program:", e);
+      }
+
+      try {
+        const remotePlans = await fetchPlansFromFirebase();
+        if (remotePlans && remotePlans.length > 0) {
+          setVikingPlans(remotePlans);
+          localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+        }
+      } catch (e) {
+        console.warn("Using offline storage for plans:", e);
+      }
+    }
+
+    loadFirebaseData();
   }, []);
 
   const saveProgramToDB = (newProg: TrainingProgram) => {
     setTrainingProgram(newProg);
     localStorage.setItem('viking_program', JSON.stringify(newProg));
+    saveProgramToFirebase(newProg).catch(err => console.error("Firebase save program error:", err));
   };
 
   const saveStudentsToDB = (newStuds: Record<string, StudentProfile>) => {
+    // Identify modified, added or deleted profiles to minimize Firestore writes
+    const prevStuds = studentsData;
+    
+    // Save state and local storage instantly for fluid UI responsiveness
     setStudentsData(newStuds);
     localStorage.setItem('viking_students', JSON.stringify(newStuds));
+
+    // Async sync to Firestore
+    // Deletion check
+    Object.keys(prevStuds).forEach(email => {
+      if (!newStuds[email]) {
+        deleteStudentFromFirebase(email).catch(err => console.error("Firebase delete athlete error:", err));
+      }
+    });
+
+    // Modification / addition check
+    Object.keys(newStuds).forEach(email => {
+      const oldVal = prevStuds[email];
+      const newVal = newStuds[email];
+      if (!oldVal || JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        saveStudentToFirebase(email, newVal).catch(err => console.error("Firebase save athlete error:", err));
+      }
+    });
   };
 
   const handleLoginSuccess = (user: UserType) => {
@@ -407,6 +476,212 @@ export default function App() {
     } catch (err) {
       console.error(err);
       showToast('Erro ao exportar PDF. Tente novamente.', 'error');
+    }
+  };
+
+  const handleExportWilksPDF = (
+    profile: StudentProfile,
+    currentWilks: number,
+    bw: number,
+    gender: 'male' | 'female',
+    totalSBD: number,
+    s: number,
+    b: number,
+    d: number
+  ) => {
+    try {
+      const doc = new jsPDF();
+      
+      // Header Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(197, 160, 89); // Viking gold
+      doc.text('VIKING FORCE', 20, 25);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      doc.text('METAS DE DESEMPENHO E EVOLUÇÃO DE WILKS', 20, 33);
+      
+      // Horizontal separator line
+      doc.setDrawColor(197, 160, 89);
+      doc.setLineWidth(0.5);
+      doc.line(20, 38, 190, 38);
+      
+      // Personal Details & Current status
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(60, 60, 60);
+      doc.text('Guerreiro(a):', 20, 48);
+      doc.setFont('helvetica', 'normal');
+      doc.text(profile.name, 45, 48);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('Peso Corporal:', 20, 54);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${bw.toFixed(1)} kg (${gender === 'female' ? 'Feminino ♀' : 'Masculino ♂'})`, 48, 54);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('Data de Emissão:', 120, 48);
+      doc.setFont('helvetica', 'normal');
+      doc.text(new Date().toLocaleDateString('pt-BR'), 153, 48);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Pontuação Wilks:', 120, 54);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(197, 160, 89);
+      doc.text(`${currentWilks.toFixed(1)} pts`, 153, 54);
+
+      // Current Marks
+      doc.setDrawColor(220, 220, 220);
+      doc.line(20, 62, 190, 62);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(197, 160, 89);
+      doc.text('MARCAS E PRs ATUAIS', 20, 70);
+
+      // Box for Current Marks
+      doc.setFillColor(248, 246, 240); // light warm background
+      doc.rect(20, 74, 170, 20, 'F');
+      doc.setDrawColor(197, 160, 89);
+      doc.rect(20, 74, 170, 20, 'D');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(110, 110, 110);
+      doc.text('AGACHAMENTO', 25, 81);
+      doc.text('SUPINO RETO', 68, 81);
+      doc.text('LEV. TERRA', 110, 81);
+      doc.text('TOTAL SBD', 150, 81);
+
+      doc.setFontSize(11);
+      doc.setTextColor(30, 30, 30);
+      doc.text(`${s} kg`, 25, 89);
+      doc.text(`${b} kg`, 68, 89);
+      doc.text(`${d} kg`, 110, 89);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${totalSBD} kg`, 150, 89);
+
+      // Goal Matrix Section
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(197, 160, 89);
+      doc.text('MATRIZ DE METAS E PROJEÇÃO DE PROGRESSÃO', 20, 108);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Divisão de Carga Alvo Selecionada: Agachamento (${wilksRatios.squat}%) | Supino (${wilksRatios.bench}%) | Levantamento Terra (${wilksRatios.deadlift}%)`, 20, 113);
+
+      doc.setDrawColor(220, 220, 220);
+      doc.line(20, 116, 190, 116);
+
+      // Draw Goals Table Header
+      let y = 122;
+      doc.setFillColor(20, 14, 12); // Dark charcoal background
+      doc.rect(20, y, 170, 8, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(197, 160, 89); // gold text
+      doc.text('PATENTE / NÍVEL', 23, y + 5.5);
+      doc.text('WILKS', 67, y + 5.5);
+      doc.text('TOTAL', 82, y + 5.5);
+      doc.text('AGACHAMENTO', 101, y + 5.5);
+      doc.text('SUPINO RETO', 131, y + 5.5);
+      doc.text('LEV. TERRA', 158, y + 5.5);
+
+      const levels = [
+        { name: 'Recruta Viking', target: 150, badge: '🛡️' },
+        { name: 'Guerreiro do Clã', target: 250, badge: '⚔️' },
+        { name: 'Berserker do Norte', target: 325, badge: '🔥' },
+        { name: 'Guerreiro de Valhalla', target: 400, badge: '⚡' },
+        { name: 'Semideus / Jarl', target: 475, badge: '👑' },
+      ];
+
+      y += 8;
+      levels.forEach((lvl, idx) => {
+        const targetTotal = calculateTotalForWilks(lvl.target, bw, gender);
+        const tSquat = Math.round((targetTotal * wilksRatios.squat) / 100);
+        const tBench = Math.round((targetTotal * wilksRatios.bench) / 100);
+        const tDeadlift = Math.round((targetTotal * wilksRatios.deadlift) / 100);
+        
+        const isUnlocked = currentWilks >= lvl.target;
+
+        // Striped background rows
+        if (isUnlocked) {
+          doc.setFillColor(235, 245, 235); // light green for achieved
+        } else if (idx % 2 === 0) {
+          doc.setFillColor(248, 248, 248); // off-white
+        } else {
+          doc.setFillColor(255, 255, 255); // white
+        }
+        doc.rect(20, y, 170, 12, 'F');
+        doc.setDrawColor(230, 230, 230);
+        doc.line(20, y + 12, 190, y + 12);
+
+        // Render values
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(30, 30, 30);
+        doc.text(`${lvl.badge} ${lvl.name}`, 23, y + 7.5);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${lvl.target}`, 67, y + 7.5);
+        doc.text(`${targetTotal} kg`, 82, y + 7.5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        
+        // Squat with diff
+        const squatDiff = tSquat - s;
+        const squatText = `${tSquat} kg (${squatDiff <= 0 ? '✓ Ok' : `+${squatDiff}kg`})`;
+        if (squatDiff <= 0) doc.setTextColor(34, 139, 34); // ForestGreen
+        else doc.setTextColor(100, 100, 100);
+        doc.text(squatText, 101, y + 7.5);
+
+        // Bench with diff
+        const benchDiff = tBench - b;
+        const benchText = `${tBench} kg (${benchDiff <= 0 ? '✓ Ok' : `+${benchDiff}kg`})`;
+        if (benchDiff <= 0) doc.setTextColor(34, 139, 34);
+        else doc.setTextColor(100, 100, 100);
+        doc.text(benchText, 131, y + 7.5);
+
+        // Deadlift with diff
+        const deadliftDiff = tDeadlift - d;
+        const deadliftText = `${tDeadlift} kg (${deadliftDiff <= 0 ? '✓ Ok' : `+${deadliftDiff}kg`})`;
+        if (deadliftDiff <= 0) doc.setTextColor(34, 139, 34);
+        else doc.setTextColor(100, 100, 100);
+        doc.text(deadliftText, 158, y + 7.5);
+
+        y += 12;
+      });
+
+      // Legend & Motivational Footer
+      y += 10;
+      doc.setFillColor(245, 240, 230);
+      doc.rect(20, y, 170, 22, 'F');
+      doc.setDrawColor(197, 160, 89);
+      doc.rect(20, y, 170, 22, 'D');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 90, 40);
+      doc.text('ESTRATÉGIA VIKING PARA EVOLUÇÃO', 25, y + 6);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(80, 80, 80);
+      const adviceText = 'Calibre seus treinos focando no levantamento com maior margem de evolucao. Busque alcancar cada meta de Wilks para subir na classificacao do clã. Os deuses do ferro recompensam a sabedoria e a persistencia!';
+      const splitAdvice = doc.splitTextToSize(adviceText, 160);
+      doc.text(splitAdvice, 25, y + 11);
+
+      const fileName = `metas_wilks_${profile.name.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      doc.save(fileName);
+      showToast('Tabela de metas exportada em PDF com sucesso!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao exportar metas em PDF.', 'error');
     }
   };
 
@@ -656,6 +931,31 @@ export default function App() {
     if (denom === 0) return 0;
     const coeff = 500 / denom;
     return Math.round(totalSBD * coeff * 10) / 10;
+  };
+
+  const calculateTotalForWilks = (targetW: number, bw: number, gender: 'male' | 'female'): number => {
+    if (!bw) return 0;
+    const x = bw;
+    let a_coeff, b_coeff, c_coeff, d_coeff, e_coeff, f_coeff;
+    if (gender === 'female') {
+      a_coeff = 594.17;
+      b_coeff = -27.23806;
+      c_coeff = 0.821122;
+      d_coeff = -0.009307339;
+      e_coeff = 0.00004731582;
+      f_coeff = -0.00000009054;
+    } else {
+      a_coeff = -216.0475144;
+      b_coeff = 16.2606339;
+      c_coeff = -0.002388645;
+      d_coeff = -0.00113732;
+      e_coeff = 0.00000701863;
+      f_coeff = -0.00000001291;
+    }
+    const denom = a_coeff + b_coeff*x + c_coeff*Math.pow(x, 2) + d_coeff*Math.pow(x, 3) + e_coeff*Math.pow(x, 4) + f_coeff*Math.pow(x, 5);
+    if (denom === 0) return 0;
+    const coeff = 500 / denom;
+    return Math.ceil(targetW / coeff);
   };
 
   const getAgeDivision = (age: number): string => {
@@ -1426,7 +1726,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
             </div>
 
-            {/* SENTINELA VIKING - SIMULATED NOTIFICATION ALERT & CONTROLS */}
+            {/* Sub-Tab Navigation inside Student Profile */}
+            <div className="flex border-b border-viking-gold/15 gap-2 sm:gap-6 bg-[#140e0c]/40 p-1.5 rounded-2xl border border-viking-gold/10">
+              <button 
+                onClick={() => setStudentSubTab('overview')}
+                className={`flex-1 sm:flex-initial py-3 px-5 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  studentSubTab === 'overview' 
+                    ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
+                    : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
+                }`}
+              >
+                ⚔️ Treinos &amp; Progresso
+              </button>
+              <button 
+                onClick={() => setStudentSubTab('wilks')}
+                className={`flex-1 sm:flex-initial py-3 px-5 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  studentSubTab === 'wilks' 
+                    ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
+                    : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
+                }`}
+              >
+                🏆 Metas de Wilks
+              </button>
+            </div>
+
+            {studentSubTab === 'overview' && (
+              <>
+                {/* SENTINELA VIKING - SIMULATED NOTIFICATION ALERT & CONTROLS */}
             {(() => {
               const todayString = new Date().toLocaleDateString('pt-BR');
               const hasTrainedToday = activeStudentProfile.sessions?.some(sess => sess.date === todayString);
@@ -1729,6 +2055,492 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 ))}
               </div>
             </div>
+              </>
+            )}
+
+            {studentSubTab === 'wilks' && (
+              <motion.div 
+                initial={{ opacity: 0, y: 15 }} 
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-6"
+              >
+                {/* 1. Header Card of Current Status */}
+                {(() => {
+                  const bw = activeStudentProfile.bodyWeight || 80.0;
+                  const gender = activeStudentProfile.gender || 'male';
+                  const s = activeStudentProfile.prs.squat || 0;
+                  const b = activeStudentProfile.prs.bench || 0;
+                  const d = activeStudentProfile.prs.deadlift || 0;
+                  const total = s + b + d;
+                  const currentWilks = calculateWilks(gender, bw, total);
+
+                  const WILKS_LEVELS = [
+                    { name: 'Aspirante Viking', targetWilks: 0, minWilks: 0, badge: '🪵', desc: 'Iniciando a jornada nos portões de ferro.', nextMin: 150 },
+                    { name: 'Recruta Viking', targetWilks: 150, minWilks: 150, badge: '🛡️', desc: 'Primeiras conquistas alcançadas no templo.', nextMin: 250 },
+                    { name: 'Guerreiro do Clã', targetWilks: 250, minWilks: 250, badge: '⚔️', desc: 'Força relativa expressiva e respeito na tribo.', nextMin: 325 },
+                    { name: 'Berserker do Norte', targetWilks: 325, minWilks: 325, badge: '🔥', desc: 'Fúria devastadora erguendo grandes pesos.', nextMin: 400 },
+                    { name: 'Guerreiro de Valhalla', targetWilks: 400, minWilks: 400, badge: '⚡', desc: 'Força extraordinária digna dos deuses.', nextMin: 475 },
+                    { name: 'Semideus / Jarl', targetWilks: 475, minWilks: 475, badge: '👑', desc: 'Lenda absoluta no topo da montanha de ferro.', nextMin: 999 },
+                  ];
+
+                  // Determine current tier
+                  let currentTier = WILKS_LEVELS[0];
+                  for (let i = WILKS_LEVELS.length - 1; i >= 0; i--) {
+                    if (currentWilks >= WILKS_LEVELS[i].minWilks) {
+                      currentTier = WILKS_LEVELS[i];
+                      break;
+                    }
+                  }
+
+                  // Determine next tier
+                  const nextTierIdx = WILKS_LEVELS.indexOf(currentTier) + 1;
+                  const nextTier = nextTierIdx < WILKS_LEVELS.length ? WILKS_LEVELS[nextTierIdx] : null;
+
+                  // Progress to next tier
+                  const currentLevelMin = currentTier.minWilks;
+                  const nextLevelMin = nextTier ? nextTier.minWilks : 999;
+                  const progressPct = nextTier 
+                    ? Math.min(100, Math.max(0, ((currentWilks - currentLevelMin) / (nextLevelMin - currentLevelMin)) * 100))
+                    : 100;
+
+                  // Quick function to adjust ratios safely
+                  const handlePreset = (type: string) => {
+                    if (type === 'balanced') setWilksRatios({ squat: 38, bench: 24, deadlift: 38 });
+                    if (type === 'squat') setWilksRatios({ squat: 44, bench: 20, deadlift: 36 });
+                    if (type === 'bench') setWilksRatios({ squat: 34, bench: 32, deadlift: 34 });
+                    if (type === 'deadlift') setWilksRatios({ squat: 34, bench: 18, deadlift: 48 });
+                    showToast(`Proporção ajustada para foco: ${type === 'balanced' ? 'Equilibrado' : type === 'squat' ? 'Agachamento' : type === 'bench' ? 'Supino' : 'Levantamento Terra'}`, 'info');
+                  };
+
+                  const adjustRatioDirectly = (lift: 'squat' | 'bench' | 'deadlift', amount: number) => {
+                    const prev = wilksRatios;
+                    const nextVal = Math.max(10, Math.min(80, prev[lift] + amount));
+                    const diff = nextVal - prev[lift];
+                    
+                    const otherLifts = (['squat', 'bench', 'deadlift'] as const).filter(l => l !== lift);
+                    const splitDiff = diff / 2;
+                    
+                    let other1 = prev[otherLifts[0]] - splitDiff;
+                    let other2 = prev[otherLifts[1]] - splitDiff;
+                    
+                    if (other1 < 10) {
+                      const debt = 10 - other1;
+                      other1 = 10;
+                      other2 -= debt;
+                    }
+                    if (other2 < 10) {
+                      const debt = 10 - other2;
+                      other2 = 10;
+                      other1 -= debt;
+                    }
+                    
+                    const sum = Math.round(nextVal + other1 + other2);
+                    const finalOther2 = other2 + (100 - sum);
+                    
+                    setWilksRatios({
+                      [lift]: Math.round(nextVal),
+                      [otherLifts[0]]: Math.round(other1),
+                      [otherLifts[1]]: Math.round(finalOther2)
+                    } as any);
+                  };
+
+                  // Helper to compute total weight needed for target wilks
+                  const calculateTotalForWilks = (targetW: number): number => {
+                    if (!bw) return 0;
+                    const x = bw;
+                    let a_coeff, b_coeff, c_coeff, d_coeff, e_coeff, f_coeff;
+                    if (gender === 'female') {
+                      a_coeff = 594.17;
+                      b_coeff = -27.23806;
+                      c_coeff = 0.821122;
+                      d_coeff = -0.009307339;
+                      e_coeff = 0.00004731582;
+                      f_coeff = -0.00000009054;
+                    } else {
+                      a_coeff = -216.0475144;
+                      b_coeff = 16.2606339;
+                      c_coeff = -0.002388645;
+                      d_coeff = -0.00113732;
+                      e_coeff = 0.00000701863;
+                      f_coeff = -0.00000001291;
+                    }
+                    const denom = a_coeff + b_coeff*x + c_coeff*Math.pow(x, 2) + d_coeff*Math.pow(x, 3) + e_coeff*Math.pow(x, 4) + f_coeff*Math.pow(x, 5);
+                    if (denom === 0) return 0;
+                    const coeff = 500 / denom;
+                    return Math.ceil(targetW / coeff);
+                  };
+
+                  return (
+                    <>
+                      {/* Performance Tiers Overview */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Left: Level Status Panel */}
+                        <div className="lg:col-span-7 bg-[#1a1210]/90 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md flex flex-col justify-between shadow-xl relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-viking-gold/5 rounded-full blur-3xl pointer-events-none" />
+                          
+                          <div>
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-viking-gold-dark font-viking-medieval block">Sua Classe Atual</span>
+                                <h2 className="text-2xl font-black text-white flex items-center gap-2 mt-1">
+                                  <span className="text-3xl">{currentTier.badge}</span>
+                                  {currentTier.name}
+                                </h2>
+                                <p className="text-xs text-viking-silver/80 italic mt-1 leading-relaxed">
+                                  "{currentTier.desc}"
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-viking-silver/50 block">Coeficiente</span>
+                                <span className="text-3xl font-black text-viking-gold font-viking-display leading-none mt-1 inline-block">
+                                  {currentWilks.toFixed(1)}
+                                </span>
+                                <span className="text-xs text-viking-silver/60 block font-viking-medieval font-bold">Wilks</span>
+                              </div>
+                            </div>
+
+                            {/* Progress bar to next level */}
+                            {nextTier ? (
+                              <div className="mt-6 space-y-2">
+                                <div className="flex justify-between text-xs font-bold uppercase tracking-wider">
+                                  <span className="text-viking-silver/70">Progresso para {nextTier.badge} {nextTier.name}</span>
+                                  <span className="text-viking-gold">{currentWilks.toFixed(1)} / {nextTier.minWilks} Wilks</span>
+                                </div>
+                                <div className="w-full h-3.5 bg-black/50 border border-viking-gold/25 rounded-full overflow-hidden p-[2px]">
+                                  <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${progressPct}%` }}
+                                    transition={{ duration: 1, ease: 'easeOut' }}
+                                    className="h-full bg-gradient-to-r from-viking-gold-dark to-viking-gold rounded-full shadow-[0_0_10px_rgba(212,175,55,0.4)]"
+                                  />
+                                </div>
+                                <p className="text-[10px] text-viking-silver/60 text-right">
+                                  Faltam <strong className="text-white font-bold">{(nextTier.minWilks - currentWilks).toFixed(1)}</strong> pontos Wilks para subir de patente.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="mt-6 p-4 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-center">
+                                <p className="text-xs font-black text-viking-gold uppercase tracking-wider flex items-center justify-center gap-1.5 animate-pulse">
+                                  <Crown className="w-4 h-4" /> VOCÊ ALCANÇOU O TOPO DE VALHALLA!
+                                </p>
+                                <p className="text-[10px] text-viking-silver/80 mt-1">Sua força relativa ultrapassou todos os limites conhecidos de um Semideus.</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-6 pt-4 border-t border-viking-gold/10 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 text-xs">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <span className="text-[9px] text-viking-silver/65 uppercase block">Peso Corporal</span>
+                                <span className="text-sm font-black text-white">{bw.toFixed(1)} kg</span>
+                              </div>
+                              <div className="h-6 w-px bg-viking-gold/15" />
+                              <div>
+                                <span className="text-[9px] text-viking-silver/65 uppercase block">Gênero</span>
+                                <span className="text-sm font-black text-white">{gender === 'male' ? 'Masculino ♂' : 'Feminino ♀'}</span>
+                              </div>
+                              <div className="h-6 w-px bg-viking-gold/15" />
+                              <div>
+                                <span className="text-[9px] text-viking-silver/65 uppercase block">Total Atual PR</span>
+                                <span className="text-sm font-black text-viking-gold">{total} kg</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setDrawerType('settings');
+                                setDrawerTitle('Ajustar Peso & Gênero');
+                                setDrawerOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-viking-gold text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer text-center"
+                            >
+                              ⚙️ Editar Dados
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Right: Ratio Distribution Panel */}
+                        <div className="lg:col-span-5 bg-[#1a1210]/90 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md shadow-xl flex flex-col justify-between">
+                          <div>
+                            <h3 className="font-viking-display text-xs font-black tracking-widest text-viking-gold uppercase border-b border-viking-gold/15 pb-2.5 mb-4 flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-viking-gold shrink-0" />
+                              Distribuição de Carga Alvo
+                            </h3>
+                            <p className="text-[11px] text-viking-silver leading-relaxed mb-4">
+                              Como deseja dividir seu levantamento total? Modifique as frações percentuais para recalcular sua meta individual para cada movimento.
+                            </p>
+
+                            {/* Ratio Sliders/Controls */}
+                            <div className="space-y-4">
+                              {/* Squat Control */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-bold">
+                                  <span className="text-white flex items-center gap-1"><Flame className="w-3.5 h-3.5 text-viking-gold" /> Agachamento</span>
+                                  <span className="text-viking-gold">{wilksRatios.squat}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('squat', -1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >-</button>
+                                  <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden border border-viking-gold/10">
+                                    <div className="h-full bg-viking-gold rounded-full" style={{ width: `${wilksRatios.squat}%` }} />
+                                  </div>
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('squat', 1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >+</button>
+                                </div>
+                              </div>
+
+                              {/* Bench Control */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-bold">
+                                  <span className="text-white flex items-center gap-1"><Award className="w-3.5 h-3.5 text-viking-gold" /> Supino Reto</span>
+                                  <span className="text-viking-gold">{wilksRatios.bench}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('bench', -1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >-</button>
+                                  <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden border border-viking-gold/10">
+                                    <div className="h-full bg-viking-gold rounded-full" style={{ width: `${wilksRatios.bench}%` }} />
+                                  </div>
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('bench', 1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >+</button>
+                                </div>
+                              </div>
+
+                              {/* Deadlift Control */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-bold">
+                                  <span className="text-white flex items-center gap-1"><Dumbbell className="w-3.5 h-3.5 text-viking-gold" /> Levantamento Terra</span>
+                                  <span className="text-viking-gold">{wilksRatios.deadlift}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('deadlift', -1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >-</button>
+                                  <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden border border-viking-gold/10">
+                                    <div className="h-full bg-viking-gold rounded-full" style={{ width: `${wilksRatios.deadlift}%` }} />
+                                  </div>
+                                  <button 
+                                    onClick={() => adjustRatioDirectly('deadlift', 1)}
+                                    className="w-7 h-7 bg-black/60 border border-viking-gold/15 hover:bg-viking-gold/10 hover:border-viking-gold/40 rounded-lg text-viking-gold font-bold flex items-center justify-center cursor-pointer transition-all shrink-0 text-sm"
+                                  >+</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Presets */}
+                          <div className="mt-6 pt-3 border-t border-viking-gold/10 space-y-2">
+                            <span className="text-[9px] uppercase font-bold text-viking-silver/50 block">Combinações Rápidas de Foco</span>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-1.5">
+                              <button 
+                                onClick={() => handlePreset('balanced')}
+                                className="py-1 px-2 rounded-md bg-black/40 hover:bg-viking-gold/15 border border-viking-gold/15 hover:border-viking-gold/35 text-[9px] font-black text-viking-silver hover:text-white transition-all cursor-pointer text-center"
+                              >
+                                ⚖️ Equilibrado (38/24/38)
+                              </button>
+                              <button 
+                                onClick={() => handlePreset('squat')}
+                                className="py-1 px-2 rounded-md bg-black/40 hover:bg-viking-gold/15 border border-viking-gold/15 hover:border-viking-gold/35 text-[9px] font-black text-viking-silver hover:text-white transition-all cursor-pointer text-center"
+                              >
+                                🦵 Agachador (44/20/36)
+                              </button>
+                              <button 
+                                onClick={() => handlePreset('bench')}
+                                className="py-1 px-2 rounded-md bg-black/40 hover:bg-viking-gold/15 border border-viking-gold/15 hover:border-viking-gold/35 text-[9px] font-black text-viking-silver hover:text-white transition-all cursor-pointer text-center"
+                              >
+                                💪 Supinador (34/32/34)
+                              </button>
+                              <button 
+                                onClick={() => handlePreset('deadlift')}
+                                className="py-1 px-2 rounded-md bg-black/40 hover:bg-viking-gold/15 border border-viking-gold/15 hover:border-viking-gold/35 text-[9px] font-black text-viking-silver hover:text-white transition-all cursor-pointer text-center"
+                              >
+                                🌋 Levantador (34/18/48)
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2. Interactive Wilks Goals Table */}
+                      <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 pb-4 border-b border-viking-gold/15">
+                          <div>
+                            <h3 className="font-viking-display text-lg font-black tracking-wider text-viking-gold uppercase">
+                              TABELA INTERATIVA DE PROGRESSÃO DE FORÇA
+                            </h3>
+                            <p className="text-xs text-viking-silver mt-1 leading-relaxed">
+                              Projeção dinâmica de cargas com base no seu peso de <strong className="text-white font-bold">{bw.toFixed(1)}kg</strong> e divisão percentual selecionada acima. Veja exatamente quanto você precisa atingir para evoluir sua patente.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleExportWilksPDF(activeStudentProfile, currentWilks, bw, gender, total, s, b, d)}
+                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark hover:from-viking-gold hover:to-viking-gold-light text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-viking-gold/15 whitespace-nowrap self-start md:self-center"
+                          >
+                            <FileDown className="w-4.5 h-4.5" /> Exportar Metas (PDF)
+                          </button>
+                        </div>
+
+                        {/* Interactive Table Container */}
+                        <div className="overflow-x-auto border border-viking-gold/15 rounded-2xl bg-black/35 shadow-inner">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-[#140e0c] border-b border-viking-gold/20 text-[10px] text-viking-gold uppercase font-black tracking-wider font-viking-medieval">
+                                <th className="py-3.5 px-4">Patente / Nível</th>
+                                <th className="py-3.5 px-4 text-center">Meta Wilks</th>
+                                <th className="py-3.5 px-4 text-center">Total (SBD)</th>
+                                <th className="py-3.5 px-4 text-center">Agachamento ({wilksRatios.squat}%)</th>
+                                <th className="py-3.5 px-4 text-center">Supino ({wilksRatios.bench}%)</th>
+                                <th className="py-3.5 px-4 text-center">Terra ({wilksRatios.deadlift}%)</th>
+                                <th className="py-3.5 px-4 text-right">Falta Elevar (Total)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-viking-gold/10 text-xs text-viking-silver">
+                              {[
+                                { name: 'Recruta Viking', target: 150, id: 'recruta', badge: '🛡️', color: 'text-viking-silver/80' },
+                                { name: 'Guerreiro do Clã', target: 250, id: 'guerreiro', badge: '⚔️', color: 'text-viking-gold/80' },
+                                { name: 'Berserker do Norte', target: 325, id: 'berserker', badge: '🔥', color: 'text-amber-500' },
+                                { name: 'Guerreiro de Valhalla', target: 400, id: 'einherjar', badge: '⚡', color: 'text-cyan-400' },
+                                { name: 'Semideus / Jarl', target: 475, id: 'semideus', badge: '👑', color: 'text-viking-gold' },
+                              ].map((lvl, index) => {
+                                const targetTotal = calculateTotalForWilks(lvl.target);
+                                const tSquat = Math.round((targetTotal * wilksRatios.squat) / 100);
+                                const tBench = Math.round((targetTotal * wilksRatios.bench) / 100);
+                                const tDeadlift = Math.round((targetTotal * wilksRatios.deadlift) / 100);
+                                const calculatedSum = tSquat + tBench + tDeadlift;
+                                
+                                const isUnlocked = currentWilks >= lvl.target;
+                                const isCurrentGoal = !isUnlocked && (index === 0 || currentWilks >= [0, 150, 250, 325, 400][index]);
+
+                                const neededDiff = targetTotal - total;
+
+                                return (
+                                  <tr 
+                                    key={lvl.id} 
+                                    className={`transition-all hover:bg-viking-gold/5 ${
+                                      isUnlocked 
+                                        ? 'bg-emerald-950/10 hover:bg-emerald-950/15' 
+                                        : isCurrentGoal 
+                                          ? 'bg-viking-gold/10 hover:bg-viking-gold/15 shadow-inner' 
+                                          : 'opacity-70 hover:opacity-100'
+                                    }`}
+                                  >
+                                    {/* Name and Status */}
+                                    <td className="py-4 px-4 font-extrabold flex items-center gap-2">
+                                      <span className="text-lg shrink-0">{lvl.badge}</span>
+                                      <div>
+                                        <p className="text-white text-xs sm:text-sm font-black flex items-center gap-1.5">
+                                          {lvl.name}
+                                          {isUnlocked && (
+                                            <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black px-1.5 py-0.5 rounded tracking-wider uppercase">
+                                              Conquistado
+                                            </span>
+                                          )}
+                                          {isCurrentGoal && (
+                                            <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded tracking-wider uppercase animate-pulse">
+                                              Alvo Atual
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p className="text-[10px] text-viking-silver/50 font-normal">Nível {index + 1}</p>
+                                      </div>
+                                    </td>
+
+                                    {/* Target Wilks */}
+                                    <td className="py-4 px-4 text-center font-black text-sm font-viking-display">
+                                      <span className={lvl.color}>{lvl.target}</span>
+                                    </td>
+
+                                    {/* Total SBD */}
+                                    <td className="py-4 px-4 text-center font-extrabold font-mono text-sm">
+                                      <span className="text-white">{targetTotal}</span> <span className="text-[10px] text-viking-silver/40">kg</span>
+                                    </td>
+
+                                    {/* Squat Target */}
+                                    <td className="py-4 px-4 text-center font-medium font-mono">
+                                      <div className="inline-block px-2.5 py-1.5 rounded-lg bg-black/30 border border-viking-gold/5 min-w-[70px]">
+                                        <p className="text-white font-black">{tSquat}kg</p>
+                                        <p className="text-[9px] text-viking-silver/40 mt-0.5">
+                                          {s >= tSquat ? (
+                                            <span className="text-emerald-400 font-bold">✓ Batido</span>
+                                          ) : (
+                                            <span className="text-viking-silver/65">Falta {tSquat - s}kg</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </td>
+
+                                    {/* Bench Target */}
+                                    <td className="py-4 px-4 text-center font-medium font-mono">
+                                      <div className="inline-block px-2.5 py-1.5 rounded-lg bg-black/30 border border-viking-gold/5 min-w-[70px]">
+                                        <p className="text-white font-black">{tBench}kg</p>
+                                        <p className="text-[9px] text-viking-silver/40 mt-0.5">
+                                          {b >= tBench ? (
+                                            <span className="text-emerald-400 font-bold">✓ Batido</span>
+                                          ) : (
+                                            <span className="text-viking-silver/65">Falta {tBench - b}kg</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </td>
+
+                                    {/* Deadlift Target */}
+                                    <td className="py-4 px-4 text-center font-medium font-mono">
+                                      <div className="inline-block px-2.5 py-1.5 rounded-lg bg-black/30 border border-viking-gold/5 min-w-[70px]">
+                                        <p className="text-white font-black">{tDeadlift}kg</p>
+                                        <p className="text-[9px] text-viking-silver/40 mt-0.5">
+                                          {d >= tDeadlift ? (
+                                            <span className="text-emerald-400 font-bold">✓ Batido</span>
+                                          ) : (
+                                            <span className="text-viking-silver/65">Falta {tDeadlift - d}kg</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </td>
+
+                                    {/* Diff Column */}
+                                    <td className="py-4 px-4 text-right font-bold">
+                                      {isUnlocked ? (
+                                        <span className="inline-flex items-center gap-1 text-emerald-400 font-black text-xs uppercase bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                                          <CheckCircle className="w-3.5 h-3.5" /> Superado!
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 text-viking-gold font-extrabold text-xs">
+                                          <TrendingUp className="w-3.5 h-3.5 text-viking-gold" /> +{neededDiff}kg
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Motivational advice */}
+                        <div className="mt-5 p-4 rounded-2xl bg-[#140e0c]/80 border border-viking-gold/10 text-xs text-viking-silver/95 leading-relaxed flex items-start gap-3">
+                          <span className="text-lg p-1.5 rounded-xl bg-viking-gold/15 text-viking-gold shrink-0">⚔️</span>
+                          <div>
+                            <p className="font-extrabold text-viking-gold uppercase mb-0.5 tracking-wider">Estratégia Viking para Evolução</p>
+                            <p>
+                              Powerlifters de elite não treinam apenas força bruta. Eles calibram seus treinos de acordo com seus pontos fortes e fracos. Tente focar seu ciclo de treino no levantamento onde você tem maior margem de evolução (maior diferença para a meta do nível desejado). Os deuses do ferro recompensam a sabedoria e a persistência!
+                            </p>
+                          </div>
+                        </div>
+
+                      </div>
+                    </>
+                  );
+                })()}
+              </motion.div>
+            )}
 
           </motion.div>
         )}
