@@ -69,6 +69,9 @@ export interface StudentProfile {
   };
   chatHistory?: ChatMessage[];
   sessions: LoggedSession[];
+  gender?: 'male' | 'female';
+  age?: number;
+  bodyWeight?: number;
 }
 
 export interface VikingPlan {
@@ -83,9 +86,15 @@ export interface VikingPlan {
 export interface GymLeaderboardEntry {
   position: number;
   name: string;
+  email: string;
   squat: number;
   bench: number;
   deadlift: number;
   total: number;
   wilks: number;
+  gender: 'male' | 'female';
+  age: number;
+  bodyWeight: number;
+  ageDivision: string;
+  weightClass: string;
 }

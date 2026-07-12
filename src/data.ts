@@ -288,6 +288,9 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     prs: { squat: 150, bench: 110, deadlift: 190 },
     prevPrs: { squat: 140, bench: 105, deadlift: 185 },
     preferredTime: '18:00',
+    age: 28,
+    bodyWeight: 82.5,
+    gender: 'male',
     chatHistory: [
       { id: '1', sender: 'trainer', text: 'Excelente progresso nas cargas de agachamento esta semana, Erik! Continue focado na profundidade.', timestamp: '08/07/2026, 19:30' },
       { id: '2', sender: 'student', text: 'Obrigado, mestre! Senti que a dica de forçar os joelhos para fora me deu muita estabilidade no buraco.', timestamp: '08/07/2026, 20:15' }
@@ -325,6 +328,9 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     prs: { squat: 160, bench: 120, deadlift: 200 },
     prevPrs: { squat: 150, bench: 115, deadlift: 190 },
     preferredTime: '20:00',
+    age: 32,
+    bodyWeight: 105.0,
+    gender: 'male',
     chatHistory: [
       { id: '1', sender: 'trainer', text: 'Cuidado com o RPE alto no Levantamento Terra, Bjorn. Se chegar a 9.5 frequentemente, podemos ajustar a porcentagem de intensidade.', timestamp: '07/07/2026, 21:00' },
       { id: '2', sender: 'student', text: 'Entendido, vou tentar regular melhor a força inicial na próxima sessão.', timestamp: '07/07/2026, 21:30' }
@@ -351,6 +357,9 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     prs: { squat: 130, bench: 90, deadlift: 160 },
     prevPrs: { squat: 120, bench: 85, deadlift: 150 },
     preferredTime: '07:00',
+    age: 25,
+    bodyWeight: 63.0,
+    gender: 'female',
     chatHistory: [
       { id: '1', sender: 'trainer', text: 'Treino muito sólido hoje, Freya! RPE de 6.6 médio é ideal para esta semana de acumulação.', timestamp: '06/07/2026, 09:00' }
     ],

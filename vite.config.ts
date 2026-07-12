@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/Viking-Force-/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

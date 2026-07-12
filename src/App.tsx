@@ -39,10 +39,12 @@ import {
   ArrowRight,
   Send,
   Video,
-  Youtube
+  Youtube,
+  Crown,
+  Award
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
@@ -69,6 +71,9 @@ export default function App() {
   const [prSquat, setPrSquat] = useState<string>('');
   const [prBench, setPrBench] = useState<string>('');
   const [prDeadlift, setPrDeadlift] = useState<string>('');
+  const [regAge, setRegAge] = useState<string>('25');
+  const [regBodyWeight, setRegBodyWeight] = useState<string>('80');
+  const [regGender, setRegGender] = useState<'male' | 'female'>('male');
   const [regPreferredTime, setRegPreferredTime] = useState<string>('18:00');
   const [simulatedTime, setSimulatedTime] = useState<string>(() => {
     const now = new Date();
@@ -76,6 +81,11 @@ export default function App() {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
   });
+
+  // Leaderboard configuration
+  const [leaderboardTab, setLeaderboardTab] = useState<'all' | 'age' | 'weight'>('all');
+  const [leaderboardSortCol, setLeaderboardSortCol] = useState<'position' | 'name' | 'age' | 'bodyWeight' | 'squat' | 'bench' | 'deadlift' | 'total' | 'wilks'>('wilks');
+  const [leaderboardSortDesc, setLeaderboardSortDesc] = useState<boolean>(true);
 
   // App core database state
   const [trainingProgram, setTrainingProgram] = useState<TrainingProgram>(DEFAULT_PROGRAM);
@@ -434,7 +444,10 @@ export default function App() {
           status: 'Pago',
           prs: { squat: null, bench: null, deadlift: null },
           preferredTime: '18:00',
-          sessions: []
+          sessions: [],
+          age: 25,
+          bodyWeight: 80,
+          gender: 'male'
         };
         const updated = { ...studentsData, [email]: newStudent };
         saveStudentsToDB(updated);
@@ -457,7 +470,10 @@ export default function App() {
           deadlift: parseFloat(prDeadlift) || null,
         },
         preferredTime: regPreferredTime || '18:00',
-        sessions: []
+        sessions: [],
+        age: parseInt(regAge) || 25,
+        bodyWeight: parseFloat(regBodyWeight) || 80,
+        gender: regGender
       };
 
       const updated = { ...studentsData, [email]: newStudent };
@@ -617,31 +633,169 @@ export default function App() {
     showToast(`Treino registrado! RPE Médio: ${avgRPE.toFixed(1)}. Seu feedback foi enviado ao John.`, 'success');
   };
 
-  // --- LEADERBOARD LOGIC ---
-  const getLeaderboard = () => {
+  // --- LEADERBOARD LOGIC & HELPERS ---
+  const calculateWilks = (gender: 'male' | 'female', bw: number, totalSBD: number): number => {
+    if (!bw || !totalSBD) return 0;
+    const x = bw;
+    let a, b, c, d, e, f;
+    if (gender === 'female') {
+      a = 594.17;
+      b = -27.23806;
+      c = 0.821122;
+      d = -0.009307339;
+      e = 0.00004731582;
+      f = -0.00000009054;
+    } else {
+      // male
+      a = -216.0475144;
+      b = 16.2606339;
+      c = -0.002388645;
+      d = -0.00113732;
+      e = 0.00000701863;
+      f = -0.00000001291;
+    }
+    const denom = a + b*x + c*Math.pow(x, 2) + d*Math.pow(x, 3) + e*Math.pow(x, 4) + f*Math.pow(x, 5);
+    if (denom === 0) return 0;
+    const coeff = 500 / denom;
+    return Math.round(totalSBD * coeff * 10) / 10;
+  };
+
+  const getAgeDivision = (age: number): string => {
+    if (age <= 18) return 'Sub-Júnior (≤18)';
+    if (age <= 23) return 'Júnior (19-23)';
+    if (age <= 39) return 'Open (24-39)';
+    return 'Master (40+)';
+  };
+
+  const getWeightClass = (gender: 'male' | 'female', weight: number): string => {
+    if (gender === 'female') {
+      if (weight <= 57) return 'Até 57kg';
+      if (weight <= 72) return '57.1kg - 72kg';
+      return 'Mais de 72kg';
+    } else {
+      if (weight <= 74) return 'Até 74kg';
+      if (weight <= 93) return '74.1kg - 93kg';
+      return 'Mais de 93kg';
+    }
+  };
+
+  const getLeaderboard = (): GymLeaderboardEntry[] => {
     // Collect everyone (default + active student) and calculate dynamic rank
-    const entries = Object.keys(studentsData).map(email => {
+    const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
       const profile = studentsData[email];
-      const squat = profile.prs.squat || 100;
-      const bench = profile.prs.bench || 70;
-      const deadlift = profile.prs.deadlift || 120;
+      const squat = profile.prs.squat || 0;
+      const bench = profile.prs.bench || 0;
+      const deadlift = profile.prs.deadlift || 0;
       const total = squat + bench + deadlift;
-      // Synthesize a beautiful Wilks score
-      const wilks = Math.round(total * 0.93 * 10) / 10;
+      const age = profile.age || 25;
+      const bw = profile.bodyWeight || 80.0;
+      const gender = profile.gender || 'male';
+      const wilks = calculateWilks(gender, bw, total);
+
       return {
+        position: 0,
         name: profile.name,
         email,
         squat,
         bench,
         deadlift,
         total,
-        wilks
+        wilks,
+        gender,
+        age,
+        bodyWeight: bw,
+        ageDivision: getAgeDivision(age),
+        weightClass: getWeightClass(gender, bw)
       };
     });
 
-    // Sort descending by Wilks
-    entries.sort((a, b) => b.wilks - a.wilks);
+    // Dynamic sorting
+    entries.sort((a, b) => {
+      let valA: any = a[leaderboardSortCol];
+      let valB: any = b[leaderboardSortCol];
+
+      if (typeof valA === 'string') {
+        return leaderboardSortDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
+      }
+      return leaderboardSortDesc ? (valB - valA) : (valA - valB);
+    });
+
     return entries.map((entry, idx) => ({ ...entry, position: idx + 1 }));
+  };
+
+  const getAbsoluteLeader = (): GymLeaderboardEntry | null => {
+    const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
+      const profile = studentsData[email];
+      const squat = profile.prs.squat || 0;
+      const bench = profile.prs.bench || 0;
+      const deadlift = profile.prs.deadlift || 0;
+      const total = squat + bench + deadlift;
+      const age = profile.age || 25;
+      const bw = profile.bodyWeight || 80.0;
+      const gender = profile.gender || 'male';
+      const wilks = calculateWilks(gender, bw, total);
+
+      return {
+        position: 0,
+        name: profile.name,
+        email,
+        squat,
+        bench,
+        deadlift,
+        total,
+        wilks,
+        gender,
+        age,
+        bodyWeight: bw,
+        ageDivision: getAgeDivision(age),
+        weightClass: getWeightClass(gender, bw)
+      };
+    });
+
+    if (entries.length === 0) return null;
+    entries.sort((a, b) => b.wilks - a.wilks);
+    return { ...entries[0], position: 1 };
+  };
+
+  const renderRankBadge = (pos: number, warrior?: GymLeaderboardEntry) => {
+    const tooltipText = warrior 
+      ? `Critério Wilks: Fórmula oficial que compara força relativa de atletas de diferentes pesos corporais e gêneros de forma justa.
+
+• Atleta: ${warrior.name}
+• Gênero: ${warrior.gender === 'female' ? 'Feminino' : 'Masculino'}
+• Peso Corporal: ${warrior.bodyWeight.toFixed(1)} kg
+• Total SBD (S/B/D): ${warrior.total} kg (${warrior.squat || 0}/${warrior.bench || 0}/${warrior.deadlift || 0} kg)
+• Coeficiente Wilks: ${warrior.wilks.toFixed(1)} pontos
+
+Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a ${pos}ª posição.`
+      : "Critério Wilks: Fórmula que pondera o peso corporal em relação ao total levantado para classificar a força relativa de forma justa.";
+
+    if (pos === 1) {
+      return (
+        <div className="relative flex items-center justify-center w-7 h-7 cursor-help" title={tooltipText}>
+          <span className="text-2xl filter drop-shadow-[0_0_5px_rgba(212,175,55,0.5)] transition-transform hover:scale-110 duration-200">🥇</span>
+        </div>
+      );
+    }
+    if (pos === 2) {
+      return (
+        <div className="relative flex items-center justify-center w-7 h-7 cursor-help" title={tooltipText}>
+          <span className="text-2xl filter drop-shadow-[0_0_5px_rgba(192,183,168,0.5)] transition-transform hover:scale-110 duration-200">🥈</span>
+        </div>
+      );
+    }
+    if (pos === 3) {
+      return (
+        <div className="relative flex items-center justify-center w-7 h-7 cursor-help" title={tooltipText}>
+          <span className="text-2xl filter drop-shadow-[0_0_5px_rgba(139,0,0,0.4)] transition-transform hover:scale-110 duration-200">🥉</span>
+        </div>
+      );
+    }
+    return (
+      <span className="font-viking-medieval text-xs font-bold w-7 text-center text-[#60504a] cursor-help" title={tooltipText}>
+        {pos}º
+      </span>
+    );
   };
 
   // --- TRAINER LEVEL LOGIC ---
@@ -651,6 +805,9 @@ export default function App() {
     const email = (e.currentTarget as any).newStudentEmail.value.trim().toLowerCase();
     const plan = (e.currentTarget as any).newStudentPlan.value;
     const status = (e.currentTarget as any).newStudentStatus.value;
+    const age = parseInt((e.currentTarget as any).newStudentAge.value) || 25;
+    const bodyWeight = parseFloat((e.currentTarget as any).newStudentBodyWeight.value) || 80.0;
+    const gender = ((e.currentTarget as any).newStudentGender.value || 'male') as 'male' | 'female';
     const preferredTime = (e.currentTarget as any).newStudentPreferredTime?.value || '18:00';
 
     if (!name || !email) {
@@ -669,7 +826,10 @@ export default function App() {
       status,
       prs: { squat: null, bench: null, deadlift: null },
       preferredTime,
-      sessions: []
+      sessions: [],
+      age,
+      bodyWeight,
+      gender
     };
 
     saveStudentsToDB({ ...studentsData, [email]: newStudent });
@@ -951,9 +1111,11 @@ export default function App() {
 
                 <button 
                   onClick={handleLogout}
-                  className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-viking-red/15 hover:bg-viking-red/30 text-white hover:text-viking-gold border border-viking-red/30 hover:border-viking-gold/40 transition-all font-medium text-xs cursor-pointer"
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-3.5 rounded-xl bg-viking-red/15 hover:bg-viking-red/30 text-white hover:text-viking-gold border border-viking-red/30 hover:border-viking-gold/40 transition-all font-medium text-xs cursor-pointer"
+                  title="Sair do Salão"
                 >
-                  <LogOut className="w-4 h-4" /> Sair
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sair</span>
                 </button>
 
                 <button 
@@ -1116,6 +1278,42 @@ export default function App() {
                             className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                           />
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
+                          <input 
+                            type="number" 
+                            value={regAge}
+                            onChange={e => setRegAge(e.target.value)}
+                            placeholder="Ex: 25"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Peso Corporal (kg)</label>
+                          <input 
+                            type="number" 
+                            step="0.1"
+                            value={regBodyWeight}
+                            onChange={e => setRegBodyWeight(e.target.value)}
+                            placeholder="Ex: 80.0"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-1">
+                        <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Gênero para Competição</label>
+                        <select 
+                          value={regGender}
+                          onChange={e => setRegGender(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                        >
+                          <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
+                          <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
+                        </select>
                       </div>
 
                       <div className="pt-2">
@@ -1951,43 +2149,324 @@ export default function App() {
                 {drawerType === 'ranking' && (
                   <div className="space-y-4">
                     <p className="text-xs text-viking-silver/80 leading-relaxed">
-                      🏆 A pontuação Wilks é calculada dinamicamente com base nas marcas máximas (1RM) registradas em seu perfil. Aumente seu total para subir na tabela de honra dos guerreiros.
+                      🏆 Templo Viking Force - Classificação de Competição. O coeficiente Wilks compara os guerreiros de diferentes pesos corporais e gêneros de forma justa para encontrar o campeão absoluto. Toque nos cabeçalhos para ordenar!
                     </p>
-                    <div className="space-y-2">
-                      {getLeaderboard().map((warrior, idx) => {
-                        const isSelf = currentUser && currentUser.email === warrior.email;
-                        return (
-                          <div 
-                            key={warrior.email} 
-                            className={`p-4 rounded-xl border flex justify-between items-center ${
-                              isSelf 
-                                ? 'bg-gradient-to-r from-viking-gold/10 to-transparent border-viking-gold/40' 
-                                : 'bg-[#0d0908]/60 border-viking-gold/10'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className={`font-viking-medieval text-lg font-black w-6 text-center ${
-                                idx === 0 ? 'text-viking-gold' : idx === 1 ? 'text-viking-silver' : idx === 2 ? 'text-viking-red' : 'text-[#50403a]'
-                              }`}>
-                                {idx + 1}º
-                              </span>
-                              <div>
-                                <p className="text-sm font-black text-white flex items-center gap-1.5">
-                                  {warrior.name}
-                                  {isSelf && <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1 py-0.5 rounded uppercase tracking-wider">Você</span>}
-                                </p>
-                                <p className="text-[10px] text-viking-silver font-mono mt-0.5">
-                                  Agacho: {warrior.squat}kg · Supino: {warrior.bench}kg · Terra: {warrior.deadlift}kg
-                                </p>
-                              </div>
+
+                    {/* Absolute Leader Highlight Card */}
+                    {getAbsoluteLeader() && (() => {
+                      const leader = getAbsoluteLeader()!;
+                      return (
+                        <div className="relative overflow-hidden p-4 rounded-xl bg-gradient-to-br from-[#1a1210] via-[#0d0908]/90 to-black border-2 border-viking-gold shadow-[0_0_20px_rgba(212,175,55,0.25)] flex items-center justify-between">
+                          {/* Background Glow */}
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-viking-gold/10 rounded-full blur-3xl pointer-events-none"></div>
+                          
+                          <div className="space-y-1.5 z-10">
+                            <div className="flex items-center gap-1.5">
+                              <Crown className="w-4 h-4 text-viking-gold animate-bounce" />
+                              <span className="text-[9px] font-black text-viking-gold uppercase tracking-widest font-viking-medieval">Líder Absoluto do Templo</span>
                             </div>
-                            <div className="text-right">
-                              <p className="text-xs text-viking-silver font-medium font-viking-medieval">Pontuação Wilks</p>
-                              <p className="text-sm font-black text-viking-gold">{warrior.wilks.toFixed(1)}</p>
+                            <div>
+                              <h4 className="text-sm font-black text-white leading-tight flex items-center gap-1">
+                                {leader.name}
+                                {currentUser && currentUser.email === leader.email && (
+                                  <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Você</span>
+                                )}
+                              </h4>
+                              <p className="text-[10px] text-viking-silver/80 mt-0.5">
+                                {leader.gender === 'female' ? 'Guerreira' : 'Guerreiro'} · <span className="font-bold text-white">{leader.ageDivision}</span> · Classe <span className="font-bold text-white">{leader.weightClass}</span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 pt-1 text-[10px] text-viking-silver font-mono">
+                              <span>Agacho: <strong className="text-viking-gold font-bold">{leader.squat}kg</strong></span>
+                              <span>Supino: <strong className="text-viking-gold font-bold">{leader.bench}kg</strong></span>
+                              <span>Terra: <strong className="text-viking-gold font-bold">{leader.deadlift}kg</strong></span>
                             </div>
                           </div>
-                        );
-                      })}
+
+                          <div className="text-right z-10 flex flex-col items-end justify-center pl-3 border-l border-viking-gold/15 min-w-[85px]">
+                            <div className="bg-viking-gold/10 p-1.5 rounded-lg border border-viking-gold/25 flex flex-col items-center justify-center w-full">
+                              <span className="text-[8px] text-viking-gold font-bold uppercase tracking-wider font-viking-medieval">Wilks</span>
+                              <span className="text-base font-black text-viking-gold leading-none mt-1">{leader.wilks.toFixed(1)}</span>
+                            </div>
+                            <p className="text-[8px] text-viking-silver/40 font-bold uppercase tracking-widest mt-1">Destinado ao Valhalla</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Leaderboard Tabs */}
+                    <div className="flex bg-[#0d0908]/80 p-1 rounded-xl border border-viking-gold/15 gap-1">
+                      <button 
+                        onClick={() => setLeaderboardTab('all')} 
+                        className={`flex-1 py-2 text-center rounded-lg font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${leaderboardTab === 'all' ? 'bg-viking-gold text-viking-dark shadow-[0_0_10px_rgba(212,175,55,0.2)]' : 'text-viking-silver hover:bg-viking-gold/5'}`}
+                      >
+                        Absoluto
+                      </button>
+                      <button 
+                        onClick={() => setLeaderboardTab('age')} 
+                        className={`flex-1 py-2 text-center rounded-lg font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${leaderboardTab === 'age' ? 'bg-viking-gold text-viking-dark shadow-[0_0_10px_rgba(212,175,55,0.2)]' : 'text-viking-silver hover:bg-viking-gold/5'}`}
+                      >
+                        Por Idade
+                      </button>
+                      <button 
+                        onClick={() => setLeaderboardTab('weight')} 
+                        className={`flex-1 py-2 text-center rounded-lg font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${leaderboardTab === 'weight' ? 'bg-viking-gold text-viking-dark shadow-[0_0_10px_rgba(212,175,55,0.2)]' : 'text-viking-silver hover:bg-viking-gold/5'}`}
+                      >
+                        Por Peso
+                      </button>
+                    </div>
+
+                    {/* Column Headers Sorting controls (Only for General View to keep clean) */}
+                    {leaderboardTab === 'all' && (
+                      <div className="p-3 bg-black/45 rounded-xl border border-viking-gold/10 flex flex-wrap gap-2 items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-viking-silver/50 font-bold">Ordenar Tabela por:</span>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { col: 'name', label: 'Nome' },
+                            { col: 'age', label: 'Idade' },
+                            { col: 'bodyWeight', label: 'Peso' },
+                            { col: 'squat', label: 'Agacho' },
+                            { col: 'bench', label: 'Supino' },
+                            { col: 'deadlift', label: 'Terra' },
+                            { col: 'total', label: 'Total SBD' },
+                            { col: 'wilks', label: 'Wilks' },
+                          ].map(({ col, label }) => {
+                            const isSorted = leaderboardSortCol === col;
+                            return (
+                              <button
+                                key={col}
+                                onClick={() => {
+                                  if (isSorted) {
+                                    setLeaderboardSortDesc(!leaderboardSortDesc);
+                                  } else {
+                                    setLeaderboardSortCol(col as any);
+                                    setLeaderboardSortDesc(true);
+                                  }
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                                  isSorted 
+                                    ? 'bg-viking-gold/15 text-viking-gold border border-viking-gold/30' 
+                                    : 'bg-[#140e0c] text-viking-silver hover:text-viking-gold border border-transparent'
+                                }`}
+                              >
+                                {label} {isSorted ? (leaderboardSortDesc ? '↓' : '↑') : ''}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      {/* 2.1 General Absoluto Leaderboard */}
+                      {leaderboardTab === 'all' && (
+                        <div className="space-y-2">
+                          {getLeaderboard().map((warrior, idx) => {
+                            const isSelf = currentUser && currentUser.email === warrior.email;
+                            const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                            return (
+                              <div 
+                                key={warrior.email} 
+                                className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all hover:border-viking-gold/30 ${
+                                  isAbsoluteLeader
+                                    ? 'bg-gradient-to-r from-viking-gold/15 to-[#1c120f]/60 border-viking-gold ring-1 ring-viking-gold/20 shadow-[0_0_15px_rgba(212,175,55,0.15)]'
+                                    : isSelf 
+                                    ? 'bg-gradient-to-r from-viking-gold/10 to-transparent border-viking-gold/30 shadow-[0_0_12px_rgba(212,175,55,0.08)]' 
+                                    : 'bg-[#0d0908]/60 border-viking-gold/10'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 flex justify-center">
+                                    {renderRankBadge(idx + 1, warrior)}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-black text-white flex flex-wrap items-center gap-1.5">
+                                      {warrior.name}
+                                      <span className="text-[10px] text-viking-silver/60 font-mono">
+                                        ({warrior.gender === 'female' ? '♀' : '♂'})
+                                      </span>
+                                      {isAbsoluteLeader && (
+                                        <span className="flex items-center gap-0.5 text-[8px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                          <Crown className="w-2.5 h-2.5" /> Líder Absoluto
+                                        </span>
+                                      )}
+                                      {isSelf && !isAbsoluteLeader && (
+                                        <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Você</span>
+                                      )}
+                                    </p>
+                                    <p className="text-[10px] text-viking-silver font-medium mt-0.5">
+                                      Idade: <span className="text-white font-bold">{warrior.age}a</span> · Peso: <span className="text-white font-bold">{warrior.bodyWeight.toFixed(1)}kg</span> · <span className="text-viking-gold/80 font-bold">{warrior.ageDivision}</span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-viking-gold/5 pt-2 sm:pt-0 sm:border-0">
+                                  <div className="grid grid-cols-4 gap-x-2.5 gap-y-0.5 text-left sm:text-right">
+                                    <div className="text-[9px] text-viking-silver/60">Agacho</div>
+                                    <div className="text-[9px] text-viking-silver/60">Supino</div>
+                                    <div className="text-[9px] text-viking-silver/60">Terra</div>
+                                    <div className="text-[9px] text-viking-silver/60 font-bold text-white">Total</div>
+                                    <div className="text-xs font-bold text-white">{warrior.squat || '-'}k</div>
+                                    <div className="text-xs font-bold text-white">{warrior.bench || '-'}k</div>
+                                    <div className="text-xs font-bold text-white">{warrior.deadlift || '-'}k</div>
+                                    <div className="text-xs font-black text-viking-gold">{warrior.total}kg</div>
+                                  </div>
+
+                                  <div className="text-right pl-3 border-l border-viking-gold/15 min-w-[75px]">
+                                    <p className="text-[9px] text-viking-silver font-medium font-viking-medieval uppercase">Wilks</p>
+                                    <p className="text-base font-black text-viking-gold tracking-tighter">{warrior.wilks.toFixed(1)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* 2.2 Leaderboard Grouped by Age Division */}
+                      {leaderboardTab === 'age' && (
+                        <div className="space-y-6">
+                          {['Sub-Júnior (≤18)', 'Júnior (19-23)', 'Open (24-39)', 'Master (40+)'].map(division => {
+                            const competitors = getLeaderboard()
+                              .filter(w => w.ageDivision === division)
+                              .sort((a, b) => b.wilks - a.wilks);
+
+                            if (competitors.length === 0) return null;
+
+                            return (
+                              <div key={division} className="space-y-2">
+                                <h4 className="text-xs font-black text-viking-gold uppercase tracking-widest border-b border-viking-gold/20 pb-1 flex items-center gap-1.5">
+                                  <Trophy className="w-3.5 h-3.5 text-viking-gold" /> Categoria {division}
+                                </h4>
+                                <div className="space-y-1.5">
+                                  {competitors.map((warrior, idx) => {
+                                    const isSelf = currentUser && currentUser.email === warrior.email;
+                                    const isCategoryLeader = idx === 0;
+                                    const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                                    return (
+                                      <div 
+                                        key={warrior.email} 
+                                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                                          isCategoryLeader
+                                            ? 'bg-gradient-to-r from-viking-gold/10 via-[#1a1210]/40 to-transparent border-viking-gold/40 shadow-[0_0_10px_rgba(212,175,55,0.12)]'
+                                            : isSelf 
+                                            ? 'bg-viking-gold/5 border-viking-gold/20' 
+                                            : 'bg-[#0d0908]/40 border-viking-gold/5'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-8 flex justify-center">
+                                            {renderRankBadge(idx + 1, warrior)}
+                                          </div>
+                                          <div>
+                                            <p className="font-bold text-white flex flex-wrap items-center gap-1">
+                                              {warrior.name}
+                                              {isAbsoluteLeader && (
+                                                <span className="flex items-center gap-0.5 text-[8px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 font-black px-1 rounded">
+                                                  <Crown className="w-2 h-2" /> Absoluto
+                                                </span>
+                                              )}
+                                              {isCategoryLeader && !isAbsoluteLeader && (
+                                                <span className="flex items-center gap-0.5 text-[8px] bg-viking-gold/10 text-viking-gold border border-viking-gold/30 font-black px-1 rounded">
+                                                  <Award className="w-2 h-2" /> Líder Categoria
+                                                </span>
+                                              )}
+                                              {isSelf && (
+                                                <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1 rounded">Você</span>
+                                              )}
+                                            </p>
+                                            <p className="text-[9px] text-viking-silver/70">
+                                              Idade: {warrior.age}a · Peso: {warrior.bodyWeight.toFixed(1)}kg · SBD: {warrior.squat || 0}/{warrior.bench || 0}/{warrior.deadlift || 0} = <strong className="text-viking-gold font-bold">{warrior.total}kg</strong>
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-[8px] text-viking-silver font-mono">WILKS</p>
+                                          <p className="font-black text-viking-gold">{warrior.wilks.toFixed(1)}</p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* 2.3 Leaderboard Grouped by Weight Class */}
+                      {leaderboardTab === 'weight' && (
+                        <div className="space-y-6">
+                          {['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg', 'Até 74kg', '74.1kg - 93kg', 'Mais de 93kg'].map(wClass => {
+                            const competitors = getLeaderboard()
+                              .filter(w => w.weightClass === wClass)
+                              .sort((a, b) => b.wilks - a.wilks);
+
+                            if (competitors.length === 0) return null;
+
+                            const isFemaleClass = ['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg'].includes(wClass);
+
+                            return (
+                              <div key={wClass} className="space-y-2">
+                                <h4 className="text-xs font-black text-viking-silver uppercase tracking-widest border-b border-viking-silver/20 pb-1 flex items-center gap-1.5">
+                                  <Scale className="w-3.5 h-3.5 text-viking-silver" /> 
+                                  Classe {wClass} ({isFemaleClass ? 'Feminino' : 'Masculino'})
+                                </h4>
+                                <div className="space-y-1.5">
+                                  {competitors.map((warrior, idx) => {
+                                    const isSelf = currentUser && currentUser.email === warrior.email;
+                                    const isCategoryLeader = idx === 0;
+                                    const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                                    return (
+                                      <div 
+                                        key={warrior.email} 
+                                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                                          isCategoryLeader
+                                            ? 'bg-gradient-to-r from-viking-gold/10 via-[#1a1210]/40 to-transparent border-viking-gold/40 shadow-[0_0_10px_rgba(212,175,55,0.12)]'
+                                            : isSelf 
+                                            ? 'bg-viking-gold/5 border-viking-gold/20' 
+                                            : 'bg-[#0d0908]/40 border-viking-gold/5'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-8 flex justify-center">
+                                            {renderRankBadge(idx + 1, warrior)}
+                                          </div>
+                                          <div>
+                                            <p className="font-bold text-white flex flex-wrap items-center gap-1">
+                                              {warrior.name}
+                                              {isAbsoluteLeader && (
+                                                <span className="flex items-center gap-0.5 text-[8px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 font-black px-1 rounded">
+                                                  <Crown className="w-2 h-2" /> Absoluto
+                                                </span>
+                                              )}
+                                              {isCategoryLeader && !isAbsoluteLeader && (
+                                                <span className="flex items-center gap-0.5 text-[8px] bg-viking-gold/10 text-viking-gold border border-viking-gold/30 font-black px-1 rounded">
+                                                  <Award className="w-2 h-2" /> Líder Categoria
+                                                </span>
+                                              )}
+                                              {isSelf && (
+                                                <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1 rounded">Você</span>
+                                              )}
+                                            </p>
+                                            <p className="text-[9px] text-viking-silver/70">
+                                              Peso: {warrior.bodyWeight.toFixed(1)}kg · Idade: {warrior.age}a · SBD: {warrior.squat || 0}/{warrior.bench || 0}/{warrior.deadlift || 0} = <strong className="text-viking-gold font-bold">{warrior.total}kg</strong>
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-[8px] text-viking-silver font-mono">WILKS</p>
+                                          <p className="font-black text-viking-gold">{warrior.wilks.toFixed(1)}</p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2155,6 +2634,47 @@ export default function App() {
 
                       <div className="pt-4 border-t border-viking-gold/15 mt-4 space-y-3">
                         <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                          <Trophy className="w-4 h-4 text-viking-gold" /> Perfil de Competição (Ranking)
+                        </h4>
+                        <p className="text-[11px] text-viking-silver leading-relaxed">
+                          Sua idade, peso corporal e gênero são necessários para calcular sua pontuação Wilks oficial e dividir as categorias de competição no Ranking do Templo.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver mb-1">Idade (anos)</label>
+                            <input 
+                              type="number" 
+                              id="cfgAge"
+                              defaultValue={activeStudentProfile.age || 25}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver mb-1">Peso Corporal (kg)</label>
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              id="cfgBodyWeight"
+                              defaultValue={activeStudentProfile.bodyWeight || 80}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver mb-1">Gênero</label>
+                          <select 
+                            id="cfgGender"
+                            defaultValue={activeStudentProfile.gender || 'male'}
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          >
+                            <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
+                            <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-viking-gold/15 mt-4 space-y-3">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
                           <Clock className="w-4 h-4 text-viking-gold" /> Horário de Preferência de Treino
                         </h4>
                         <p className="text-[11px] text-viking-silver leading-relaxed">
@@ -2177,6 +2697,9 @@ export default function App() {
                           const b = parseFloat((document.getElementById('cfgBench') as HTMLInputElement).value) || null;
                           const d = parseFloat((document.getElementById('cfgDeadlift') as HTMLInputElement).value) || null;
                           const pt = (document.getElementById('cfgPreferredTime') as HTMLInputElement).value || '18:00';
+                          const age = parseInt((document.getElementById('cfgAge') as HTMLInputElement).value) || 25;
+                          const bodyWeight = parseFloat((document.getElementById('cfgBodyWeight') as HTMLInputElement).value) || 80;
+                          const gender = (document.getElementById('cfgGender') as HTMLSelectElement).value as 'male' | 'female';
                           
                           const oldPrs = activeStudentProfile.prs || { squat: null, bench: null, deadlift: null };
                           const prevPrs = {
@@ -2189,7 +2712,10 @@ export default function App() {
                             ...activeStudentProfile,
                             prs: { squat: s, bench: b, deadlift: d },
                             prevPrs,
-                            preferredTime: pt
+                            preferredTime: pt,
+                            age,
+                            bodyWeight,
+                            gender
                           };
                           saveStudentsToDB({ ...studentsData, [currentUser!.email]: updatedProfile });
                           setDrawerOpen(false);
@@ -2242,6 +2768,38 @@ export default function App() {
                         <option value="Pago" className="bg-[#140e0c] text-[#e0d3a8]">Pago</option>
                         <option value="Pendente" className="bg-[#140e0c] text-[#e0d3a8]">Pendente</option>
                         <option value="Atrasado" className="bg-[#140e0c] text-[#e0d3a8]">Atrasado</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
+                        <input 
+                          type="number" 
+                          name="newStudentAge" 
+                          defaultValue="25"
+                          required
+                          className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Peso Corporal (kg)</label>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          name="newStudentBodyWeight" 
+                          defaultValue="80.0"
+                          required
+                          className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Gênero</label>
+                      <select name="newStudentGender" className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold">
+                        <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
+                        <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
                       </select>
                     </div>
 
