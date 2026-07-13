@@ -42,7 +42,9 @@ import {
   Youtube,
   Crown,
   Award,
-  Sparkles
+  Sparkles,
+  Mail,
+  Inbox
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -61,7 +63,9 @@ import {
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signOut 
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
@@ -123,6 +127,13 @@ export default function App() {
   const [editingStudentEmail, setEditingStudentEmail] = useState<string>('');
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
+
+  // Gmail states
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
+  const [gmailTab, setGmailTab] = useState<'inbox' | 'compose' | 'broadcast'>('inbox');
+  const [gmailMessages, setGmailMessages] = useState<any[]>([]);
+  const [loadingGmail, setLoadingGmail] = useState<boolean>(false);
 
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
@@ -865,6 +876,193 @@ export default function App() {
     showToast('Sessão encerrada com sucesso. Retorne em breve ao templo!', 'info');
   };
 
+  // --- GMAIL INTEGRATION LOGIC ---
+  const handleGoogleSignIn = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.addScope('https://mail.google.com/');
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
+      provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+      provider.addScope('https://www.googleapis.com/auth/gmail.compose');
+      provider.addScope('https://www.googleapis.com/auth/gmail.modify');
+
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential && credential.accessToken) {
+        setGoogleAccessToken(credential.accessToken);
+        setGoogleUserEmail(result.user.email || '');
+        showToast('Gmail conectado com sucesso ao templo!', 'success');
+        fetchRecentEmails(credential.accessToken);
+      } else {
+        showToast('Não foi possível obter a credencial do Gmail.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Google Auth Error:', err);
+      showToast('Falha na conexão com o Gmail. Tente novamente.', 'error');
+    }
+  };
+
+  const fetchRecentEmails = async (token: string) => {
+    setLoadingGmail(true);
+    try {
+      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.messages && data.messages.length > 0) {
+        const details = await Promise.all(
+          data.messages.map(async (msg: { id: string }) => {
+            const detailResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            return detailResponse.json();
+          })
+        );
+        setGmailMessages(details);
+      } else {
+        setGmailMessages([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Gmail messages:', err);
+    } finally {
+      setLoadingGmail(false);
+    }
+  };
+
+  const sendGmail = async (to: string, subject: string, bodyHTML: string) => {
+    if (!googleAccessToken) {
+      showToast('Por favor, conecte seu Gmail primeiro!', 'error');
+      return false;
+    }
+
+    try {
+      const emailContent = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'Content-Type: text/html; charset=utf-8',
+        'MIME-Version: 1.0',
+        '',
+        bodyHTML
+      ].join('\n');
+
+      const encodedEmail = btoa(unescape(encodeURIComponent(emailContent)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${googleAccessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ raw: encodedEmail })
+      });
+
+      if (response.ok) {
+        showToast(`Mensagem enviada com sucesso para ${to}!`, 'success');
+        return true;
+      } else {
+        const errData = await response.json();
+        console.error('Gmail send response error:', errData);
+        showToast('Falha ao enviar e-mail via Gmail API.', 'error');
+        return false;
+      }
+    } catch (err) {
+      console.error('Error sending email:', err);
+      showToast('Erro ao enviar e-mail. Verifique a conexão.', 'error');
+      return false;
+    }
+  };
+
+  const sendWorkoutPlanEmail = async (studentEmail: string, s: StudentProfile) => {
+    if (!googleAccessToken) {
+      setDrawerType('gmail');
+      setDrawerTitle('Correio de Valhalla (Gmail)');
+      setDrawerOpen(true);
+      showToast('Por favor, conecte seu Gmail antes de enviar a planilha!', 'info');
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja enviar a ficha de treino atual de ${s.name} para o e-mail ${studentEmail} via Gmail?`);
+    if (!confirmed) return;
+
+    // Generate HTML for the email
+    const subject = `🛡️ [Viking Force] Sua Ficha de Treino Atualizada - Olá, ${s.name}!`;
+    
+    // Construct active training details
+    let exercisesHTML = '';
+    const currentWeek = 1; // standard or current week
+    const weekWorkout = trainingProgram.weeks[currentWeek] || trainingProgram.weeks[1];
+    
+    if (weekWorkout) {
+      exercisesHTML += `
+        <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px;">Treino Prescrito (Semana ${currentWeek})</h3>
+      `;
+      ['A', 'B', 'C'].forEach((day) => {
+        const exercises = weekWorkout[day as 'A' | 'B' | 'C'] || [];
+        if (exercises.length > 0) {
+          exercisesHTML += `<h4 style="color: #ffffff; font-family: sans-serif; background-color: #1a1210; padding: 6px 12px; margin-top: 15px;">Treino ${day}</h4>`;
+          exercisesHTML += `<table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; color: #e0d3a8; margin-bottom: 15px;">
+            <thead>
+              <tr style="background-color: #261a15; color: #d4af37; text-align: left;">
+                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Exercício</th>
+                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Séries x Reps</th>
+                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Intensidade</th>
+                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">RPE Alvo</th>
+              </tr>
+            </thead>
+            <tbody>`;
+          exercises.forEach((ex) => {
+            const displayIntensity = typeof ex.intensity === 'number' 
+              ? `${(ex.intensity * 100).toFixed(0)}%` 
+              : ex.intensity;
+            exercisesHTML += `
+              <tr style="border-bottom: 1px solid #3c2a21;">
+                <td style="padding: 8px; font-weight: bold; color: #ffffff;">${ex.name}</td>
+                <td style="padding: 8px; color: #ffffff;">${ex.sets} x ${ex.reps}</td>
+                <td style="padding: 8px; color: #d4af37;">${displayIntensity}</td>
+                <td style="padding: 8px; color: #ffffff;">@${ex.targetRPE}</td>
+              </tr>
+            `;
+          });
+          exercisesHTML += `</tbody></table>`;
+        }
+      });
+    }
+
+    const prsHTML = `
+      <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px; margin-top: 25px;">Seus Recordes Pessoais (PRs)</h3>
+      <ul style="font-family: sans-serif; font-size: 14px; color: #ffffff; list-style-type: none; padding-left: 0;">
+        <li style="margin-bottom: 6px;">🏋️ <strong>Agachamento:</strong> ${s.prs.squat ? `${s.prs.squat} kg` : 'Não registrado'}</li>
+        <li style="margin-bottom: 6px;">🏋️ <strong>Supino:</strong> ${s.prs.bench ? `${s.prs.bench} kg` : 'Não registrado'}</li>
+        <li style="margin-bottom: 6px;">🏋️ <strong>Levantamento Terra:</strong> ${s.prs.deadlift ? `${s.prs.deadlift} kg` : 'Não registrado'}</li>
+      </ul>
+    `;
+
+    const emailHTML = `
+      <div style="background-color: #0d0908; color: #e0d3a8; padding: 25px; border-radius: 15px; border: 2px solid #d4af37; font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #d4af37; font-family: 'Georgia', serif; font-size: 28px; margin: 0; text-transform: uppercase; letter-spacing: 2px;">Viking Force</h1>
+          <p style="color: #a89a78; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; margin: 5px 0 0 0;">Salão de Powerlifting</p>
+        </div>
+        
+        <p style="font-size: 15px; line-height: 1.6;">Saudações, guerreiro <strong>${s.name}</strong>!</p>
+        <p style="font-size: 14px; line-height: 1.6;">Seu treinador acaba de atualizar sua ficha de batalhas (treino) no painel do templo. Prepare seus eixos, fortaleça sua mente e que os deuses do ferro estejam com você na próxima jornada.</p>
+        
+        ${exercisesHTML}
+        ${prsHTML}
+        
+        <div style="margin-top: 30px; border-top: 1px solid #3c2a21; padding-top: 15px; font-size: 12px; color: #a89a78; text-align: center; line-height: 1.5;">
+          <p>Este e-mail foi disparado diretamente de Valhalla pelo sistema integrado Gmail da Viking Force.</p>
+          <p style="color: #d4af37; font-weight: bold; margin-top: 5px;">"O ferro não mente. 100kg sempre serão 100kg."</p>
+        </div>
+      </div>
+    `;
+
+    await sendGmail(studentEmail, subject, emailHTML);
+  };
+
   // --- CHAT / FEEDBACK LOGIC ---
   const handleSendMessage = (studentEmail: string, text: string) => {
     if (!text.trim()) return;
@@ -1522,6 +1720,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   }`}
                 >
                   <CreditCard className={`w-4 h-4 ${drawerOpen && drawerType === 'plans' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Planos
+                </button>
+
+                <button 
+                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                    drawerOpen && drawerType === 'gmail' 
+                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                  }`}
+                >
+                  <Mail className={`w-4 h-4 ${drawerOpen && drawerType === 'gmail' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Correio Gmail
                 </button>
               </div>
             </div>
@@ -2876,6 +3085,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       Prescrever Treino <ChevronRight className="w-3.5 h-3.5 text-viking-gold" />
                                     </button>
                                     <button 
+                                      onClick={() => sendWorkoutPlanEmail(email, s)}
+                                      className="p-2 px-3.5 rounded-xl bg-viking-gold/5 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold text-viking-gold hover:text-white transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
+                                      title="Enviar Ficha por Gmail"
+                                    >
+                                      <Mail className="w-3.5 h-3.5" />
+                                      <span className="text-xs font-bold">Enviar Ficha</span>
+                                    </button>
+                                    <button 
                                       onClick={() => setDeletingStudentEmail(email)}
                                       className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/30 border border-red-500/30 hover:border-red-500 text-red-400 transition-all cursor-pointer inline-flex items-center justify-center"
                                       title="Excluir Guerreiro"
@@ -2967,7 +3184,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               );
                             })()}
 
-                            <div className="border-t border-viking-gold/10 pt-2 grid grid-cols-5 gap-2">
+                            <div className="border-t border-viking-gold/10 pt-2 grid grid-cols-6 gap-2">
                               <button 
                                 onClick={() => {
                                   setActiveChatStudentEmail(email);
@@ -2986,6 +3203,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 Prescrever
                               </button>
                               <button 
+                                onClick={() => sendWorkoutPlanEmail(email, s)}
+                                className="col-span-1 py-3 rounded-xl bg-viking-gold/5 border border-viking-gold/20 hover:bg-viking-gold/10 text-viking-gold transition-all flex items-center justify-center cursor-pointer"
+                                title="Enviar Planilha por Gmail"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </button>
+                              <button 
                                 onClick={() => setDeletingStudentEmail(email)}
                                 className="col-span-1 py-3 rounded-xl bg-red-950/40 hover:bg-red-900/30 border border-red-500/30 hover:border-red-500 text-red-400 transition-all flex items-center justify-center cursor-pointer"
                                 title="Excluir Guerreiro"
@@ -3002,7 +3226,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               })()}
 
               {/* Quick actions for Trainer */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
                 <button 
                   onClick={() => { setDrawerType('whatsapp'); setDrawerTitle('Cobranças via WhatsApp'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -3020,6 +3244,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" /> Logs de Treino dos Alunos
+                </button>
+                <button 
+                  onClick={() => { setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
+                  className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Mail className="w-4 h-4 shrink-0 text-viking-gold" /> Central de Gmail (Correio)
                 </button>
               </div>
 
@@ -3062,6 +3292,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   {drawerType === 'rpeFeedback' && <MessageSquare className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'editProgram' && <Settings className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'chat' && <MessageSquare className="w-5 h-5 text-viking-gold animate-pulse" />}
+                  {drawerType === 'gmail' && <Mail className="w-5 h-5 text-viking-gold" />}
                   {drawerTitle}
                 </h3>
                 <button 
@@ -4247,6 +4478,257 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   );
                 })()}
 
+                {/* 11. Gmail / Correio de Valhalla Drawer */}
+                {drawerType === 'gmail' && (
+                  <div className="space-y-4">
+                    {!googleAccessToken ? (
+                      <div className="text-center py-12 space-y-5">
+                        <div className="w-16 h-16 bg-viking-gold/10 rounded-full flex items-center justify-center mx-auto border border-viking-gold/25 animate-pulse-gold">
+                          <Mail className="w-8 h-8 text-viking-gold" />
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="font-viking-display text-base font-black text-white uppercase tracking-wider">CORREIO DE VALHALLA</h4>
+                          <p className="text-xs text-viking-silver max-w-sm mx-auto leading-relaxed">
+                            Conecte sua conta do Google para enviar fichas de treino, feedbacks e comunicados diretamente pelo seu Gmail com a permissão do clã.
+                          </p>
+                        </div>
+                        <button 
+                          onClick={handleGoogleSignIn}
+                          className="gsi-material-button mx-auto shadow-lg"
+                        >
+                          <div className="gsi-material-button-state"></div>
+                          <div className="gsi-material-button-content-wrapper">
+                            <div className="gsi-material-button-icon">
+                              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
+                                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                                <path fill="none" d="M0 0h48v48H0z"></path>
+                              </svg>
+                            </div>
+                            <span className="gsi-material-button-contents font-bold text-[#1f2937]">Entrar com o Google</span>
+                          </div>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        <div className="p-4 rounded-xl bg-[#0d0908]/90 border border-viking-gold/25 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-viking-gold/15 border border-viking-gold/30 flex items-center justify-center">
+                              <Mail className="w-4 h-4 text-viking-gold" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-white leading-none">Gmail Conectado</p>
+                              <p className="text-[10px] text-viking-silver mt-0.5">{googleUserEmail}</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => { setGoogleAccessToken(null); setGoogleUserEmail(null); }}
+                            className="px-3 py-1.5 rounded-lg bg-viking-red/10 hover:bg-viking-red/20 text-red-400 border border-viking-red/25 text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all"
+                          >
+                            Desconectar
+                          </button>
+                        </div>
+
+                        {/* Gmail tabs */}
+                        <div className="flex border-b border-viking-gold/15">
+                          {['inbox', 'compose', 'broadcast'].map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => {
+                                setGmailTab(t as any);
+                                if (t === 'inbox') fetchRecentEmails(googleAccessToken);
+                              }}
+                              className={`flex-1 py-2 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer ${
+                                gmailTab === t 
+                                  ? 'border-viking-gold text-viking-gold font-bold bg-viking-gold/5' 
+                                  : 'border-transparent text-viking-silver hover:text-white'
+                              }`}
+                            >
+                              {t === 'inbox' && '📥 Caixa'}
+                              {t === 'compose' && '✉️ Escrever'}
+                              {t === 'broadcast' && '📢 Comunicado'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Gmail Tab: Inbox */}
+                        {gmailTab === 'inbox' && (
+                          <div className="space-y-3.5">
+                            <div className="flex justify-between items-center">
+                              <h4 className="text-xs font-black uppercase tracking-wider text-viking-gold flex items-center gap-1.5">
+                                <Inbox className="w-4 h-4 text-viking-gold" /> Últimos E-mails Recebidos
+                              </h4>
+                              <button 
+                                onClick={() => fetchRecentEmails(googleAccessToken)}
+                                className="text-[10px] text-viking-silver hover:text-viking-gold transition-all flex items-center gap-1 font-bold cursor-pointer uppercase"
+                              >
+                                🔄 Atualizar
+                              </button>
+                            </div>
+
+                            {loadingGmail ? (
+                              <div className="text-center py-10 space-y-2">
+                                <span className="block text-2xl animate-spin text-viking-gold">⌛</span>
+                                <p className="text-xs text-viking-silver font-bold uppercase tracking-wider">Consultando pergaminhos no Gmail...</p>
+                              </div>
+                            ) : gmailMessages.length === 0 ? (
+                              <div className="text-center py-10 text-viking-silver/50 bg-[#0d0908]/30 rounded-xl border border-viking-gold/10">
+                                <Inbox className="w-10 h-10 mx-auto text-viking-gold/15 mb-2" />
+                                <p className="text-xs font-bold uppercase tracking-wider">Caixa vazia ou sem mensagens recentes.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                {gmailMessages.map((msg, i) => {
+                                  const headers = msg.payload?.headers || [];
+                                  const subject = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value || '(Sem Assunto)';
+                                  const from = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value || 'Desconhecido';
+                                  return (
+                                    <div key={i} className="p-3.5 rounded-xl bg-[#0d0908]/55 border border-viking-gold/10 hover:border-viking-gold/25 transition-all">
+                                      <div className="flex justify-between items-start gap-2 mb-1.5">
+                                        <p className="text-xs font-black text-white truncate max-w-[250px]">{subject}</p>
+                                        <span className="text-[9px] font-bold text-viking-gold uppercase shrink-0">Recebido</span>
+                                      </div>
+                                      <p className="text-[10px] text-viking-silver font-semibold truncate mb-2">De: {from}</p>
+                                      <p className="text-[11px] text-viking-silver/80 italic line-clamp-2 bg-black/20 p-2 rounded-lg border border-viking-gold/5">{msg.snippet}</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Gmail Tab: Compose */}
+                        {gmailTab === 'compose' && (
+                          <div className="space-y-4">
+                            <h4 className="text-xs font-black uppercase tracking-wider text-viking-gold">✉️ Novo E-mail Individual</h4>
+                            <div className="space-y-3 p-4 bg-[#0d0908]/40 border border-viking-gold/15 rounded-xl">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">E-mail do Destinatário</label>
+                                <input 
+                                  type="email" 
+                                  placeholder="guerreiro@exemplo.com"
+                                  id="composeTo"
+                                  className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Assunto</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="🛡️ Convocação para o Treino"
+                                  id="composeSubject"
+                                  className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Mensagem</label>
+                                <textarea 
+                                  rows={5}
+                                  placeholder="Escreva sua instrução ou aviso aqui..."
+                                  id="composeBody"
+                                  className="w-full p-4 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/35 focus:outline-none focus:border-viking-gold text-xs font-semibold"
+                                />
+                              </div>
+                              <button 
+                                onClick={async () => {
+                                  const to = (document.getElementById('composeTo') as HTMLInputElement)?.value || '';
+                                  const subject = (document.getElementById('composeSubject') as HTMLInputElement)?.value || '';
+                                  const body = (document.getElementById('composeBody') as HTMLTextAreaElement)?.value || '';
+                                  if (!to || !subject || !body) {
+                                    showToast('Preencha todos os campos!', 'error');
+                                    return;
+                                  }
+                                  const success = await sendGmail(to, subject, `<div style="font-family:sans-serif;color:#111;padding:15px;line-height:1.6;">${body.replace(/\n/g, '<br/>')}</div>`);
+                                  if (success) {
+                                    (document.getElementById('composeTo') as HTMLInputElement).value = '';
+                                    (document.getElementById('composeSubject') as HTMLInputElement).value = '';
+                                    (document.getElementById('composeBody') as HTMLTextAreaElement).value = '';
+                                  }
+                                }}
+                                className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Send className="w-4 h-4" /> Enviar E-mail
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Gmail Tab: Broadcast */}
+                        {gmailTab === 'broadcast' && (
+                          <div className="space-y-4">
+                            <div className="p-3.5 rounded-xl border border-dashed border-viking-gold/25 bg-viking-gold/5 text-xs text-viking-silver leading-relaxed flex gap-2">
+                              <Info className="w-5 h-5 text-viking-gold shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-bold text-viking-gold">Envio em Massa:</span> Esta funcionalidade permite enviar um comunicado por e-mail para todos os {Object.keys(studentsData).length} atletas cadastrados no templo ao mesmo tempo.
+                              </div>
+                            </div>
+                            <div className="space-y-3 p-4 bg-[#0d0908]/40 border border-viking-gold/15 rounded-xl">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Assunto do Comunicado</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="🛡️ Comunicado Oficial do Templo Viking Force"
+                                  id="broadcastSubject"
+                                  className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Mensagem do Comunicado</label>
+                                <textarea 
+                                  rows={5}
+                                  placeholder="Escreva a mensagem que todos os guerreiros receberão..."
+                                  id="broadcastBody"
+                                  className="w-full p-4 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/35 focus:outline-none focus:border-viking-gold text-xs font-semibold"
+                                />
+                              </div>
+                              <button 
+                                onClick={async () => {
+                                  const subject = (document.getElementById('broadcastSubject') as HTMLInputElement)?.value || '';
+                                  const body = (document.getElementById('broadcastBody') as HTMLTextAreaElement)?.value || '';
+                                  if (!subject || !body) {
+                                    showToast('Preencha o assunto e a mensagem!', 'error');
+                                    return;
+                                  }
+                                  const athleteEmails = Object.keys(studentsData);
+                                  const confirmed = window.confirm(`Tem certeza que deseja disparar este e-mail em massa para TODOS os ${athleteEmails.length} atletas?`);
+                                  if (!confirmed) return;
+
+                                  showToast(`Iniciando disparo em massa...`, 'info');
+                                  let sentCount = 0;
+                                  for (const email of athleteEmails) {
+                                    const success = await sendGmail(email, subject, `
+                                      <div style="background-color:#0d0908;color:#e0d3a8;padding:25px;border-radius:15px;border:2px solid #d4af37;font-family:sans-serif;max-width:600px;margin:0 auto;">
+                                        <h2 style="color:#d4af37;text-align:center;text-transform:uppercase;margin-top:0;">🛡️ Comunicado do Templo Viking Force</h2>
+                                        <p style="font-size:15px;line-height:1.6;color:#ffffff;">Olá, Guerreiro!</p>
+                                        <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">${body.replace(/\n/g, '<br/>')}</p>
+                                        <div style="margin-top:25px;border-top:1px solid #3c2a21;padding-top:15px;font-size:11px;color:#a89a78;text-align:center;">
+                                          Viking Force Powerlifting - Central de Comunicação Gmail
+                                        </div>
+                                      </div>
+                                    `);
+                                    if (success) sentCount++;
+                                  }
+                                  showToast(`Disparo concluído: ${sentCount} e-mails enviados com sucesso!`, 'success');
+                                  if (sentCount > 0) {
+                                    (document.getElementById('broadcastSubject') as HTMLInputElement).value = '';
+                                    (document.getElementById('broadcastBody') as HTMLTextAreaElement).value = '';
+                                  }
+                                }}
+                                className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Send className="w-4 h-4" /> Disparar Comunicado para Todos os Atletas
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
               </div>
             </motion.div>
           </>
@@ -4570,6 +5052,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" /> Planos de Treino
+                  </button>
+
+                  <button 
+                    onClick={() => { setMobileMenuOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
+                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <Mail className="w-4 h-4 text-viking-gold" /> Correio Gmail
                   </button>
                 </div>
               </div>

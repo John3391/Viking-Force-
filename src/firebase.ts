@@ -25,6 +25,54 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, "ai-studio-remixvikingforce-975519ec-fc30-48ed-bba6-b972bb76ae87");
 export const auth = getAuth(app);
 
+// --- ERROR HANDLING FOR FIRESTORE (As required by Firebase Integration Skill) ---
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 // --- FIREBASE SYNC METHODS ---
 
 /**
@@ -51,9 +99,7 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
     });
     return students;
   } catch (error) {
-    console.error("Failed to fetch students from Firebase:", error);
-    // Fallback to local storage if available, handled in App.tsx
-    throw error;
+    handleFirestoreError(error, OperationType.LIST, 'students');
   }
 }
 
@@ -64,8 +110,7 @@ export async function saveStudentToFirebase(email: string, student: StudentProfi
   try {
     await setDoc(doc(db, 'students', email), student);
   } catch (error) {
-    console.error(`Failed to save student ${email} to Firebase:`, error);
-    throw error;
+    handleFirestoreError(error, OperationType.WRITE, `students/${email}`);
   }
 }
 
@@ -76,8 +121,7 @@ export async function deleteStudentFromFirebase(email: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'students', email));
   } catch (error) {
-    console.error(`Failed to delete student ${email} from Firebase:`, error);
-    throw error;
+    handleFirestoreError(error, OperationType.DELETE, `students/${email}`);
   }
 }
 
@@ -98,8 +142,7 @@ export async function fetchProgramFromFirebase(): Promise<TrainingProgram> {
       return DEFAULT_PROGRAM;
     }
   } catch (error) {
-    console.error("Failed to fetch program from Firebase:", error);
-    throw error;
+    handleFirestoreError(error, OperationType.GET, 'config/program');
   }
 }
 
@@ -110,8 +153,7 @@ export async function saveProgramToFirebase(program: TrainingProgram): Promise<v
   try {
     await setDoc(doc(db, 'config', 'program'), program);
   } catch (error) {
-    console.error("Failed to save program to Firebase:", error);
-    throw error;
+    handleFirestoreError(error, OperationType.WRITE, 'config/program');
   }
 }
 
@@ -128,8 +170,7 @@ export async function fetchPlansFromFirebase(): Promise<VikingPlan[] | null> {
     }
     return null;
   } catch (error) {
-    console.error("Failed to fetch plans from Firebase:", error);
-    throw error;
+    handleFirestoreError(error, OperationType.GET, 'config/plans');
   }
 }
 
@@ -140,7 +181,6 @@ export async function savePlansToFirebase(plans: VikingPlan[]): Promise<void> {
   try {
     await setDoc(doc(db, 'config', 'plans'), { plans });
   } catch (error) {
-    console.error("Failed to save plans to Firebase:", error);
-    throw error;
+    handleFirestoreError(error, OperationType.WRITE, 'config/plans');
   }
 }
