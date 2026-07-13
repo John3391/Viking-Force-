@@ -44,7 +44,8 @@ import {
   Award,
   Sparkles,
   Mail,
-  Inbox
+  Inbox,
+  Loader2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -129,6 +130,8 @@ export default function App() {
   const [editingStudentEmail, setEditingStudentEmail] = useState<string>('');
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
+  const [activeNoteStudentEmail, setActiveNoteStudentEmail] = useState<string>('');
+  const [publicNoteInput, setPublicNoteInput] = useState<string>('');
 
   // Gmail states
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
@@ -154,6 +157,8 @@ export default function App() {
 
   // Search filter state for Trainer dashboard
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
@@ -817,6 +822,7 @@ export default function App() {
     }
 
     try {
+      setAuthLoading(true);
       if (!isRegisterMode) {
         // Firebase Auth sign-in
         let userCredential;
@@ -921,6 +927,8 @@ export default function App() {
         errorMsg = 'O formato do e-mail inserido é inválido.';
       }
       showToast(errorMsg, 'error');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -1151,6 +1159,25 @@ export default function App() {
     saveStudentsToDB(updatedStudents);
     setChatMessageInput('');
     showToast('Comentário enviado!', 'success');
+  };
+
+  const handleSavePublicNote = (studentEmail: string, noteText: string) => {
+    const student = studentsData[studentEmail];
+    if (!student) return;
+
+    const updatedProfile: StudentProfile = {
+      ...student,
+      publicNote: noteText.trim() || undefined
+    };
+
+    const updatedStudents = {
+      ...studentsData,
+      [studentEmail]: updatedProfile
+    };
+
+    saveStudentsToDB(updatedStudents);
+    showToast('Nota pública de parabéns atualizada com sucesso!', 'success');
+    setDrawerOpen(false);
   };
 
   const handleSendActiveChatMessage = (e: React.FormEvent) => {
@@ -1978,10 +2005,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <input 
                           type="text" 
                           required 
+                          disabled={authLoading}
                           value={loginEmail}
                           onChange={e => setLoginEmail(e.target.value)}
                           placeholder="john" 
-                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
                       </div>
 
@@ -1990,10 +2018,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <input 
                           type="password" 
                           required 
+                          disabled={authLoading}
                           value={loginPassword}
                           onChange={e => setLoginPassword(e.target.value)}
                           placeholder="••••" 
-                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
                       </div>
                     </>
@@ -2005,10 +2034,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <input 
                             type="text" 
                             required 
+                            disabled={authLoading}
                             value={regName}
                             onChange={e => setRegName(e.target.value)}
                             placeholder="Ex: Ragnar Lothbrok" 
-                            className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                            className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                           />
                         </div>
                       )}
@@ -2018,10 +2048,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <input 
                           type="email" 
                           required 
+                          disabled={authLoading}
                           value={loginEmail}
                           onChange={e => setLoginEmail(e.target.value)}
                           placeholder="seu@email.com" 
-                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
                       </div>
 
@@ -2030,10 +2061,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <input 
                           type="password" 
                           required 
+                          disabled={authLoading}
                           value={loginPassword}
                           onChange={e => setLoginPassword(e.target.value)}
                           placeholder="••••••••" 
-                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
                       </div>
                     </>
@@ -2054,30 +2086,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Agachamento (kg)</label>
                           <input 
                             type="number" 
+                            disabled={authLoading}
                             value={prSquat}
                             onChange={e => setPrSquat(e.target.value)}
                             placeholder="Ex: 140"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Supino (kg)</label>
                           <input 
                             type="number" 
+                            disabled={authLoading}
                             value={prBench}
                             onChange={e => setPrBench(e.target.value)}
                             placeholder="Ex: 100"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Terra (kg)</label>
                           <input 
                             type="number" 
+                            disabled={authLoading}
                             value={prDeadlift}
                             onChange={e => setPrDeadlift(e.target.value)}
                             placeholder="Ex: 180"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -2087,10 +2122,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
                           <input 
                             type="number" 
+                            disabled={authLoading}
                             value={regAge}
                             onChange={e => setRegAge(e.target.value)}
                             placeholder="Ex: 25"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div>
@@ -2098,10 +2134,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <input 
                             type="number" 
                             step="0.1"
+                            disabled={authLoading}
                             value={regBodyWeight}
                             onChange={e => setRegBodyWeight(e.target.value)}
                             placeholder="Ex: 80.0"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -2109,9 +2146,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <div className="pt-1">
                         <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Gênero para Competição</label>
                         <select 
+                          disabled={authLoading}
                           value={regGender}
                           onChange={e => setRegGender(e.target.value as any)}
-                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
                           <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
@@ -2122,9 +2160,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1.5">Horário de Preferência de Treino</label>
                         <input 
                           type="time" 
+                          disabled={authLoading}
                           value={regPreferredTime}
                           onChange={e => setRegPreferredTime(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
+                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </div>
                     </div>
@@ -2132,10 +2171,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                   <button 
                     type="submit" 
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black tracking-widest uppercase hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4 text-xs shadow-[0_0_20px_rgba(212,175,55,0.3)] cursor-pointer"
+                    disabled={authLoading}
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black tracking-widest uppercase hover:brightness-110 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:brightness-90 transition-all flex items-center justify-center gap-2 mt-4 text-xs shadow-[0_0_20px_rgba(212,175,55,0.3)] cursor-pointer"
                   >
-                    {isRegisterMode ? <UserPlus className="w-4 h-4 shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
-                    {isRegisterMode ? 'Registrar meu Clã' : 'Adentrar ao Salão'}
+                    {authLoading ? (
+                      <Loader2 className="w-4 h-4 shrink-0 animate-spin text-viking-dark" />
+                    ) : isRegisterMode ? (
+                      <UserPlus className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <Play className="w-4 h-4 shrink-0" />
+                    )}
+                    {authLoading 
+                      ? (isRegisterMode ? 'Invocando Guerreiro...' : 'Adentrando...') 
+                      : (isRegisterMode ? 'Registrar meu Clã' : 'Adentrar ao Salão')}
                   </button>
                 </form>
 
@@ -2183,6 +2231,40 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">Ciclo de Força Ativo</span>
               </div>
             </div>
+
+            {/* Conditional Highlight Card / Public Note from Trainer */}
+            {activeStudentProfile.publicNote && (
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', duration: 0.5 }}
+                className="bg-gradient-to-br from-amber-500/15 via-[#231710]/95 to-amber-950/20 border-2 border-viking-gold rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(217,119,6,0.25)] text-left"
+              >
+                {/* Sparkly decorative elements */}
+                <div className="absolute right-4 top-4 text-viking-gold/20 pointer-events-none">
+                  <Sparkles className="w-24 h-24 rotate-12 animate-pulse" />
+                </div>
+                
+                <div className="flex items-start gap-4">
+                  <span className="p-3 rounded-2xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark shrink-0 shadow-lg shadow-viking-gold/20 mt-1 animate-pulse">
+                    <Award className="w-6 h-6" />
+                  </span>
+                  <div className="space-y-1 pr-12">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-viking-gold bg-viking-gold/10 px-2.5 py-1 rounded-md border border-viking-gold/20">
+                        Mensagem de Honra do Treinador John
+                      </span>
+                    </div>
+                    <h3 className="font-viking-display text-lg sm:text-xl font-black text-white tracking-wide leading-tight pt-1">
+                      PARABÉNS, GUERREIRO!
+                    </h3>
+                    <p className="text-viking-silver hover:text-white transition-colors text-sm sm:text-base leading-relaxed font-semibold italic pt-2">
+                      "{activeStudentProfile.publicNote}"
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Sub-Tab Navigation inside Student Profile */}
             <div className="flex border-b border-viking-gold/15 gap-2 sm:gap-6 bg-[#140e0c]/40 p-1.5 rounded-2xl border border-viking-gold/10">
@@ -3029,6 +3111,136 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
             </div>
 
+            {/* Resumo Financeiro Section */}
+            {(() => {
+              const expectedTotal = Object.keys(studentsData).reduce((sum, email) => sum + getPlanMonthlyEquivalent(studentsData[email].plan), 0);
+              const receivedTotal = Object.keys(studentsData).reduce((sum, email) => {
+                const s = studentsData[email];
+                return s.status === 'Pago' ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
+              }, 0);
+              const pendingOrOverdueTotal = Object.keys(studentsData).reduce((sum, email) => {
+                const s = studentsData[email];
+                return (s.status === 'Pendente' || s.status === 'Atrasado') ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
+              }, 0);
+
+              const countMensal = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Mensal').length;
+              const countTrimestral = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Trimestral').length;
+              const countAnual = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Anual').length;
+
+              const receivedPercentage = expectedTotal > 0 ? Math.round((receivedTotal / expectedTotal) * 100) : 0;
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Coins className="w-32 h-32" />
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-viking-gold">
+                        <Coins className="w-5 h-5" />
+                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Resumo Financeiro do Clã</h2>
+                      </div>
+                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-0.5">Tesouraria do Templo de Ferro</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-viking-silver/60 uppercase font-bold">Mês de Referência:</span>
+                      <p className="text-xs text-viking-gold font-extrabold uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/20 px-2.5 py-1 rounded-lg mt-1 inline-block">
+                        Julho 2026 (Ciclo Atual)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Financial stats columns */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    {/* Expected Card */}
+                    <div className="bg-[#100a09]/60 border border-viking-gold/10 hover:border-viking-gold/20 rounded-2xl p-4 transition-all flex items-start gap-3.5">
+                      <span className="p-2.5 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold mt-0.5">
+                        <CreditCard className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-[10px] text-viking-silver uppercase font-bold tracking-widest font-viking-medieval">Tributo Esperado</p>
+                        <p className="text-xl font-black text-white mt-1">
+                          R$ {expectedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-viking-silver/50 mt-0.5">
+                          Soma de todas as mensalidades vigentes
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Received Card */}
+                    <div className="bg-[#100a09]/60 border border-emerald-500/10 hover:border-emerald-500/30 rounded-2xl p-4 transition-all flex items-start gap-3.5">
+                      <span className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mt-0.5 animate-pulse">
+                        <CheckCircle className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest font-viking-medieval">Tributo Recebido</p>
+                        <p className="text-xl font-black text-emerald-400 mt-1">
+                          R$ {receivedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-viking-silver/50 mt-0.5">
+                          {receivedPercentage}% do esperado recolhido
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Pending Card */}
+                    <div className="bg-[#100a09]/60 border border-red-500/10 hover:border-red-500/30 rounded-2xl p-4 transition-all flex items-start gap-3.5">
+                      <span className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 mt-0.5">
+                        <AlertTriangle className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-[10px] text-red-400 uppercase font-bold tracking-widest font-viking-medieval">Tributo Pendente</p>
+                        <p className="text-xl font-black text-red-400 mt-1">
+                          R$ {pendingOrOverdueTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-viking-silver/50 mt-0.5">
+                          Atrasados e pendentes de quitação
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Indicator */}
+                  <div className="space-y-2 mb-6">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-viking-silver">Progresso de Arrecadação:</span>
+                      <span className="font-black text-viking-gold">{receivedPercentage}% Completo</span>
+                    </div>
+                    <div className="h-2.5 w-full bg-[#0d0908] rounded-full overflow-hidden border border-viking-gold/10 p-0.5">
+                      <div 
+                        className="h-full bg-gradient-to-r from-viking-gold-dark to-emerald-400 rounded-full transition-all duration-500"
+                        style={{ width: `${receivedPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Plans Distribution & Quick Stats */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-4 border-t border-viking-gold/10">
+                    <div className="flex items-center justify-between p-3 bg-[#0d0908]/40 rounded-xl border border-viking-gold/5 text-xs">
+                      <span className="text-viking-silver font-semibold">Planos Mensais (R$ 200/mês):</span>
+                      <span className="font-black text-white px-2 py-0.5 bg-viking-gold/10 border border-viking-gold/20 rounded-lg">
+                        {countMensal} Atleta{countMensal !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-[#0d0908]/40 rounded-xl border border-viking-gold/5 text-xs">
+                      <span className="text-viking-silver font-semibold">Planos Trimestrais (R$ 180/mês):</span>
+                      <span className="font-black text-white px-2 py-0.5 bg-viking-gold/10 border border-viking-gold/20 rounded-lg">
+                        {countTrimestral} Atleta{countTrimestral !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-[#0d0908]/40 rounded-xl border border-viking-gold/5 text-xs">
+                      <span className="text-viking-silver font-semibold">Planos Anuais (R$ 150/mês):</span>
+                      <span className="font-black text-white px-2 py-0.5 bg-viking-gold/10 border border-viking-gold/20 rounded-lg">
+                        {countAnual} Atleta{countAnual !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Coach Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               
@@ -3064,6 +3276,156 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             {/* Wilks Efficiency Scatter Chart */}
             <WilksScatterChart entries={getLeaderboard()} />
+
+            {/* Payment Highlight Card */}
+            {(() => {
+              const overdueOrPending = Object.keys(studentsData)
+                .map(email => ({ email, ...studentsData[email] }))
+                .filter(s => s.status === 'Pendente' || s.status === 'Atrasado');
+
+              const isFiltered = paymentFilter === 'pending_or_overdue';
+
+              return (
+                <div className={`border rounded-3xl p-6 relative overflow-hidden shadow-xl backdrop-blur-md transition-all duration-300 ${
+                  overdueOrPending.length > 0 
+                    ? 'bg-[#1c1210]/95 border-red-500/35 shadow-[0_0_20px_rgba(239,68,68,0.15)]' 
+                    : 'bg-[#101912]/95 border-emerald-500/35 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                }`}>
+                  <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+                    {overdueOrPending.length > 0 ? (
+                      <AlertTriangle className="w-32 h-32 text-red-500" />
+                    ) : (
+                      <CheckCircle className="w-32 h-32 text-emerald-500" />
+                    )}
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 relative z-10">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        {overdueOrPending.length > 0 ? (
+                          <span className="flex h-2 w-2 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                          </span>
+                        ) : (
+                          <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                        )}
+                        <h4 className={`text-xs font-black uppercase tracking-widest font-viking-medieval ${
+                          overdueOrPending.length > 0 ? 'text-red-400' : 'text-emerald-400'
+                        }`}>
+                          {overdueOrPending.length > 0 ? 'Sentinela de Cobrança / Alertas Ativos' : 'Tributos da Tribo'}
+                        </h4>
+                      </div>
+                      <h3 className="font-viking-display text-xl font-black text-white tracking-wide mt-1">
+                        {overdueOrPending.length > 0 
+                          ? `${overdueOrPending.length} Atleta${overdueOrPending.length > 1 ? 's' : ''} com Pendência`
+                          : 'Todos os Guerreiros em Dia!'}
+                      </h3>
+                      <p className="text-xs text-viking-silver/80 mt-1 max-w-2xl">
+                        {overdueOrPending.length > 0
+                          ? 'Estes atletas estão com pagamento pendente ou atrasado. Toque para filtrar na lista abaixo e gerenciar.'
+                          : 'As finanças do templo estão seguras. Nenhum gladiador possui pendências.'}
+                      </p>
+                    </div>
+
+                    {overdueOrPending.length > 0 && (
+                      <button
+                        onClick={() => setPaymentFilter(prev => prev === 'all' ? 'pending_or_overdue' : 'all')}
+                        className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-lg cursor-pointer flex items-center gap-2 border w-full md:w-auto justify-center ${
+                          isFiltered
+                            ? 'bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark border-viking-gold hover:brightness-110 shadow-viking-gold/25'
+                            : 'bg-red-950/40 hover:bg-red-900/30 border-red-500/30 hover:border-red-500 text-red-400 shadow-red-950/20'
+                        }`}
+                      >
+                        {isFiltered ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Mostrar Todos os Atletas
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4 animate-pulse" />
+                            Filtrar Pendentes / Atrasados
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {overdueOrPending.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4 relative z-10">
+                      {overdueOrPending.map(student => {
+                        const isAtrasado = student.status === 'Atrasado';
+                        return (
+                          <div 
+                            key={student.email}
+                            onClick={() => {
+                              setPaymentFilter('pending_or_overdue');
+                              setSearchTerm(student.name);
+                            }}
+                            className={`p-3.5 rounded-2xl bg-[#0d0908]/85 border transition-all duration-200 relative group flex flex-col justify-between cursor-pointer ${
+                              isAtrasado 
+                                ? 'border-red-500/20 hover:border-red-500/60 hover:bg-red-500/5' 
+                                : 'border-amber-500/20 hover:border-amber-500/60 hover:bg-amber-500/5'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex justify-between items-start gap-2">
+                                <p className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate">
+                                  {student.name}
+                                </p>
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                  isAtrasado ? 'bg-red-500/15 text-red-400 border border-red-500/25' : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                                }`}>
+                                  {student.status}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-viking-silver/50 truncate mt-0.5">{student.email}</p>
+                              <p className="text-[11px] text-viking-silver mt-1.5 flex items-center gap-1.5 font-semibold">
+                                <span className="text-viking-gold/70">Plano:</span> {student.plan}
+                              </p>
+                            </div>
+                            
+                            <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-viking-gold/5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => {
+                                  setActiveChatStudentEmail(student.email);
+                                  setDrawerTitle(`Chat com ${student.name}`);
+                                  setDrawerType('chat');
+                                  setDrawerOpen(true);
+                                }}
+                                className="flex-1 py-1.5 rounded-lg bg-viking-gold/5 border border-viking-gold/15 hover:bg-viking-gold/15 text-viking-gold text-[10px] font-bold uppercase transition-all cursor-pointer text-center"
+                              >
+                                Cobrar Chat
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSearchTerm(student.name);
+                                  setPaymentFilter('all');
+                                }}
+                                className="flex-1 py-1.5 rounded-lg bg-viking-dark border border-viking-gold/15 hover:border-viking-gold/30 text-viking-silver hover:text-white text-[10px] font-bold uppercase transition-all cursor-pointer text-center"
+                              >
+                                Rastrear
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3.5 mt-2 bg-emerald-500/5 border border-emerald-500/15 p-4 rounded-2xl relative z-10">
+                      <span className="text-2xl">🛡️</span>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-400 uppercase tracking-wide font-viking-medieval">Fidelidade Suprema</p>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
+                          Todos os {Object.keys(studentsData).length} guerreiros estão em dia com a guilda. Nenhum tributo de ferro está em atraso neste solstício!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* List of Athletes Table Panel */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 overflow-hidden shadow-xl backdrop-blur-md">
@@ -3102,9 +3464,31 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 )}
               </div>
 
+              {/* Active Payment Filter Indicator */}
+              {paymentFilter === 'pending_or_overdue' && (
+                <div className="mb-6 flex items-center justify-between bg-amber-500/10 border border-amber-500/35 px-4 py-2.5 rounded-2xl text-xs shadow-inner">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span className="font-extrabold uppercase tracking-wide font-viking-medieval text-viking-gold">Exibindo apenas pendentes e atrasados</span>
+                  </div>
+                  <button
+                    onClick={() => setPaymentFilter('all')}
+                    className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 hover:border-amber-500 text-amber-300 font-black uppercase text-[10px] rounded-xl transition-all cursor-pointer"
+                  >
+                    Mostrar Todos
+                  </button>
+                </div>
+              )}
+
               {(() => {
                 const filteredStudentEmails = Object.keys(studentsData).filter(email => {
                   const s = studentsData[email];
+                  if (paymentFilter === 'pending_or_overdue' && s.status === 'Pago') {
+                    return false;
+                  }
                   const searchLower = searchTerm.toLowerCase().trim();
                   if (!searchLower) return true;
                   return s.name.toLowerCase().includes(searchLower) || email.toLowerCase().includes(searchLower);
@@ -3115,7 +3499,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <div className="py-12 text-center text-viking-silver/60 bg-[#0d0908]/30 rounded-2xl border border-viking-gold/10">
                       <Search className="w-10 h-10 mx-auto text-viking-silver/30 mb-3" />
                       <p className="text-sm font-semibold text-viking-gold">Nenhum guerreiro encontrado</p>
-                      <p className="text-xs mt-1">Nenhum atleta corresponde à busca "{searchTerm}".</p>
+                      <p className="text-xs mt-1">
+                        {paymentFilter === 'pending_or_overdue' 
+                          ? `Nenhum atleta pendente/atrasado corresponde à busca "${searchTerm}".`
+                          : `Nenhum atleta corresponde à busca "${searchTerm}".`}
+                      </p>
                     </div>
                   );
                 }
@@ -3195,12 +3583,26 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   <div className="flex justify-end items-center gap-2">
                                     <button 
                                       onClick={() => {
+                                        setActiveNoteStudentEmail(email);
+                                        setPublicNoteInput(s.publicNote || '');
+                                        setDrawerTitle(`Nota Pública / Parabenizar ${s.name}`);
+                                        setDrawerType('publicNote');
+                                        setDrawerOpen(true);
+                                      }}
+                                      className="p-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500 text-amber-400 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
+                                      title="Escrever Nota Pública de Parabenização"
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5" />
+                                      <span className="text-xs font-bold">Parabenizar</span>
+                                    </button>
+                                    <button 
+                                      onClick={() => {
                                         setActiveChatStudentEmail(email);
                                         setDrawerTitle(`Chat com ${s.name}`);
                                         setDrawerType('chat');
                                         setDrawerOpen(true);
                                       }}
-                                      className="p-2 px-3.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/35 hover:border-viking-gold text-viking-gold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
+                                      className="p-2 px-3 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/35 hover:border-viking-gold text-viking-gold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
                                       title="Enviar Feedback"
                                     >
                                       <MessageSquare className="w-3.5 h-3.5" />
@@ -3312,7 +3714,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               );
                             })()}
 
-                            <div className="border-t border-viking-gold/10 pt-2 grid grid-cols-6 gap-2">
+                            <div className="border-t border-viking-gold/10 pt-2 grid grid-cols-4 gap-2">
                               <button 
                                 onClick={() => {
                                   setActiveChatStudentEmail(email);
@@ -3320,30 +3722,44 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   setDrawerType('chat');
                                   setDrawerOpen(true);
                                 }}
-                                className="col-span-2 py-3 rounded-xl bg-viking-gold/10 border border-viking-gold/30 hover:bg-viking-gold/20 text-viking-gold font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                className="py-2.5 rounded-xl bg-viking-gold/10 border border-viking-gold/30 hover:bg-viking-gold/20 text-viking-gold font-black text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                <MessageSquare className="w-3.5 h-3.5" /> Chat
+                                <MessageSquare className="w-3 h-3" /> Chat
                               </button>
                               <button 
                                 onClick={() => openProgramEditor(email)}
-                                className="col-span-2 py-3 rounded-xl bg-viking-dark border border-viking-gold/25 hover:border-viking-gold hover:bg-viking-gold/10 text-viking-gold font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                className="py-2.5 rounded-xl bg-viking-dark border border-viking-gold/25 hover:border-viking-gold hover:bg-viking-gold/10 text-viking-gold font-black text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 Prescrever
                               </button>
                               <button 
-                                onClick={() => sendWorkoutPlanEmail(email, s)}
-                                className="col-span-1 py-3 rounded-xl bg-viking-gold/5 border border-viking-gold/20 hover:bg-viking-gold/10 text-viking-gold transition-all flex items-center justify-center cursor-pointer"
-                                title="Enviar Planilha por Gmail"
+                                onClick={() => {
+                                  setActiveNoteStudentEmail(email);
+                                  setPublicNoteInput(s.publicNote || '');
+                                  setDrawerTitle(`Parabenizar ${s.name}`);
+                                  setDrawerType('publicNote');
+                                  setDrawerOpen(true);
+                                }}
+                                className="py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 text-amber-400 font-black text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                <Mail className="w-4 h-4" />
+                                <Sparkles className="w-3 h-3" /> Parabéns
                               </button>
-                              <button 
-                                onClick={() => setDeletingStudentEmail(email)}
-                                className="col-span-1 py-3 rounded-xl bg-red-950/40 hover:bg-red-900/30 border border-red-500/30 hover:border-red-500 text-red-400 transition-all flex items-center justify-center cursor-pointer"
-                                title="Excluir Guerreiro"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex gap-1">
+                                <button 
+                                  onClick={() => sendWorkoutPlanEmail(email, s)}
+                                  className="flex-1 py-2.5 rounded-xl bg-viking-gold/5 border border-viking-gold/20 hover:bg-viking-gold/10 text-viking-gold transition-all flex items-center justify-center cursor-pointer"
+                                  title="Enviar Planilha por Gmail"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => setDeletingStudentEmail(email)}
+                                  className="flex-1 py-2.5 rounded-xl bg-red-950/40 hover:bg-red-900/30 border border-red-500/30 hover:border-red-500 text-red-400 transition-all flex items-center justify-center cursor-pointer"
+                                  title="Excluir Guerreiro"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -4196,6 +4612,78 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     </button>
                   </form>
                 )}
+
+                {/* Public Note / Parabenizar Panel */}
+                {drawerType === 'publicNote' && (() => {
+                  const s = studentsData[activeNoteStudentEmail];
+                  if (!s) return <p className="text-sm text-viking-silver">Selecione um atleta válido.</p>;
+                  
+                  const presets = [
+                    "🔥 PARABÉNS PELO NOVO PR! O clã celebra a sua força! Continue quebrando limites!",
+                    "⚔️ Treino de mestre hoje! Sua persistência e entrega orgulham os deuses do ferro!",
+                    "🏆 Wilks nas alturas! Você está subindo rapidamente na classificação geral do templo!",
+                    "💪 Excelente consistência! Continue firme na jornada em direção à força absoluta!"
+                  ];
+
+                  return (
+                    <div className="space-y-4 text-left">
+                      <div className="p-4 rounded-xl bg-viking-gold/5 border border-viking-gold/15">
+                        <p className="text-xs text-viking-silver">Atleta selecionado:</p>
+                        <p className="text-base font-black text-white mt-1">{s.name}</p>
+                        <p className="text-[10px] text-viking-silver/50">{activeNoteStudentEmail}</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#e0d3a8] uppercase tracking-wider">Sua Mensagem de Destaque / Parabéns</label>
+                        <textarea
+                          value={publicNoteInput}
+                          onChange={(e) => setPublicNoteInput(e.target.value)}
+                          placeholder="Digite aqui palavras de honra, conquistas ou um novo recorde que merece celebração no feed..."
+                          className="w-full h-32 px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-medium text-sm leading-relaxed"
+                        />
+                        <p className="text-[10px] text-viking-silver/50 leading-normal">
+                          Esta mensagem será apresentada em destaque dourado com efeito épico na página inicial do guerreiro.
+                        </p>
+                      </div>
+
+                      {/* Suggestions presets */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-viking-silver uppercase tracking-wider">Sugestões Rápidas (Toque para usar)</p>
+                        <div className="space-y-2">
+                          {presets.map((preset, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setPublicNoteInput(preset)}
+                              className="w-full text-left p-2.5 rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 hover:border-viking-gold/30 hover:bg-viking-gold/5 text-xs text-viking-silver hover:text-white transition-all font-medium leading-relaxed cursor-pointer"
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 pt-4">
+                        {s.publicNote && (
+                          <button
+                            type="button"
+                            onClick={() => handleSavePublicNote(activeNoteStudentEmail, '')}
+                            className="flex-1 py-3 border border-red-500/30 hover:border-red-500 bg-red-950/20 hover:bg-red-950/40 text-red-400 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                          >
+                            Remover Nota
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSavePublicNote(activeNoteStudentEmail, publicNoteInput)}
+                          className="flex-[2] py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+                        >
+                          Salvar Mensagem
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* 6. WhatsApp billing */}
                 {drawerType === 'whatsapp' && (
