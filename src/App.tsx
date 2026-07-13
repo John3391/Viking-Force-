@@ -296,7 +296,7 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const email = firebaseUser.email || '';
+        const email = (firebaseUser.email || '').trim().toLowerCase();
         const isTrainer = email === TRAINER_EMAIL;
         
         // Ensure state and localstorage match current authenticated user
@@ -1236,7 +1236,7 @@ export default function App() {
   // --- CHAT / FEEDBACK LOGIC ---
   const handleSendMessage = (studentEmail: string, text: string) => {
     if (!text.trim()) return;
-    const student = studentsData[studentEmail];
+    const student = studentsData[studentEmail.toLowerCase()];
     if (!student) return;
 
     const newMessage: ChatMessage = {
@@ -1254,7 +1254,7 @@ export default function App() {
 
     const updatedStudents = {
       ...studentsData,
-      [studentEmail]: updatedProfile
+      [studentEmail.toLowerCase()]: updatedProfile
     };
 
     saveStudentsToDB(updatedStudents);
@@ -1263,7 +1263,7 @@ export default function App() {
   };
 
   const handleSavePublicNote = (studentEmail: string, noteText: string) => {
-    const student = studentsData[studentEmail];
+    const student = studentsData[studentEmail.toLowerCase()];
     if (!student) return;
 
     const updatedProfile: StudentProfile = {
@@ -1273,7 +1273,7 @@ export default function App() {
 
     const updatedStudents = {
       ...studentsData,
-      [studentEmail]: updatedProfile
+      [studentEmail.toLowerCase()]: updatedProfile
     };
 
     saveStudentsToDB(updatedStudents);
@@ -1288,11 +1288,11 @@ export default function App() {
     const targetEmail = currentUser?.role === 'trainer' ? activeChatStudentEmail : currentUser?.email;
     if (!targetEmail) return;
 
-    handleSendMessage(targetEmail, chatMessageInput);
+    handleSendMessage(targetEmail.toLowerCase(), chatMessageInput);
   };
 
   // --- STUDENT LEVEL LOGIC ---
-  const activeStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email] : null;
+  const activeStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
 
   // Calculate volume: Sets * Reps * 1RM * intensity ratio for each logged exercise
   const calculateTotalVolume = () => {
@@ -4641,7 +4641,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             bodyWeight,
                             gender
                           };
-                          saveStudentsToDB({ ...studentsData, [currentUser!.email]: updatedProfile });
+                          saveStudentsToDB({ ...studentsData, [currentUser!.email.toLowerCase()]: updatedProfile });
                           setDrawerOpen(false);
                           
                           if (improvedLifts.length > 0) {
@@ -5245,7 +5245,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* 10. Direct Chat / Feedback Drawer */}
                 {drawerType === 'chat' && (() => {
                   const targetEmail = currentUser?.role === 'trainer' ? activeChatStudentEmail : currentUser?.email;
-                  const student = targetEmail ? studentsData[targetEmail] : null;
+                  const student = targetEmail ? studentsData[targetEmail.toLowerCase()] : null;
                   if (!student) return <p className="text-center text-viking-silver py-6">Carregando guerreiro...</p>;
 
                   const chatHistory = student.chatHistory || [];
