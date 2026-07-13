@@ -45,11 +45,13 @@ import {
   Sparkles,
   Mail,
   Inbox,
-  Loader2
+  Loader2,
+  BookOpen,
+  Upload
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import { 
   fetchStudentsFromFirebase, 
@@ -59,6 +61,9 @@ import {
   saveProgramToFirebase, 
   fetchPlansFromFirebase, 
   savePlansToFirebase,
+  fetchDbExercisesFromFirebase,
+  saveDbExerciseToFirebase,
+  deleteDbExerciseFromFirebase,
   auth
 } from './firebase';
 import { 
@@ -80,6 +85,16 @@ interface Toast {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info';
+}
+
+function getYouTubeEmbedUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?\??v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return `https://www.youtube.com/embed/${match[2]}`;
+  }
+  return null;
 }
 
 export default function App() {
@@ -165,6 +180,15 @@ export default function App() {
 
   // PR Celebration state (Student)
   const [prCelebration, setPrCelebration] = useState<{ lifts: string[] } | null>(null);
+
+  // Exercises Database state
+  const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
+  const [dbExercisesLoading, setDbExercisesLoading] = useState<boolean>(false);
+  const [editingDbExercise, setEditingDbExercise] = useState<DbExercise | null>(null);
+  const [dbExerciseSearch, setDbExerciseSearch] = useState<string>('');
+  const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
+  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string } | null>(null);
 
   // Viking Plans configuration
   const [vikingPlans, setVikingPlans] = useState<VikingPlan[]>(() => {
@@ -316,6 +340,21 @@ export default function App() {
           syncSuccess = false;
         }
 
+        try {
+          const remoteExs = await fetchDbExercisesFromFirebase();
+          if (remoteExs && remoteExs.length > 0) {
+            setDbExercises(remoteExs);
+            localStorage.setItem('viking_db_exercises', JSON.stringify(remoteExs));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for exercises:", e);
+          const cached = localStorage.getItem('viking_db_exercises');
+          if (cached) {
+            setDbExercises(JSON.parse(cached));
+          }
+          syncSuccess = false;
+        }
+
         setIsOnline(syncSuccess);
       } else {
         // Not signed in to Firebase Auth
@@ -359,6 +398,21 @@ export default function App() {
       }
     } catch (e) {
       console.warn("Using offline storage for plans:", e);
+      syncSuccess = false;
+    }
+
+    try {
+      const remoteExs = await fetchDbExercisesFromFirebase();
+      if (remoteExs && remoteExs.length > 0) {
+        setDbExercises(remoteExs);
+        localStorage.setItem('viking_db_exercises', JSON.stringify(remoteExs));
+      }
+    } catch (e) {
+      console.warn("Using offline storage for exercises:", e);
+      const cached = localStorage.getItem('viking_db_exercises');
+      if (cached) {
+        setDbExercises(JSON.parse(cached));
+      }
       syncSuccess = false;
     }
 
@@ -1789,6 +1843,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 )}
 
                 <button 
+                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                    drawerOpen && drawerType === 'exerciseLibrary' 
+                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                  }`}
+                >
+                  <BookOpen className={`w-4 h-4 ${drawerOpen && drawerType === 'exerciseLibrary' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Biblioteca
+                </button>
+
+                <button 
                   onClick={() => { setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'ranking' 
@@ -2559,17 +2624,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <p className="text-sm font-bold text-white flex items-center flex-wrap gap-2">
                           <span>{ex.name}</span>
                           {ex.main && <span className="text-[9px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Principal</span>}
-                          {ex.videoUrl && (
-                            <a 
-                              href={ex.videoUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[9px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded transition-all cursor-pointer"
-                              title="Assistir execução no YouTube"
-                            >
-                              <Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Ver Execução
-                            </a>
-                          )}
+                          {(() => {
+                            const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
+                            const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;
+                            if (!hasVideo) return null;
+                            return (
+                              <button 
+                                type="button"
+                                onClick={() => setActiveVideoModal({
+                                  name: ex.name,
+                                  videoUrl: ex.videoUrl || matchedDbEx?.videoUrl,
+                                  videoBase64: matchedDbEx?.videoBase64
+                                })}
+                                className="inline-flex items-center gap-1 text-[9px] font-bold text-viking-gold hover:text-white bg-viking-gold/10 border border-viking-gold/25 px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                                title="Assistir execução no Templo"
+                              >
+                                <Video className="w-3 h-3 text-viking-gold" /> Ver Execução
+                              </button>
+                            );
+                          })()}
                         </p>
                         <p className="text-[11px] text-viking-silver/80 mt-0.5">Séries prescritas de trabalho: <strong className="text-viking-gold">{ex.sets}x{ex.reps}</strong></p>
                         {ex.techniqueTips && (
@@ -4870,13 +4943,82 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                             {/* Standard fields */}
                             <div className="grid grid-cols-2 gap-2">
-                              <div className="col-span-2">
+                              <div className="col-span-2 relative">
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Nome do Exercício</label>
-                                <input 
-                                  value={ex.name}
-                                  onChange={e => handleEditorUpdateField(idx, 'name', e.target.value)}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                />
+                                <div className="relative">
+                                  <input 
+                                    value={ex.name}
+                                    onChange={e => {
+                                      handleEditorUpdateField(idx, 'name', e.target.value);
+                                      setOpenDropdownIdx(idx);
+                                    }}
+                                    onFocus={() => setOpenDropdownIdx(idx)}
+                                    className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                    placeholder="Escreva ou selecione..."
+                                  />
+                                  <button 
+                                    type="button"
+                                    onClick={() => setOpenDropdownIdx(openDropdownIdx === idx ? null : idx)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer"
+                                    title="Abrir Banco de Exercícios"
+                                  >
+                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === idx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} />
+                                  </button>
+                                </div>
+
+                                {openDropdownIdx === idx && (
+                                  <>
+                                    <div 
+                                      className="fixed inset-0 z-40" 
+                                      onClick={() => setOpenDropdownIdx(null)} 
+                                    />
+                                    <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#140e0c] border-2 border-viking-gold/30 rounded-xl shadow-[0_4px_25px_rgba(0,0,0,0.9)] z-55 p-1 flex flex-col gap-0.5 divide-y divide-viking-gold/10">
+                                      {(() => {
+                                        const query = ex.name.toLowerCase();
+                                        const matches = dbExercises.filter(dbEx => 
+                                          dbEx.name.toLowerCase().includes(query)
+                                        );
+                                        const listToShow = query === '' ? dbExercises : matches;
+
+                                        if (listToShow.length === 0) {
+                                          return (
+                                            <div className="p-2 text-center text-[10px] text-viking-silver/50">
+                                              Nenhum exercício encontrado.
+                                            </div>
+                                          );
+                                        }
+
+                                        return listToShow.map((dbEx) => (
+                                          <button
+                                            key={dbEx.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setEditorExercises(prev => prev.map((item, i) => {
+                                                if (i === idx) {
+                                                  return {
+                                                    ...item,
+                                                    name: dbEx.name,
+                                                    techniqueTips: dbEx.techniqueTips || '',
+                                                    videoUrl: dbEx.videoUrl || ''
+                                                  };
+                                                }
+                                                return item;
+                                              }));
+                                              setOpenDropdownIdx(null);
+                                              showToast(`Exercício "${dbEx.name}" selecionado!`, 'success');
+                                            }}
+                                            className="w-full text-left p-2 hover:bg-viking-gold/15 rounded-lg text-xs font-semibold text-viking-silver hover:text-viking-gold flex flex-col gap-0.5 transition-all cursor-pointer"
+                                          >
+                                            <span className="font-bold text-white text-[10px] sm:text-[11px] uppercase tracking-wider">{dbEx.name}</span>
+                                            {dbEx.techniqueTips && (
+                                              <span className="text-[9px] text-viking-silver/60 truncate max-w-[280px] italic">Orientações: {dbEx.techniqueTips}</span>
+                                            )}
+                                          </button>
+                                        ));
+                                      })()}
+                                    </div>
+                                  </>
+                                )}
                               </div>
 
                               <div>
@@ -5357,6 +5499,312 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </div>
                 )}
 
+                {/* 12. Biblioteca de Exercícios Drawer */}
+                {drawerType === 'exerciseLibrary' && (
+                  <div className="space-y-4">
+                    {/* Header Controls */}
+                    <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-viking-silver/45 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input 
+                          type="text"
+                          placeholder="Buscar exercício (ex: Agachamento)..."
+                          value={dbExerciseSearch}
+                          onChange={(e) => setDbExerciseSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#0d0908]/90 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 text-xs font-semibold focus:outline-none focus:border-viking-gold"
+                        />
+                        {dbExerciseSearch && (
+                          <button 
+                            onClick={() => setDbExerciseSearch('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-viking-silver hover:text-viking-gold"
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+
+                      {currentUser?.role === 'trainer' && !editingDbExercise && (
+                        <button 
+                          onClick={() => setEditingDbExercise({ id: '', name: '', techniqueTips: '', videoUrl: '' })}
+                          className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-viking-gold/10"
+                        >
+                          <Plus className="w-4 h-4" /> Incluir Exercício
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Unified Form (Add or Edit) */}
+                    {currentUser?.role === 'trainer' && editingDbExercise && (
+                      <div className="p-4 bg-[#0d0908]/90 border border-viking-gold/25 rounded-2xl space-y-3.5 relative">
+                        <div className="flex justify-between items-center border-b border-viking-gold/15 pb-2">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-viking-gold">
+                            {editingDbExercise.id ? 'Editar Exercício' : 'Cadastrar Novo Exercício'}
+                          </h4>
+                          <button 
+                            onClick={() => {
+                              setEditingDbExercise(null);
+                            }}
+                            className="p-1 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-viking-silver hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Nome do Exercício *</label>
+                            <input 
+                              type="text" 
+                              placeholder="Ex: Agachamento Livre Back Squat"
+                              value={editingDbExercise.name}
+                              onChange={(e) => setEditingDbExercise({ ...editingDbExercise, name: e.target.value })}
+                              className="w-full px-3 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Dicas de Técnica / Instruções de Movimento</label>
+                            <textarea 
+                              rows={2}
+                              placeholder="Ex: Mantenha os joelhos alinhados com as pontas dos pés, descendo abaixo do paralelo mantendo o tronco firme."
+                              value={editingDbExercise.techniqueTips}
+                              onChange={(e) => setEditingDbExercise({ ...editingDbExercise, techniqueTips: e.target.value })}
+                              className="w-full p-3 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/30 text-xs font-semibold focus:outline-none focus:border-viking-gold"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Link de Vídeo (YouTube)</label>
+                              <input 
+                                type="text" 
+                                placeholder="https://www.youtube.com/watch?v=..."
+                                value={editingDbExercise.videoUrl || ''}
+                                onChange={(e) => setEditingDbExercise({ ...editingDbExercise, videoUrl: e.target.value })}
+                                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1 flex items-center gap-1">
+                                <Upload className="w-3.5 h-3.5 text-viking-gold" /> Upload Vídeo do Celular
+                              </label>
+                              <input 
+                                type="file" 
+                                accept="video/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  if (file.size > 1.2 * 1024 * 1024) {
+                                    showToast('O vídeo deve ser menor que 1.2MB. Grave um clipe curto de 3-5 segundos.', 'error');
+                                    return;
+                                  }
+                                  setIsUploadingVideo(true);
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    setEditingDbExercise({
+                                      ...editingDbExercise,
+                                      videoBase64: ev.target?.result as string,
+                                      videoFileType: file.type,
+                                      videoUrl: ''
+                                    });
+                                    setIsUploadingVideo(false);
+                                    showToast('Vídeo do celular carregado com sucesso!', 'success');
+                                  };
+                                  reader.onerror = () => {
+                                    setIsUploadingVideo(false);
+                                    showToast('Erro ao ler arquivo de vídeo.', 'error');
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                                className="w-full text-xs text-viking-silver file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:uppercase file:bg-viking-gold/15 file:text-viking-gold hover:file:bg-viking-gold/25 cursor-pointer bg-black/40 p-1 rounded-xl border border-viking-gold/20"
+                              />
+                              {isUploadingVideo && (
+                                <p className="text-[9px] text-viking-gold mt-1 animate-pulse">Processando vídeo...</p>
+                              )}
+                              {editingDbExercise.videoBase64 && (
+                                <div className="mt-2 flex items-center justify-between bg-black/20 p-1.5 rounded border border-viking-gold/10">
+                                  <span className="text-[9px] text-green-400 font-bold uppercase">✓ Vídeo carregado ({editingDbExercise.videoFileType?.split('/')[1] || 'mp4'})</span>
+                                  <button 
+                                    type="button"
+                                    onClick={() => setEditingDbExercise({ ...editingDbExercise, videoBase64: undefined, videoFileType: undefined })}
+                                    className="text-[9px] text-red-400 hover:text-red-300 font-bold uppercase"
+                                  >
+                                    Remover
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              if (!editingDbExercise.name.trim()) {
+                                showToast('O nome do exercício é obrigatório!', 'error');
+                                return;
+                              }
+                              try {
+                                showToast(editingDbExercise.id ? 'Atualizando exercício...' : 'Armazenando exercício...', 'info');
+                                await saveDbExerciseToFirebase(editingDbExercise);
+                                
+                                const updatedExs = await fetchDbExercisesFromFirebase();
+                                if (updatedExs) {
+                                  setDbExercises(updatedExs);
+                                  localStorage.setItem('viking_db_exercises', JSON.stringify(updatedExs));
+                                }
+
+                                setEditingDbExercise(null);
+                                showToast('Exercício salvo com sucesso no Banco do Templo!', 'success');
+                              } catch (err) {
+                                console.error("Error saving db exercise:", err);
+                                showToast('Falha ao salvar exercício no servidor.', 'error');
+                              }
+                            }}
+                            className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Save className="w-4 h-4" /> {editingDbExercise.id ? 'Salvar Alterações' : 'Gravar no Banco'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exercise Library List */}
+                    <div className="space-y-3 overflow-y-auto pr-1">
+                      {dbExercisesLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="w-8 h-8 text-viking-gold animate-spin mx-auto mb-2" />
+                          <p className="text-xs text-viking-silver font-bold uppercase tracking-wider">Lendo banco de dados de exercícios...</p>
+                        </div>
+                      ) : (() => {
+                        const filtered = dbExercises.filter(ex => 
+                          ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase()) ||
+                          (ex.techniqueTips && ex.techniqueTips.toLowerCase().includes(dbExerciseSearch.toLowerCase()))
+                        );
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-viking-silver/50 bg-[#0d0908]/30 rounded-xl border border-viking-gold/10">
+                              <BookOpen className="w-10 h-10 mx-auto text-viking-gold/15 mb-2" />
+                              <p className="text-xs font-bold uppercase tracking-wider">Nenhum exercício encontrado.</p>
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((ex) => {
+                          const hasYoutube = !!ex.videoUrl;
+                          const hasBase64 = !!ex.videoBase64;
+                          const ytEmbedUrl = getYouTubeEmbedUrl(ex.videoUrl);
+
+                          return (
+                            <div 
+                              key={ex.id} 
+                              className="p-4 rounded-2xl bg-[#0d0908]/55 border border-viking-gold/10 hover:border-viking-gold/25 transition-all space-y-3"
+                            >
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="space-y-1">
+                                  <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <Dumbbell className="w-4 h-4 text-viking-gold" /> {ex.name}
+                                  </h4>
+                                  {ex.techniqueTips && (
+                                    <p className="text-[11px] text-[#e0d3a8]/80 leading-relaxed">
+                                      <strong className="text-viking-gold">Dica de Técnica:</strong> {ex.techniqueTips}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {currentUser?.role === 'trainer' && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button 
+                                      onClick={() => {
+                                        setEditingDbExercise(ex);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/20 transition-all text-[10px] font-bold uppercase cursor-pointer"
+                                      title="Editar"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={async () => {
+                                        if (window.confirm(`Tem certeza que deseja DELETAR o exercício "${ex.name}" do banco de dados geral do Templo?`)) {
+                                          try {
+                                            showToast('Removendo exercício...', 'info');
+                                            await deleteDbExerciseFromFirebase(ex.id);
+                                            const updated = await fetchDbExercisesFromFirebase();
+                                            if (updated) {
+                                              setDbExercises(updated);
+                                              localStorage.setItem('viking_db_exercises', JSON.stringify(updated));
+                                            }
+                                            showToast('Exercício removido com sucesso!', 'success');
+                                          } catch (e) {
+                                            showToast('Erro ao remover exercício.', 'error');
+                                          }
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg bg-viking-red/10 hover:bg-viking-red/20 text-red-400 border border-viking-red/25 transition-all text-[10px] font-bold uppercase cursor-pointer"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {(hasYoutube || hasBase64) && (
+                                <div className="p-2 rounded-xl bg-black/35 border border-viking-gold/5">
+                                  {hasBase64 ? (
+                                    <div className="space-y-1.5">
+                                      <span className="text-[9px] font-bold text-viking-gold uppercase tracking-wider flex items-center gap-1">
+                                        <Video className="w-3 h-3 text-viking-gold" /> Vídeo Próprio (Celular/Upload)
+                                      </span>
+                                      <video 
+                                        controls 
+                                        src={ex.videoBase64} 
+                                        className="w-full max-h-48 rounded-lg border border-viking-gold/15 bg-black" 
+                                        playsInline
+                                      />
+                                    </div>
+                                  ) : (
+                                    ytEmbedUrl ? (
+                                      <div className="space-y-1.5">
+                                        <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1">
+                                          <Youtube className="w-3 h-3 text-red-500" /> Demonstração no YouTube
+                                        </span>
+                                        <iframe 
+                                          src={ytEmbedUrl}
+                                          title={ex.name}
+                                          frameBorder="0"
+                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                          allowFullScreen
+                                          className="w-full h-44 rounded-lg border border-viking-gold/10"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="flex justify-between items-center py-1">
+                                        <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1">
+                                          <Youtube className="w-3 h-3 text-red-500" /> Link de Demonstração
+                                        </span>
+                                        <a 
+                                          href={ex.videoUrl} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer" 
+                                          className="text-[10px] font-black text-viking-gold hover:underline uppercase flex items-center gap-1 cursor-pointer"
+                                        >
+                                          Assistir Externamente
+                                        </a>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
+
               </div>
             </motion.div>
           </>
@@ -5474,17 +5922,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   {ex.name}
                                 </h4>
                                 {ex.main && <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Foco Principal</span>}
-                                {ex.videoUrl && (
-                                  <a 
-                                    href={ex.videoUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 text-[10px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/25 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-red-500/10"
-                                    title="Assistir execução no YouTube"
-                                  >
-                                    <Youtube className="w-3.5 h-3.5 text-red-500 animate-pulse" /> Ver Execução
-                                  </a>
-                                )}
+                                {(() => {
+                                  const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
+                                  const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;
+                                  if (!hasVideo) return null;
+                                  return (
+                                    <button 
+                                      type="button"
+                                      onClick={() => setActiveVideoModal({
+                                        name: ex.name,
+                                        videoUrl: ex.videoUrl || matchedDbEx?.videoUrl,
+                                        videoBase64: matchedDbEx?.videoBase64
+                                      })}
+                                      className="inline-flex items-center gap-1.5 text-[10px] font-bold text-viking-gold hover:text-white bg-viking-gold/10 border border-viking-gold/25 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-viking-gold/10"
+                                      title="Assistir execução no Templo"
+                                    >
+                                      <Video className="w-3.5 h-3.5 text-viking-gold" /> Ver Execução
+                                    </button>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <span className="text-xs text-viking-silver">Séries: <strong className="text-white">{ex.sets}x{ex.reps}</strong> @ <strong className="text-viking-gold">{intensityStr}</strong></span>
@@ -5667,6 +6123,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       </button>
                     </>
                   )}
+
+                  <button 
+                    onClick={() => { setMobileMenuOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <BookOpen className="w-4 h-4 text-viking-gold" /> Biblioteca de Exercícios
+                  </button>
 
                   <button 
                     onClick={() => { setMobileMenuOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); }}
@@ -5982,6 +6445,80 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     Retornar ao Templo
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* --- IN-APP VIDEO DEMONSTRATION POPUP MODAL --- */}
+      <AnimatePresence>
+        {activeVideoModal && (
+          <>
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveVideoModal(null)}
+              className="fixed inset-0 bg-black/90 backdrop-blur-md z-[80]"
+            />
+
+            {/* Video Container Card */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: '-48%', x: '-50%' }}
+              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
+              exit={{ opacity: 0, scale: 0.9, y: '-48%', x: '-50%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-xl bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.3)] z-[85] overflow-hidden text-[#e0d3a8] flex flex-col"
+            >
+              <div className="p-5 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center">
+                <h4 className="font-viking-display text-xs sm:text-sm font-black tracking-wider text-viking-gold flex items-center gap-2 uppercase">
+                  <Video className="w-4 h-4 text-viking-gold" /> {activeVideoModal.name}
+                </h4>
+                <button 
+                  onClick={() => setActiveVideoModal(null)}
+                  className="p-1 rounded-lg bg-viking-gold/5 border border-viking-gold/15 text-viking-silver hover:text-viking-gold cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 bg-black/40">
+                {activeVideoModal.videoBase64 ? (
+                  <video 
+                    controls 
+                    autoPlay
+                    src={activeVideoModal.videoBase64} 
+                    className="w-full rounded-2xl border border-viking-gold/20 bg-black shadow-inner"
+                    playsInline
+                  />
+                ) : activeVideoModal.videoUrl && getYouTubeEmbedUrl(activeVideoModal.videoUrl) ? (
+                  <iframe 
+                    src={getYouTubeEmbedUrl(activeVideoModal.videoUrl) || ''}
+                    title={activeVideoModal.name}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-64 sm:h-80 rounded-2xl border border-viking-gold/20 shadow-inner bg-black"
+                  />
+                ) : activeVideoModal.videoUrl ? (
+                  <div className="text-center py-10 space-y-4">
+                    <p className="text-xs text-viking-silver">Este link não pode ser embutido diretamente.</p>
+                    <a 
+                      href={activeVideoModal.videoUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="inline-flex py-2.5 px-6 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black text-xs uppercase tracking-widest hover:brightness-110 shadow-lg cursor-pointer transition-all"
+                    >
+                      Assistir no YouTube
+                    </a>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-viking-silver/50">
+                    Nenhum vídeo disponível para visualização.
+                  </div>
+                )}
               </div>
             </motion.div>
           </>

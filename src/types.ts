@@ -99,3 +99,13 @@ export interface GymLeaderboardEntry {
   ageDivision: string;
   weightClass: string;
 }
+
+export interface DbExercise {
+  id: string;
+  name: string;
+  techniqueTips?: string;
+  videoUrl?: string;       // YouTube link
+  videoBase64?: string;    // Base64 string for mobile uploads
+  videoFileType?: string;  // e.g. "video/mp4" or "video/quicktime"
+}
+
