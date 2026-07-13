@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Dumbbell, 
@@ -64,7 +64,8 @@ import {
   fetchDbExercisesFromFirebase,
   saveDbExerciseToFirebase,
   deleteDbExerciseFromFirebase,
-  auth
+  auth,
+  subscribeStudents
 } from './firebase';
 import { 
   signInWithEmailAndPassword, 
@@ -178,6 +179,9 @@ export default function App() {
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
 
+  // Chat scroll container reference
+  const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
+
   // PR Celebration state (Student)
   const [prCelebration, setPrCelebration] = useState<{ lifts: string[] } | null>(null);
 
@@ -244,6 +248,17 @@ export default function App() {
     localStorage.setItem('viking_plans', JSON.stringify(vikingPlans));
   }, [vikingPlans]);
 
+  // Auto-scroll chat container to the bottom when chat is active or new messages arrive
+  useEffect(() => {
+    if (drawerType === 'chat' && chatMessagesContainerRef.current) {
+      requestAnimationFrame(() => {
+        if (chatMessagesContainerRef.current) {
+          chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [drawerType, activeChatStudentEmail, currentUser?.email, studentsData, drawerOpen]);
+
   // --- LOCALSTORAGE & FIREBASE SYNC ---
   useEffect(() => {
     // 1. Offline-First: Load local data instantly
@@ -277,6 +292,8 @@ export default function App() {
     }
 
     // 2. Cloud Sync: Set up the auth listener. Fetch only when authenticated!
+    let unsubscribeStudents: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const email = firebaseUser.email || '';
@@ -307,15 +324,32 @@ export default function App() {
 
         // Fetch fresh data from Firebase now that we are authenticated!
         let syncSuccess = true;
+        
+        // Subscribe to students in real-time!
         try {
-          const remoteStudents = await fetchStudentsFromFirebase();
-          if (remoteStudents && Object.keys(remoteStudents).length > 0) {
-            setStudentsData(remoteStudents);
-            localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+          if (unsubscribeStudents) {
+            unsubscribeStudents();
+            unsubscribeStudents = null;
           }
+          unsubscribeStudents = subscribeStudents((remoteStudents) => {
+            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+              setStudentsData(remoteStudents);
+              localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+            }
+          });
         } catch (e) {
-          console.warn("Using offline storage for athletes:", e);
+          console.warn("Error subscribing to athletes real-time feed:", e);
           syncSuccess = false;
+          // Fallback to one-time fetch
+          try {
+            const remoteStudents = await fetchStudentsFromFirebase();
+            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+              setStudentsData(remoteStudents);
+              localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+            }
+          } catch (err) {
+            console.warn("Using offline storage for athletes:", err);
+          }
         }
 
         try {
@@ -359,10 +393,19 @@ export default function App() {
       } else {
         // Not signed in to Firebase Auth
         setIsOnline(false);
+        if (unsubscribeStudents) {
+          unsubscribeStudents();
+          unsubscribeStudents = null;
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeStudents) {
+        unsubscribeStudents();
+      }
+    };
   }, []);
 
   const handleManualSync = async () => {
@@ -944,26 +987,30 @@ export default function App() {
         // 1. Create Firebase Auth user
         await createUserWithEmailAndPassword(auth, email, password);
 
-        // 2. Create the athlete profile
+        // 2. Create or merge the athlete profile (preventing overwrites of trainer-created data)
+        const existingStudent = studentsData[email];
         const newStudent: StudentProfile = {
-          name: regName.trim(),
-          plan: 'Mensal',
-          status: 'Pago',
+          name: existingStudent?.name || regName.trim(),
+          plan: existingStudent?.plan || 'Mensal',
+          status: existingStudent?.status || 'Pago',
           prs: {
-            squat: parseFloat(prSquat) || null,
-            bench: parseFloat(prBench) || null,
-            deadlift: parseFloat(prDeadlift) || null,
+            squat: existingStudent?.prs?.squat ?? (parseFloat(prSquat) || null),
+            bench: existingStudent?.prs?.bench ?? (parseFloat(prBench) || null),
+            deadlift: existingStudent?.prs?.deadlift ?? (parseFloat(prDeadlift) || null),
           },
-          preferredTime: regPreferredTime || '18:00',
-          sessions: [],
-          age: parseInt(regAge) || 25,
-          bodyWeight: parseFloat(regBodyWeight) || 80,
-          gender: regGender
+          preferredTime: existingStudent?.preferredTime || regPreferredTime || '18:00',
+          sessions: existingStudent?.sessions || [],
+          age: existingStudent?.age ?? (parseInt(regAge) || 25),
+          bodyWeight: existingStudent?.bodyWeight ?? (parseFloat(regBodyWeight) || 80),
+          gender: existingStudent?.gender || regGender,
+          prevPrs: existingStudent?.prevPrs,
+          chatHistory: existingStudent?.chatHistory,
+          publicNote: existingStudent?.publicNote
         };
 
         const updated = { ...studentsData, [email]: newStudent };
         saveStudentsToDB(updated);
-        handleLoginSuccess({ name: regName.trim(), email, role: 'student' });
+        handleLoginSuccess({ name: newStudent.name, email, role: 'student' });
       }
     } catch (error: any) {
       console.error("Firebase auth error:", error);
@@ -2115,11 +2162,29 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           required 
                           disabled={authLoading}
                           value={loginEmail}
-                          onChange={e => setLoginEmail(e.target.value)}
+                          onChange={e => {
+                            const emailVal = e.target.value;
+                            setLoginEmail(emailVal);
+                            if (isRegisterMode) {
+                              const existingStudent = studentsData[emailVal.trim().toLowerCase()];
+                              if (existingStudent) {
+                                setRegName(existingStudent.name);
+                              }
+                            }
+                          }}
                           placeholder="seu@email.com" 
                           className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
                       </div>
+
+                      {isRegisterMode && loginEmail.trim() && studentsData[loginEmail.trim().toLowerCase()] && (
+                        <div className="p-3 rounded-xl bg-viking-gold/10 border border-viking-gold/35 text-[11px] text-viking-gold leading-relaxed space-y-1">
+                          <span className="font-bold uppercase tracking-wider flex items-center gap-1">🛡️ Guerreiro pré-cadastrado encontrado!</span>
+                          <p className="text-viking-silver/90">
+                            Sua conta de Atleta já foi criada pelo Treinador. Defina sua senha abaixo para concluir seu cadastro e acessar sua ficha de treino.
+                          </p>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">{isRegisterMode ? 'Senha' : 'Senha do Clã'}</label>
@@ -2132,12 +2197,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           placeholder="••••••••" 
                           className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-semibold"
                         />
+                        {isRegisterMode && (
+                          <p className="text-[10px] text-viking-silver/50 mt-1">Mínimo de 6 caracteres para a segurança de sua conta.</p>
+                        )}
                       </div>
                     </>
                   )}
 
                   {/* Register PR Fields (Optional) */}
-                  {isRegisterMode && (
+                  {isRegisterMode && !studentsData[loginEmail.trim().toLowerCase()] && (
                     <div className="pt-2 border-t border-viking-gold/15 mt-4 space-y-3">
                       <span className="text-xs font-bold text-viking-gold uppercase tracking-widest flex items-center gap-2">
                         <Flame className="w-4 h-4 text-viking-gold" /> Cargas Máximas de Força (1RM) - Opcional
@@ -5191,7 +5259,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       </div>
 
                       {/* Message List */}
-                      <div className="flex-1 overflow-y-auto space-y-3.5 my-4 pr-1 scrollbar-thin scrollbar-thumb-viking-gold/20">
+                      <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto space-y-3.5 my-4 pr-1 scrollbar-thin scrollbar-thumb-viking-gold/20">
                         {chatHistory.length === 0 ? (
                           <div className="text-center py-12 text-viking-silver/50 space-y-2">
                             <MessageSquare className="w-10 h-10 mx-auto text-viking-gold/20" />

@@ -7,7 +7,8 @@ import {
   getDoc, 
   collection, 
   getDocs, 
-  deleteDoc 
+  deleteDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { StudentProfile, TrainingProgram, VikingPlan, DbExercise } from './types';
 import { DEFAULT_STUDENTS, DEFAULT_PROGRAM } from './data';
@@ -101,6 +102,28 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'students');
   }
+}
+
+/**
+ * Subscribe to the 'students' collection in real-time.
+ */
+export function subscribeStudents(
+  onUpdate: (students: Record<string, StudentProfile>) => void
+): () => void {
+  const colRef = collection(db, 'students');
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const students: Record<string, StudentProfile> = {};
+      snapshot.forEach((d) => {
+        students[d.id] = d.data() as StudentProfile;
+      });
+      onUpdate(students);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'students');
+    }
+  );
 }
 
 /**

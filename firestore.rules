@@ -26,5 +26,11 @@ service cloud.firestore {
     match /config/{configId} {
       allow read, write: if isSignedIn() && isValidId(configId);
     }
+
+    // 4. Rules for Exercises collection
+    match /exercises/{exerciseId} {
+      allow get, write: if isSignedIn() && isValidId(exerciseId);
+      allow list: if isSignedIn();
+    }
   }
 }
