@@ -65,7 +65,8 @@ import {
   createUserWithEmailAndPassword, 
   signOut,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  onAuthStateChanged
 } from 'firebase/auth';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
@@ -87,6 +88,7 @@ export default function App() {
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
   const [loginEmail, setLoginEmail] = useState<string>('john.vasquesrodrigues@gmail.com');
   const [loginPassword, setLoginPassword] = useState<string>('3636');
+  const [authTab, setAuthTab] = useState<'student' | 'trainer'>('student');
   
   // Registration and PR state
   const [regName, setRegName] = useState<string>('');
@@ -211,7 +213,6 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('viking_plans', JSON.stringify(vikingPlans));
-    savePlansToFirebase(vikingPlans).catch(err => console.error("Firebase save plans error:", err));
   }, [vikingPlans]);
 
   // --- LOCALSTORAGE & FIREBASE SYNC ---
@@ -219,66 +220,105 @@ export default function App() {
     // 1. Offline-First: Load local data instantly
     const storedProgram = localStorage.getItem('viking_program');
     const storedStudents = localStorage.getItem('viking_students');
+    const storedUser = localStorage.getItem('viking_current_user');
+    const loggedOut = localStorage.getItem('viking_logged_out');
 
     if (storedProgram) setTrainingProgram(JSON.parse(storedProgram));
     if (storedStudents) setStudentsData(JSON.parse(storedStudents));
 
-    // Handle "/cadastro", "#/cadastro", "?atleta=cadastro"
-    const isRegisterRoute = 
-      window.location.pathname.includes('cadastro') || 
-      window.location.hash.includes('cadastro') || 
-      window.location.search.includes('cadastro');
-
-    if (isRegisterRoute) {
-      setIsRegisterMode(true);
-      setIsLoggedIn(false);
-      setCurrentUser(null);
+    if (storedUser && !loggedOut) {
+      setCurrentUser(JSON.parse(storedUser));
+      setIsLoggedIn(true);
     } else {
-      setIsRegisterMode(false);
-      setIsLoggedIn(false);
-      setCurrentUser(null);
+      // Handle "/cadastro", "#/cadastro", "?atleta=cadastro"
+      const isRegisterRoute = 
+        window.location.pathname.includes('cadastro') || 
+        window.location.hash.includes('cadastro') || 
+        window.location.search.includes('cadastro');
+
+      if (isRegisterRoute) {
+        setIsRegisterMode(true);
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      } else {
+        setIsRegisterMode(false);
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      }
     }
 
-    // 2. Cloud Sync: Fetch fresh data from Firebase Firestore
-    async function loadFirebaseData() {
-      let syncSuccess = true;
-      try {
-        const remoteStudents = await fetchStudentsFromFirebase();
-        if (remoteStudents && Object.keys(remoteStudents).length > 0) {
-          setStudentsData(remoteStudents);
-          localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+    // 2. Cloud Sync: Set up the auth listener. Fetch only when authenticated!
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const email = firebaseUser.email || '';
+        const isTrainer = email === TRAINER_EMAIL;
+        
+        // Ensure state and localstorage match current authenticated user
+        const storedUserObj = localStorage.getItem('viking_current_user');
+        let name = isTrainer ? 'John Vasques' : (email.split('@')[0]);
+        if (storedUserObj) {
+          try {
+            const parsed = JSON.parse(storedUserObj);
+            if (parsed.email === email && parsed.name) {
+              name = parsed.name;
+            }
+          } catch (e) {}
         }
-      } catch (e) {
-        console.warn("Using offline storage for athletes:", e);
-        syncSuccess = false;
-      }
+        
+        const userObj: UserType = {
+          name: name,
+          email: email,
+          role: isTrainer ? 'trainer' : 'student'
+        };
+        
+        setCurrentUser(userObj);
+        setIsLoggedIn(true);
+        localStorage.setItem('viking_current_user', JSON.stringify(userObj));
+        localStorage.removeItem('viking_logged_out');
 
-      try {
-        const remoteProgram = await fetchProgramFromFirebase();
-        if (remoteProgram) {
-          setTrainingProgram(remoteProgram);
-          localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+        // Fetch fresh data from Firebase now that we are authenticated!
+        let syncSuccess = true;
+        try {
+          const remoteStudents = await fetchStudentsFromFirebase();
+          if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+            setStudentsData(remoteStudents);
+            localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for athletes:", e);
+          syncSuccess = false;
         }
-      } catch (e) {
-        console.warn("Using offline storage for training program:", e);
-        syncSuccess = false;
-      }
 
-      try {
-        const remotePlans = await fetchPlansFromFirebase();
-        if (remotePlans && remotePlans.length > 0) {
-          setVikingPlans(remotePlans);
-          localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+        try {
+          const remoteProgram = await fetchProgramFromFirebase();
+          if (remoteProgram) {
+            setTrainingProgram(remoteProgram);
+            localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for training program:", e);
+          syncSuccess = false;
         }
-      } catch (e) {
-        console.warn("Using offline storage for plans:", e);
-        syncSuccess = false;
+
+        try {
+          const remotePlans = await fetchPlansFromFirebase();
+          if (remotePlans && remotePlans.length > 0) {
+            setVikingPlans(remotePlans);
+            localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for plans:", e);
+          syncSuccess = false;
+        }
+
+        setIsOnline(syncSuccess);
+      } else {
+        // Not signed in to Firebase Auth
+        setIsOnline(false);
       }
+    });
 
-      setIsOnline(syncSuccess);
-    }
-
-    loadFirebaseData();
+    return () => unsubscribe();
   }, []);
 
   const handleManualSync = async () => {
@@ -757,18 +797,39 @@ export default function App() {
   // --- ACTIONS ---
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    const email = loginEmail.trim().toLowerCase();
-    const password = loginPassword.trim();
+    let email = loginEmail.trim().toLowerCase();
+    let password = loginPassword.trim();
 
     if (!email || !password) {
       showToast('Por favor, preencha todos os campos obrigatórios!', 'error');
       return;
     }
 
+    // MAP TRAINER LOGINS (As requested: name "john", password "3636")
+    const isTrainerLogin = email === 'john' || email === TRAINER_EMAIL;
+    if (isTrainerLogin) {
+      if (password !== '3636') {
+        showToast('Senha do Treinador incorreta!', 'error');
+        return;
+      }
+      email = TRAINER_EMAIL;
+      password = 'john3636'; // Translate to 6+ characters for Firebase Auth
+    }
+
     try {
       if (!isRegisterMode) {
         // Firebase Auth sign-in
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        let userCredential;
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, email, password);
+        } catch (signInErr: any) {
+          // If the trainer doesn't exist yet, automatically create their Firebase Auth user
+          if (isTrainerLogin && (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential')) {
+            userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          } else {
+            throw signInErr;
+          }
+        }
         const fbUser = userCredential.user;
 
         // Determine if they are trainer or student
@@ -1860,58 +1921,123 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </button>
                 </div>
 
-                <div className="text-center mb-8">
+                <div className="text-center mb-6">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#0d0908] border border-viking-gold/20 flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.2)]">
                     <Shield className="w-9 h-9 text-viking-gold" />
                   </div>
                   <h2 className="font-viking-display text-2xl sm:text-3xl font-bold tracking-wider bg-gradient-to-r from-[#e0d3a8] via-viking-gold to-[#e0d3a8] bg-clip-text text-transparent">
-                    {isRegisterMode ? 'FORGE SUA CONTA' : 'TEMPLO VIKING FORCE'}
+                    {isRegisterMode ? 'FORGE SUA CONTA' : (authTab === 'trainer' ? 'PORTAL DO TREINADOR' : 'TEMPLO VIKING FORCE')}
                   </h2>
                   <p className="text-xs text-viking-silver mt-2 max-w-sm mx-auto leading-relaxed">
                     {isRegisterMode 
                       ? 'Cadastre-se para calcular seus warmups inteligentes e registrar seu cansaço via RPE.' 
-                      : 'Faça login para ter acesso aos programas de treino personalizados de Powerlifting.'}
+                      : (authTab === 'trainer' ? 'Acesso restrito para o mestre John. Insira suas credenciais mágicas.' : 'Faça login para ter acesso aos programas de treino personalizados de Powerlifting.')}
                   </p>
                 </div>
 
+                {!isRegisterMode && (
+                  <div className="flex border border-viking-gold/10 rounded-2xl overflow-hidden bg-[#0d0908]/50 p-1 mb-6 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthTab('student');
+                        setLoginEmail('');
+                        setLoginPassword('');
+                      }}
+                      className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer rounded-xl flex items-center justify-center gap-1.5 ${
+                        authTab === 'student'
+                          ? 'bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark shadow-md'
+                          : 'text-viking-silver hover:text-[#e0d3a8]'
+                      }`}
+                    >
+                      🛡️ Atleta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthTab('trainer');
+                        setLoginEmail('john');
+                        setLoginPassword('3636');
+                      }}
+                      className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer rounded-xl flex items-center justify-center gap-1.5 ${
+                        authTab === 'trainer'
+                          ? 'bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark shadow-md'
+                          : 'text-viking-silver hover:text-[#e0d3a8]'
+                      }`}
+                    >
+                      ⚡ Treinador
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleAuth} className="space-y-4">
-                  {isRegisterMode && (
-                    <div>
-                      <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Seu Nome de Guerreiro</label>
-                      <input 
-                        type="text" 
-                        required 
-                        value={regName}
-                        onChange={e => setRegName(e.target.value)}
-                        placeholder="Ex: Ragnar Lothbrok" 
-                        className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
-                      />
-                    </div>
+                  {!isRegisterMode && authTab === 'trainer' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Nome do Treinador</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={loginEmail}
+                          onChange={e => setLoginEmail(e.target.value)}
+                          placeholder="john" 
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Senha Secreta</label>
+                        <input 
+                          type="password" 
+                          required 
+                          value={loginPassword}
+                          onChange={e => setLoginPassword(e.target.value)}
+                          placeholder="••••" 
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {isRegisterMode && (
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Seu Nome de Guerreiro</label>
+                          <input 
+                            type="text" 
+                            required 
+                            value={regName}
+                            onChange={e => setRegName(e.target.value)}
+                            placeholder="Ex: Ragnar Lothbrok" 
+                            className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Endereço de Email</label>
+                        <input 
+                          type="email" 
+                          required 
+                          value={loginEmail}
+                          onChange={e => setLoginEmail(e.target.value)}
+                          placeholder="seu@email.com" 
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">{isRegisterMode ? 'Senha' : 'Senha do Clã'}</label>
+                        <input 
+                          type="password" 
+                          required 
+                          value={loginPassword}
+                          onChange={e => setLoginPassword(e.target.value)}
+                          placeholder="••••••••" 
+                          className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
+                        />
+                      </div>
+                    </>
                   )}
-
-                  <div>
-                    <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Endereço de Email</label>
-                    <input 
-                      type="email" 
-                      required 
-                      value={loginEmail}
-                      onChange={e => setLoginEmail(e.target.value)}
-                      placeholder="seu@email.com" 
-                      className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-viking-silver uppercase tracking-wider mb-1.5">Senha do Clã</label>
-                    <input 
-                      type="password" 
-                      required 
-                      value={loginPassword}
-                      onChange={e => setLoginPassword(e.target.value)}
-                      placeholder="••••••••" 
-                      className="w-full px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold transition-all text-sm font-semibold"
-                    />
-                  </div>
 
                   {/* Register PR Fields (Optional) */}
                   {isRegisterMode && (
@@ -2014,14 +2140,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </form>
 
                 {/* Switch Login / Register Mode */}
-                <div className="text-center mt-6 pt-4 border-t border-viking-gold/15">
-                  <button 
-                    onClick={() => { setIsRegisterMode(!isRegisterMode); }}
-                    className="text-xs text-viking-gold hover:text-viking-gold-dark font-semibold transition-all underline cursor-pointer"
-                  >
-                    {isRegisterMode ? 'Já faz parte do clã? Entre aqui' : 'Ainda não tem conta? Registre-se agora'}
-                  </button>
-                </div>
+                {authTab !== 'trainer' && (
+                  <div className="text-center mt-6 pt-4 border-t border-viking-gold/15">
+                    <button 
+                      onClick={() => { setIsRegisterMode(!isRegisterMode); }}
+                      className="text-xs text-viking-gold hover:text-viking-gold-dark font-semibold transition-all underline cursor-pointer"
+                    >
+                      {isRegisterMode ? 'Já faz parte do clã? Entre aqui' : 'Ainda não tem conta? Registre-se agora'}
+                    </button>
+                  </div>
+                )}
 
 
 
@@ -3773,7 +3901,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <button 
                           onClick={() => {
                             setDrawerOpen(false);
-                            showToast('Novos valores salvos com sucesso e replicados para todos os alunos!', 'success');
+                            // Explicitly save the plans to Firebase when confirming
+                            if (isLoggedIn && currentUser?.role === 'trainer' && auth.currentUser) {
+                              savePlansToFirebase(vikingPlans)
+                                .then(() => {
+                                  showToast('Novos valores salvos com sucesso e replicados para todos os alunos!', 'success');
+                                })
+                                .catch(err => {
+                                  console.error("Firebase save plans error:", err);
+                                  showToast('Erro ao salvar os planos na nuvem.', 'error');
+                                });
+                            } else {
+                              showToast('Novos valores salvos localmente!', 'success');
+                            }
                           }}
                           className="w-full py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 mt-4 cursor-pointer"
                         >
