@@ -58,7 +58,8 @@ import {
   Filter,
   Maximize2,
   Minimize2,
-  Columns
+  Columns,
+  Lock
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -352,7 +353,9 @@ export default function App() {
         let defaultWeight = 0;
         const exNameLower = ex.name.toLowerCase();
         let pr: number | null = null;
-        if (activeStudentProfile) {
+        if (ex.baseWeight) {
+          pr = ex.baseWeight;
+        } else if (activeStudentProfile) {
           if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
             pr = activeStudentProfile.prs.squat;
           } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
@@ -6651,6 +6654,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 />
                               </div>
 
+                              {ex.main && (
+                                <div>
+                                  <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">
+                                    <Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)
+                                  </label>
+                                  <input 
+                                    type="number"
+                                    value={ex.baseWeight || ''}
+                                    onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)}
+                                    placeholder="Ex: 150"
+                                    className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                    title="Defina a carga máxima (1RM) ou carga de referência para este exercício para calcular a porcentagem"
+                                  />
+                                </div>
+                              )}
+
+                              {ex.main && typeof ex.intensity === 'number' && (
+                                <div className="col-span-2 text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver mt-1">
+                                  <span className="font-semibold flex items-center gap-1">⚔️ Peso Estimado Calculado:</span>
+                                  <strong className="text-viking-gold text-xs font-black font-mono">
+                                    {ex.baseWeight 
+                                      ? `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)` 
+                                      : `(Depende do PR cadastrado do aluno x ${Math.round(ex.intensity * 100)}%)`}
+                                  </strong>
+                                </div>
+                              )}
+
                               <div className="col-span-2 flex items-center gap-2 pt-1.5">
                                 <input 
                                   type="checkbox"
@@ -7749,13 +7779,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               
                               // Determine proper 1RM based on exercise identifier
                       let currentPr: number | null = null;
-                      const exNameLower = ex.name.toLowerCase();
-                      if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-                        currentPr = activeStudentProfile.prs.squat;
-                      } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-                        currentPr = activeStudentProfile.prs.bench;
-                      } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-                        currentPr = activeStudentProfile.prs.deadlift;
+                      if (ex.baseWeight) {
+                        currentPr = ex.baseWeight;
+                      } else {
+                        const exNameLower = ex.name.toLowerCase();
+                        if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                          currentPr = activeStudentProfile.prs.squat;
+                        } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                          currentPr = activeStudentProfile.prs.bench;
+                        } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                          currentPr = activeStudentProfile.prs.deadlift;
+                        }
                       }
 
                       const intensityStr = typeof ex.intensity === 'number' ? `${Math.round(ex.intensity * 100)}% 1RM` : ex.intensity;
@@ -7981,13 +8015,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   </div>
 
                                   {/* Weight selector */}
-                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1 flex-1 max-w-[110px]">
+                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1 flex-1 max-w-[115px]">
                                     <span className="text-[9px] text-viking-silver/60 uppercase font-bold">Peso:</span>
                                     <input
                                       type="number"
                                       value={set.weight || ''}
+                                      disabled={ex.main}
                                       placeholder="0"
                                       onChange={(e) => {
+                                        if (ex.main) return;
                                         const val = parseFloat(e.target.value) || 0;
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
@@ -7997,9 +8033,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-full bg-transparent text-right font-mono text-xs font-bold text-viking-gold focus:outline-none"
+                                      className={`w-full bg-transparent text-right font-mono text-xs font-bold focus:outline-none ${ex.main ? 'text-viking-gold/60 cursor-not-allowed font-black' : 'text-viking-gold'}`}
+                                      title={ex.main ? "Carga do lift calculada pelo treinador (Bloqueada)" : "Carga do acessório livre"}
                                     />
                                     <span className="text-[9px] text-viking-silver/70 font-bold">kg</span>
+                                    {ex.main && <Lock className="w-2.5 h-2.5 text-viking-gold/40 shrink-0" title="Calculada e bloqueada pelo Treinador" />}
                                   </div>
 
                                   {/* Delete set */}
@@ -8027,8 +8065,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 onClick={() => {
                                   setExerciseSetsState(prev => {
                                     const sets = [...(prev[ex.id] || [])];
-                                    const lastSet = sets[sets.length - 1] || { reps: ex.reps || 8, weight: 0 };
-                                    sets.push({ reps: lastSet.reps, weight: lastSet.weight });
+                                    let defaultWeight = 0;
+                                    if (ex.main) {
+                                      let pr: number | null = null;
+                                      const exNameLower = ex.name.toLowerCase();
+                                      if (ex.baseWeight) {
+                                        pr = ex.baseWeight;
+                                      } else if (activeStudentProfile) {
+                                        if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                                          pr = activeStudentProfile.prs.squat;
+                                        } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                                          pr = activeStudentProfile.prs.bench;
+                                        } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                                          pr = activeStudentProfile.prs.deadlift;
+                                        }
+                                      }
+                                      if (pr && typeof ex.intensity === 'number') {
+                                        defaultWeight = Math.round(pr * ex.intensity);
+                                      }
+                                    }
+                                    const lastSet = sets[sets.length - 1] || { reps: ex.reps || 8, weight: defaultWeight };
+                                    sets.push({ reps: lastSet.reps, weight: ex.main ? defaultWeight : lastSet.weight });
                                     return { ...prev, [ex.id]: sets };
                                   });
                                   showToast('Série adicionada!', 'success');

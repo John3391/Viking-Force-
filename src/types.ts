@@ -17,6 +17,7 @@ export interface Exercise {
   intensity: number | string; // e.g., 0.80 (for 80%) or "carga livre"
   targetRPE: number;
   main: boolean;
+  baseWeight?: number; // Carga do lift (1RM ou Peso Base) configurado pelo treinador
   warmup?: WarmupStep[];
   techniqueTips?: string;
   videoUrl?: string;
