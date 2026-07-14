@@ -53,7 +53,10 @@ import {
   Zap,
   Square,
   CheckSquare,
-  Filter
+  Filter,
+  Maximize2,
+  Minimize2,
+  Columns
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -170,6 +173,7 @@ export default function App() {
 
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
+  const [workoutLayout, setWorkoutLayout] = useState<'modal' | 'sidebar'>('modal');
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
@@ -1492,10 +1496,11 @@ export default function App() {
     const deadliftTrend = getTrendIconAndColor(deadliftDiff);
 
     return (
-      <div id="strength-evolution-panel" className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 shadow-xl relative overflow-hidden backdrop-blur-md">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 opacity-5 pointer-events-none">
-          <TrendingUp className="w-64 h-64 text-viking-gold" />
-        </div>
+      <div id="strength-evolution-panel" className="relative p-[1.5px] rounded-3xl bg-gradient-to-r from-viking-gold/40 via-[#2d1f1b] to-viking-gold/45 shadow-[0_12px_45px_rgba(20,14,12,0.85)] overflow-hidden transition-all duration-300 hover:shadow-[0_12px_50px_rgba(212,175,55,0.08)]">
+        <div className="bg-[#1a1210]/95 rounded-[22px] p-8 h-full w-full relative overflow-hidden backdrop-blur-md">
+          <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 opacity-5 pointer-events-none">
+            <TrendingUp className="w-64 h-64 text-viking-gold" />
+          </div>
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-viking-gold/15 pb-4 mb-6">
@@ -1630,6 +1635,7 @@ export default function App() {
             <span>Ainda não há recordes (1RM) registrados para cálculo do SBD. Clique em <strong className="text-white">Ajustar 1RM</strong> nas ações rápidas abaixo para começar!</span>
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -4534,15 +4540,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <button 
                                       onClick={() => {
                                         setEditingStudentEmail(email);
-                                        setDrawerTitle(`Editar Dados & 1RM de ${s.name}`);
+                                        setDrawerTitle(`Editar Cadastro de ${s.name}`);
                                         setDrawerType('editStudent');
                                         setDrawerOpen(true);
                                       }}
                                       className="p-2 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500 text-indigo-400 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
-                                      title="Editar 1RMs e Informações do Guerreiro"
+                                      title="Editar Cadastro, Informações e Cargas Máximas (1RMs) do Guerreiro"
                                     >
                                       <Edit className="w-3.5 h-3.5" />
-                                      <span className="text-xs font-bold">Editar 1RM</span>
+                                      <span className="text-xs font-bold">Editar Cadastro</span>
                                     </button>
                                     <button 
                                       onClick={() => openProgramEditor(email)}
@@ -4612,12 +4618,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <button
                                       onClick={() => {
                                         setEditingStudentEmail(email);
-                                        setDrawerTitle(`Editar Dados & 1RM de ${s.name}`);
+                                        setDrawerTitle(`Editar Cadastro de ${s.name}`);
                                         setDrawerType('editStudent');
                                         setDrawerOpen(true);
                                       }}
                                       className="p-1 rounded-lg bg-[#140e0c]/80 border border-viking-gold/20 hover:border-viking-gold text-viking-gold cursor-pointer inline-flex items-center justify-center"
-                                      title="Editar Dados & 1RMs"
+                                      title="Editar Cadastro & 1RMs"
                                     >
                                       <Edit className="w-3 h-3" />
                                     </button>
@@ -7374,19 +7380,26 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       <AnimatePresence>
         {workoutModalOpen && activeStudentProfile && (
           <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setWorkoutModalOpen(false)}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
-            />
+            {workoutLayout === 'modal' ? (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setWorkoutModalOpen(false)}
+                className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              />
+            ) : null}
             
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[92vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+              key={workoutLayout}
+              initial={workoutLayout === 'modal' ? { opacity: 0, scale: 0.95 } : { x: '100%', opacity: 0.8 }}
+              animate={workoutLayout === 'modal' ? { opacity: 1, scale: 1 } : { x: 0, opacity: 1 }}
+              exit={workoutLayout === 'modal' ? { opacity: 0, scale: 0.95 } : { x: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className={workoutLayout === 'modal' 
+                ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[92vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+                : "fixed top-0 right-0 h-screen w-full sm:w-[480px] md:w-[540px] lg:w-[600px] bg-[#140e0c]/98 border-l-2 border-viking-gold/30 z-50 flex flex-col overflow-hidden text-[#e0d3a8] shadow-[-15px_0_50px_rgba(0,0,0,0.85)] backdrop-blur-xl rounded-l-3xl"
+              }
             >
               <div className="p-6 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3">
@@ -7398,12 +7411,44 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <p className="text-[10px] text-viking-silver uppercase font-viking-medieval mt-0.5">Registre suas marcas e feedbacks</p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setWorkoutModalOpen(false)}
-                  className="p-1.5 rounded-xl bg-viking-gold/5 border border-viking-gold/20 text-viking-silver hover:text-viking-gold cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Layout Toggle Button */}
+                  {workoutLayout === 'modal' ? (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setWorkoutLayout('sidebar');
+                        showToast('Treino movido para a lateral! Navegue pelo salão livremente.', 'info');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-viking-gold hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                      title="Mover para Painel Lateral"
+                    >
+                      <Columns className="w-4 h-4 shrink-0 text-viking-gold" />
+                      <span className="hidden md:inline">Mover para Lateral</span>
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setWorkoutLayout('modal');
+                        showToast('Treino centralizado na tela.', 'info');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-viking-gold hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                      title="Centralizar na Tela"
+                    >
+                      <Maximize2 className="w-4 h-4 shrink-0 text-viking-gold" />
+                      <span className="hidden md:inline">Centralizar Treino</span>
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => setWorkoutModalOpen(false)}
+                    className="p-1.5 rounded-xl bg-viking-gold/5 border border-viking-gold/20 text-viking-silver hover:text-viking-gold cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6 space-y-6">

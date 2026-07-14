@@ -89,7 +89,11 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
       // First-time setup: write DEFAULT_STUDENTS to Firestore
       const initial: Record<string, StudentProfile> = DEFAULT_STUDENTS;
       for (const email of Object.keys(initial)) {
-        await setDoc(doc(db, 'students', email), initial[email]);
+        try {
+          await setDoc(doc(db, 'students', email), initial[email]);
+        } catch (e) {
+          console.warn("Falha ao salvar estudante inicial no Firestore:", email, e);
+        }
       }
       return initial;
     }
@@ -100,6 +104,23 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
     });
     return students;
   } catch (error) {
+    const cached = localStorage.getItem('viking_students');
+    if (cached) {
+      try {
+        return JSON.parse(cached) as Record<string, StudentProfile>;
+      } catch (_) {}
+    }
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond')
+    ) {
+      console.warn("Firestore offline ou instável, usando DEFAULT_STUDENTS:", error);
+      return DEFAULT_STUDENTS;
+    }
     handleFirestoreError(error, OperationType.LIST, 'students');
   }
 }
@@ -121,6 +142,17 @@ export function subscribeStudents(
       onUpdate(students);
     },
     (error) => {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      if (
+        errMessage.includes('offline') || 
+        errMessage.includes('network') || 
+        errMessage.includes('token') || 
+        errMessage.includes('Could not reach') ||
+        errMessage.includes('Backend didn\'t respond')
+      ) {
+        console.warn("Inscrição em tempo real offline/instável:", error);
+        return;
+      }
       handleFirestoreError(error, OperationType.GET, 'students');
     }
   );
@@ -161,10 +193,31 @@ export async function fetchProgramFromFirebase(): Promise<TrainingProgram> {
       return programSnap.data() as TrainingProgram;
     } else {
       // Initialize with DEFAULT_PROGRAM
-      await setDoc(programDocRef, DEFAULT_PROGRAM);
+      try {
+        await setDoc(programDocRef, DEFAULT_PROGRAM);
+      } catch (e) {
+        console.warn("Falha ao salvar DEFAULT_PROGRAM no Firestore:", e);
+      }
       return DEFAULT_PROGRAM;
     }
   } catch (error) {
+    const cached = localStorage.getItem('viking_program');
+    if (cached) {
+      try {
+        return JSON.parse(cached) as TrainingProgram;
+      } catch (_) {}
+    }
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond')
+    ) {
+      console.warn("Firestore offline ou instável, usando DEFAULT_PROGRAM:", error);
+      return DEFAULT_PROGRAM;
+    }
     handleFirestoreError(error, OperationType.GET, 'config/program');
   }
 }
@@ -193,6 +246,23 @@ export async function fetchPlansFromFirebase(): Promise<VikingPlan[] | null> {
     }
     return null;
   } catch (error) {
+    const cached = localStorage.getItem('viking_plans');
+    if (cached) {
+      try {
+        return JSON.parse(cached) as VikingPlan[];
+      } catch (_) {}
+    }
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond')
+    ) {
+      console.warn("Firestore offline ou instável, retornando array vazio de planos:", error);
+      return [];
+    }
     handleFirestoreError(error, OperationType.GET, 'config/plans');
   }
 }
@@ -523,7 +593,11 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
       const chunkSize = 60;
       for (let i = 0; i < missing.length; i += chunkSize) {
         const chunk = missing.slice(i, i + chunkSize);
-        await Promise.all(chunk.map(ex => setDoc(doc(db, 'exercises', ex.id), ex)));
+        try {
+          await Promise.all(chunk.map(ex => setDoc(doc(db, 'exercises', ex.id), ex)));
+        } catch (e) {
+          console.warn("Falha ao semear lote de exercícios:", e);
+        }
         console.log(`Seeded chunk ${i / chunkSize + 1} (${chunk.length} exercises)`);
       }
 
@@ -537,6 +611,23 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
 
     return exercises;
   } catch (error) {
+    const cached = localStorage.getItem('viking_db_exercises');
+    if (cached) {
+      try {
+        return JSON.parse(cached) as DbExercise[];
+      } catch (_) {}
+    }
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond')
+    ) {
+      console.warn("Firestore offline ou instável, gerando exercícios padrão:", error);
+      return generate500Exercises();
+    }
     handleFirestoreError(error, OperationType.LIST, 'exercises');
   }
 }
