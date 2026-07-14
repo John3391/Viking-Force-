@@ -2971,22 +2971,49 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">Ciclo de Força Ativo</span>
                 </div>
-                {activeStudentProfile.competitionDate && (
+                {activeStudentProfile.competitionDate ? (
                   <div className="flex flex-col items-center gap-2">
-                    <div className="bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl">
-                      <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">
-                        {Math.max(0, Math.ceil((new Date(activeStudentProfile.competitionDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)))} dias para competição
+                    <div className="bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl text-center">
+                      <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold block">
+                        {(() => {
+                          const days = Math.max(0, Math.ceil((new Date(activeStudentProfile.competitionDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)));
+                          const wks = Math.floor(days / 7);
+                          const remDays = days % 7;
+                          if (wks > 0) return `Faltam ${wks} sem e ${remDays} d`;
+                          return `Faltam ${days} dias`;
+                        })()}
                       </span>
+                      {activeStudentProfile.targetEventName && (
+                        <span className="text-[9px] text-[#e0d3a8] font-bold mt-0.5 block">{activeStudentProfile.targetEventName}</span>
+                      )}
                     </div>
-                    <a 
-                      href={`https://www.google.com/calendar/render?action=TEMPLATE&text=Competição+de+Força&dates=${activeStudentProfile.competitionDate.replace(/-/g, '')}/${activeStudentProfile.competitionDate.replace(/-/g, '')}&details=Dia+da+competição+alvo+no+Viking+Force`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-viking-silver hover:text-viking-gold underline"
-                    >
-                      Adicionar ao Google Calendar
-                    </a>
+                    <div className="flex gap-2">
+                      <a 
+                        href={`https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(activeStudentProfile.targetEventName || 'Competição de Força')}&dates=${activeStudentProfile.competitionDate.replace(/-/g, '')}/${activeStudentProfile.competitionDate.replace(/-/g, '')}&details=Dia+da+competição+alvo+no+Viking+Force`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-viking-silver hover:text-viking-gold underline"
+                      >
+                        Add ao GCalendar
+                      </a>
+                      <span className="text-[10px] text-viking-silver/50">|</span>
+                      <button 
+                        onClick={() => { setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
+                        className="text-[10px] text-viking-silver hover:text-viking-gold underline"
+                      >
+                        Mudar
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  <button 
+                    onClick={() => { setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
+                    className="mt-2 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    <span className="text-[10px] uppercase tracking-wider font-viking-medieval text-viking-gold flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3" /> Selecionar Evento Alvo
+                    </span>
+                  </button>
                 )}
               </div>
             </div>
@@ -5218,22 +5245,48 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   <p className="text-[11px] text-viking-silver mt-2.5 leading-relaxed whitespace-pre-wrap">{ev.description}</p>
                                 )}
                               </div>
-                              {currentUser?.role === 'trainer' && (
-                                <button
-                                  onClick={() => {
-                                    if(confirm('Apagar este evento do calendário?')) {
-                                      const updated = calendarEvents.filter(e => e.id !== ev.id);
-                                      setCalendarEvents(updated);
-                                      deleteCalendarEventFromFirebase(ev.id);
-                                      showToast('Evento removido.', 'info');
-                                    }
-                                  }}
-                                  className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                                  title="Remover Evento"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
+                              <div className="flex flex-col items-end gap-2">
+                                {currentUser?.role === 'trainer' && (
+                                  <button
+                                    onClick={() => {
+                                      if(confirm('Apagar este evento do calendário?')) {
+                                        const updated = calendarEvents.filter(e => e.id !== ev.id);
+                                        setCalendarEvents(updated);
+                                        deleteCalendarEventFromFirebase(ev.id);
+                                        showToast('Evento removido.', 'info');
+                                      }
+                                    }}
+                                    className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                                    title="Remover Evento"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {currentUser?.role === 'student' && activeStudentProfile && (
+                                  <button
+                                    onClick={() => {
+                                      const updatedStudent = {
+                                        ...activeStudentProfile,
+                                        competitionDate: ev.date,
+                                        targetEventId: ev.id,
+                                        targetEventName: ev.title
+                                      };
+                                      const updatedData = { ...studentsData, [currentUser.email]: updatedStudent };
+                                      setStudentsData(updatedData);
+                                      saveStudentToFirebase(updatedStudent, currentUser.email);
+                                      showToast('Evento definido como alvo!', 'success');
+                                      setDrawerOpen(false);
+                                    }}
+                                    className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                      activeStudentProfile.targetEventId === ev.id
+                                        ? 'bg-viking-gold text-viking-dark'
+                                        : 'bg-viking-gold/10 text-viking-gold hover:bg-viking-gold/20 border border-viking-gold/30'
+                                    }`}
+                                  >
+                                    {activeStudentProfile.targetEventId === ev.id ? 'Alvo Atual' : 'Definir Alvo'}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))
@@ -6193,6 +6246,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none [color-scheme:dark]"
                           />
                         </div>
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Evento Alvo / Teste de Força</label>
+                          <select 
+                            id="editStudentTargetEvent"
+                            defaultValue={s.targetEventId || ''}
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold"
+                          >
+                            <option value="" className="bg-[#140e0c] text-[#e0d3a8]">Sem evento alvo</option>
+                            {calendarEvents.map(ev => (
+                              <option key={ev.id} value={ev.id} className="bg-[#140e0c] text-[#e0d3a8]">
+                                {ev.title} ({(() => {
+                                  const parts = ev.date.split('-');
+                                  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ev.date;
+                                })()})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -6236,6 +6307,20 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const plan = (document.getElementById('editStudentPlan') as HTMLSelectElement).value as any;
                             const status = (document.getElementById('editStudentStatus') as HTMLSelectElement).value as any;
 
+                            const eventId = (document.getElementById('editStudentTargetEvent') as HTMLSelectElement).value;
+                            let targetEvtDate = s.competitionDate;
+                            let targetEvtName = s.targetEventName;
+                            if (eventId) {
+                              const found = calendarEvents.find(e => e.id === eventId);
+                              if (found) {
+                                targetEvtDate = found.date;
+                                targetEvtName = found.title;
+                              }
+                            } else {
+                              targetEvtDate = undefined;
+                              targetEvtName = undefined;
+                            }
+
                             const oldPrs = s.prs || { squat: null, bench: null, deadlift: null };
                             const prevPrs = {
                               squat: sq !== oldPrs.squat ? oldPrs.squat : (s.prevPrs?.squat ?? null),
@@ -6267,7 +6352,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               gender: gen,
                               preferredTime: pt,
                               plan,
-                              status
+                              status,
+                              targetEventId: eventId,
+                              competitionDate: targetEvtDate,
+                              targetEventName: targetEvtName
                             };
 
                             saveStudentsToDB({ ...studentsData, [editingStudentEmail.toLowerCase()]: updatedProfile });

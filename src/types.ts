@@ -97,6 +97,8 @@ export interface StudentProfile {
   age?: number;
   bodyWeight?: number;
   competitionDate?: string;
+  targetEventId?: string;
+  targetEventName?: string;
   publicNote?: string;
 }
 
