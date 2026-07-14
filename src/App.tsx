@@ -103,8 +103,8 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
-  const [loginEmail, setLoginEmail] = useState<string>('john.vasquesrodrigues@gmail.com');
-  const [loginPassword, setLoginPassword] = useState<string>('3636');
+  const [loginEmail, setLoginEmail] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
   const [authTab, setAuthTab] = useState<'student' | 'trainer'>('student');
   
   // Registration and PR state
@@ -2095,8 +2095,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       type="button"
                       onClick={() => {
                         setAuthTab('trainer');
-                        setLoginEmail('john');
-                        setLoginPassword('3636');
+                        setLoginEmail('');
+                        setLoginPassword('');
                       }}
                       className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer rounded-xl flex items-center justify-center gap-1.5 ${
                         authTab === 'trainer'
