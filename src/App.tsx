@@ -2138,8 +2138,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     saveProgramToDB({ weeks: updatedWeeks });
     showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para todos os guerreiros!`, 'success');
     
-    // Close drawer and smooth scroll to top of screen
+    // Close drawer, reset view to home panel, and smooth scroll to top of screen
     setDrawerOpen(false);
+    setActiveTab('home');
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
