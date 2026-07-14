@@ -50,7 +50,9 @@ import {
   Loader2,
   BookOpen,
   Upload,
-  Zap
+  Zap,
+  Square,
+  CheckSquare
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -189,6 +191,10 @@ export default function App() {
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
+
+  // Batch Selection State for updating status (e.g., set to 'Pago')
+  const [selectedStudentEmails, setSelectedStudentEmails] = useState<string[]>([]);
+  const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
 
   // Custom Confirm Modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -544,6 +550,36 @@ export default function App() {
         saveStudentToFirebase(email, newVal).catch(err => console.error("Firebase save athlete error:", err));
       }
     });
+  };
+
+  const handleBatchUpdateStatus = (newStatus: 'Pago' | 'Pendente' | 'Atrasado') => {
+    if (selectedStudentEmails.length === 0) {
+      showToast('Nenhum guerreiro selecionado!', 'info');
+      return;
+    }
+    const updatedStudents = { ...studentsData };
+    selectedStudentEmails.forEach(email => {
+      if (updatedStudents[email]) {
+        updatedStudents[email] = {
+          ...updatedStudents[email],
+          status: newStatus
+        };
+      }
+    });
+    saveStudentsToDB(updatedStudents);
+    setSelectedStudentEmails([]);
+    setIsBatchMode(false);
+    showToast(`Status atualizado para ${selectedStudentEmails.length} guerreiro(s) com sucesso!`, 'success');
+  };
+
+  const handleBatchSelectAll = () => {
+    setSelectedStudentEmails(filteredStudentEmails);
+    showToast(`${filteredStudentEmails.length} guerreiros selecionados!`, 'info');
+  };
+
+  const handleBatchClearSelection = () => {
+    setSelectedStudentEmails([]);
+    showToast('Seleção limpa!', 'info');
   };
 
   const handleLoginSuccess = (user: UserType) => {
@@ -1715,6 +1751,11 @@ export default function App() {
     setExerciseFailureState({});
     setSessionNote('');
 
+    // Smooth scroll to top of screen
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
+
     if (volumeDeficit > 0) {
       showToast(`Treino registrado! Alerta Viking de Volume: Déficit de ${volumeDeficit} reps. Estratégia de compensação gerada em seu Histórico!`, 'info');
     } else {
@@ -2096,6 +2137,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
     saveProgramToDB({ weeks: updatedWeeks });
     showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para todos os guerreiros!`, 'success');
+    
+    // Close drawer and smooth scroll to top of screen
+    setDrawerOpen(false);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
   };
 
   const handleEditorUpdateField = (idx: number, field: keyof Exercise, value: any) => {
@@ -2141,6 +2188,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       return ex;
     }));
   };
+
+  const filteredStudentEmails = Object.keys(studentsData).filter(email => {
+    const s = studentsData[email];
+    if (paymentFilter === 'pending_or_overdue' && s.status === 'Pago') {
+      return false;
+    }
+    const searchLower = searchTerm.toLowerCase().trim();
+    if (!searchLower) return true;
+    return s.name.toLowerCase().includes(searchLower) || email.toLowerCase().includes(searchLower);
+  });
 
   return (
     <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
@@ -3807,6 +3864,181 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             </div>
 
+            {/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
+            {(() => {
+              const prNotifications: {
+                email: string;
+                studentName: string;
+                exercise: 'squat' | 'bench' | 'deadlift';
+                exerciseLabel: string;
+                oldValue: number | null;
+                newValue: number;
+                diff: number | null;
+              }[] = [];
+
+              Object.keys(studentsData).forEach(email => {
+                const student = studentsData[email];
+                const { prs, prevPrs, name } = student;
+                
+                if (prs) {
+                  const lifts: { key: 'squat' | 'bench' | 'deadlift'; label: string }[] = [
+                    { key: 'squat', label: 'Agachamento' },
+                    { key: 'bench', label: 'Supino' },
+                    { key: 'deadlift', label: 'Levantamento Terra' }
+                  ];
+                  
+                  lifts.forEach(({ key, label }) => {
+                    const newVal = prs[key];
+                    const oldVal = prevPrs?.[key] ?? null;
+                    
+                    if (newVal !== null && newVal > 0) {
+                      if (oldVal === null || newVal > oldVal) {
+                        const diff = oldVal !== null ? newVal - oldVal : null;
+                        prNotifications.push({
+                          email,
+                          studentName: name,
+                          exercise: key,
+                          exerciseLabel: label,
+                          oldValue: oldVal,
+                          newValue: newVal,
+                          diff
+                        });
+                      }
+                    }
+                  });
+                }
+              });
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Trophy className="w-32 h-32" />
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-viking-gold">
+                        <Trophy className="w-5 h-5 text-viking-gold animate-bounce" />
+                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Mural de Conquistas (PRs)</h2>
+                      </div>
+                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-0.5">Glória e Recordes de Força Recentes</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-viking-silver/60 uppercase font-bold">Recordes Registrados:</span>
+                      <p className="text-xs text-viking-gold font-extrabold uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/20 px-2.5 py-1 rounded-lg mt-1 inline-block">
+                        {prNotifications.length} Conquistas Ativas
+                      </p>
+                    </div>
+                  </div>
+
+                  {prNotifications.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {prNotifications.map((notif) => {
+                        const student = studentsData[notif.email.toLowerCase()];
+                        const congratMessage = `⚔️ ¡Parabéns pelo novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg! ${notif.diff ? `Uma evolução de +${notif.diff}kg!` : ''} Que os deuses do ferro celebrem sua força! 🏋️🔥`;
+                        
+                        // Verificar se já parabenizou o aluno por esse peso exato
+                        const alreadyCongratulated = student?.chatHistory?.some(
+                          msg => msg.sender === 'trainer' && msg.text.includes(`novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg`)
+                        ) || false;
+
+                        return (
+                          <div 
+                            key={`${notif.email}-${notif.exercise}`}
+                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
+                          >
+                            {!alreadyCongratulated && (
+                              <div className="absolute inset-0 bg-viking-gold/2 pointer-events-none animate-pulse" />
+                            )}
+                            
+                            <div className="relative z-10">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
+                                    <Sparkles className="w-4 h-4" />
+                                  </span>
+                                  <div>
+                                    <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
+                                      {notif.studentName}
+                                    </h4>
+                                    <p className="text-[10px] text-viking-silver/60 truncate">{notif.email}</p>
+                                  </div>
+                                </div>
+                                <span className="bg-viking-gold/15 text-viking-gold border border-viking-gold/25 text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval">
+                                  {notif.exerciseLabel}
+                                </span>
+                              </div>
+
+                              <div className="mt-3.5 flex items-baseline gap-2.5 bg-[#0d0908]/40 p-2.5 rounded-xl border border-viking-gold/5">
+                                <span className="text-xl font-black text-viking-gold">{notif.newValue} kg</span>
+                                {notif.oldValue !== null ? (
+                                  <span className="text-[11px] text-viking-silver/65 line-through">Anterior: {notif.oldValue} kg</span>
+                                ) : (
+                                  <span className="text-[10px] text-viking-silver/50 uppercase tracking-widest font-viking-medieval">Primeiro Registro</span>
+                                )}
+                                {notif.diff !== null && notif.diff > 0 && (
+                                  <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md ml-auto animate-pulse">
+                                    +{notif.diff} kg
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                if (alreadyCongratulated) {
+                                  setActiveChatStudentEmail(notif.email);
+                                  setDrawerTitle(`Chat com ${notif.studentName}`);
+                                  setDrawerType('chat');
+                                  setDrawerOpen(true);
+                                  return;
+                                }
+
+                                handleSendMessage(notif.email, congratMessage);
+                                triggerPrConfetti();
+                                
+                                setActiveChatStudentEmail(notif.email);
+                                setDrawerTitle(`Chat com ${notif.studentName}`);
+                                setDrawerType('chat');
+                                setDrawerOpen(true);
+                              }}
+                              className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer ${
+                                alreadyCongratulated
+                                  ? 'bg-emerald-950/20 hover:bg-emerald-900/10 border-emerald-500/25 text-emerald-400 font-bold'
+                                  : 'bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark border-viking-gold font-extrabold hover:scale-[1.02]'
+                              }`}
+                            >
+                              {alreadyCongratulated ? (
+                                <>
+                                  <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                                  Parabenizado! Ver Chat
+                                </>
+                              ) : (
+                                <>
+                                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                                  Parabenizar via Chat
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl">
+                      <span className="text-3xl">🛡️</span>
+                      <div>
+                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Salão do Silêncio</p>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
+                          Nenhum novo recorde de força registrado por seus gladiadores nesta quinzena. Mantenha os guerreiros focados nos treinos pesados para clamar glória!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Wilks Efficiency Scatter Chart */}
             <WilksScatterChart entries={getLeaderboard()} />
 
@@ -3975,12 +4207,35 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <h3 className="font-viking-display text-lg font-bold text-viking-gold">LISTA DE GLADIADORES</h3>
                   <p className="text-xs text-viking-silver">Acompanhe as marcas (1RM), pagamentos e prescreva os treinos</p>
                 </div>
-                <button 
-                  onClick={() => { setDrawerType('addStudent'); setDrawerTitle('Recrutar Novo Aluno'); setDrawerOpen(true); }}
-                  className="px-4 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-lg shadow-viking-gold/20 transition-all cursor-pointer"
-                >
-                  <UserPlus className="w-4 h-4 shrink-0" /> Novo Guerreiro
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    onClick={() => { 
+                      setIsBatchMode(!isBatchMode); 
+                      setSelectedStudentEmails([]); 
+                    }}
+                    className={`px-4 py-2 border rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                      isBatchMode 
+                        ? 'bg-red-950/40 border-red-500/50 hover:bg-red-900/30 text-red-400' 
+                        : 'bg-viking-dark border-viking-gold/30 hover:border-viking-gold/60 text-viking-silver hover:text-viking-gold'
+                    }`}
+                  >
+                    {isBatchMode ? (
+                      <>
+                        <X className="w-4 h-4 shrink-0" /> Sair da Seleção
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare className="w-4 h-4 shrink-0" /> Seleção em Massa
+                      </>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => { setDrawerType('addStudent'); setDrawerTitle('Recrutar Novo Aluno'); setDrawerOpen(true); }}
+                    className="px-4 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-lg shadow-viking-gold/20 transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4 shrink-0" /> Novo Guerreiro
+                  </button>
+                </div>
               </div>
 
               {/* Search Bar for Athlete Filtering */}
@@ -4024,16 +4279,74 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
               )}
 
+              {/* Bulk Actions Panel */}
+              {isBatchMode && (
+                <div className="mb-6 p-4 bg-viking-gold/5 border border-viking-gold/40 rounded-2xl shadow-lg shadow-viking-gold/5 animate-fadeIn">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="p-2 bg-viking-gold/10 rounded-xl text-viking-gold">
+                        <CheckSquare className="w-5 h-5 animate-pulse" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-black text-viking-gold uppercase tracking-widest font-viking-medieval">MODO SELEÇÃO EM MASSA ATIVO</p>
+                        <p className="text-[11px] text-viking-silver mt-0.5">
+                          {selectedStudentEmails.length === 0 ? (
+                            <span className="text-viking-silver/65 italic">Selecione os guerreiros abaixo para alterar o status financeiro de uma vez</span>
+                          ) : (
+                            <span><strong className="text-white font-extrabold">{selectedStudentEmails.length}</strong> de <strong className="text-[#e0d3a8]">{filteredStudentEmails.length}</strong> gladiadores selecionados</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                      {/* Select/Deselect visible controls */}
+                      <button
+                        onClick={handleBatchSelectAll}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-viking-silver text-[10px] font-bold uppercase rounded-lg transition-all cursor-pointer"
+                      >
+                        Selecionar Todos
+                      </button>
+                      <button
+                        onClick={handleBatchClearSelection}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-viking-silver text-[10px] font-bold uppercase rounded-lg transition-all cursor-pointer"
+                        disabled={selectedStudentEmails.length === 0}
+                      >
+                        Limpar Seleção
+                      </button>
+
+                      {/* Bulk action buttons */}
+                      <div className="h-4 w-[1px] bg-viking-gold/20 hidden sm:block mx-1"></div>
+
+                      <button
+                        onClick={() => handleBatchUpdateStatus('Pago')}
+                        disabled={selectedStudentEmails.length === 0}
+                        className="px-3.5 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-800/45 hover:border-emerald-500 disabled:opacity-40 disabled:pointer-events-none text-emerald-400 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Marcar Pago
+                      </button>
+
+                      <button
+                        onClick={() => handleBatchUpdateStatus('Pendente')}
+                        disabled={selectedStudentEmails.length === 0}
+                        className="px-3.5 py-1.5 bg-amber-950/40 hover:bg-amber-900/40 border border-amber-800/45 hover:border-amber-500 disabled:opacity-40 disabled:pointer-events-none text-amber-400 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" /> Marcar Pendente
+                      </button>
+
+                      <button
+                        onClick={() => handleBatchUpdateStatus('Atrasado')}
+                        disabled={selectedStudentEmails.length === 0}
+                        className="px-3.5 py-1.5 bg-red-950/40 hover:bg-red-900/40 border border-red-800/45 hover:border-red-500 disabled:opacity-40 disabled:pointer-events-none text-red-400 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Marcar Atrasado
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {(() => {
-                const filteredStudentEmails = Object.keys(studentsData).filter(email => {
-                  const s = studentsData[email];
-                  if (paymentFilter === 'pending_or_overdue' && s.status === 'Pago') {
-                    return false;
-                  }
-                  const searchLower = searchTerm.toLowerCase().trim();
-                  if (!searchLower) return true;
-                  return s.name.toLowerCase().includes(searchLower) || email.toLowerCase().includes(searchLower);
-                });
 
                 if (filteredStudentEmails.length === 0) {
                   return (
@@ -4056,6 +4369,31 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <table className="w-full text-left border-collapse text-sm">
                         <thead>
                           <tr className="border-b border-viking-gold/15 text-xs text-viking-gold uppercase font-viking-medieval">
+                            {isBatchMode && (
+                              <th className="py-3 px-4 font-bold text-center w-12">
+                                <button
+                                  onClick={() => {
+                                    const allSelected = filteredStudentEmails.every(email => selectedStudentEmails.includes(email));
+                                    if (allSelected) {
+                                      setSelectedStudentEmails(prev => prev.filter(email => !filteredStudentEmails.includes(email)));
+                                    } else {
+                                      setSelectedStudentEmails(prev => {
+                                        const union = new Set([...prev, ...filteredStudentEmails]);
+                                        return Array.from(union);
+                                      });
+                                    }
+                                  }}
+                                  className="text-viking-gold hover:text-white transition-colors focus:outline-none cursor-pointer"
+                                  title={filteredStudentEmails.every(email => selectedStudentEmails.includes(email)) ? "Deselecionar todos" : "Selecionar todos"}
+                                >
+                                  {filteredStudentEmails.every(email => selectedStudentEmails.includes(email)) ? (
+                                    <CheckSquare className="w-4 h-4 mx-auto" />
+                                  ) : (
+                                    <Square className="w-4 h-4 mx-auto" />
+                                  )}
+                                </button>
+                              </th>
+                            )}
                             <th className="py-3 px-4 font-bold">Guerreiro</th>
                             <th className="py-3 px-4 font-bold">Email</th>
                             <th className="py-3 px-4 font-bold">Assinatura</th>
@@ -4073,9 +4411,30 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const hasTrainedToday = s.sessions?.some(sess => sess.date === todayString);
                             const preferredTime = s.preferredTime || '18:00';
                             const isPastPreferredTime = simulatedTime > preferredTime;
+                            const isSelected = selectedStudentEmails.includes(email);
 
                             return (
-                              <tr key={email} className="hover:bg-viking-gold/5 transition-colors">
+                              <tr key={email} className={`transition-colors ${isSelected ? 'bg-viking-gold/10 hover:bg-viking-gold/15' : 'hover:bg-viking-gold/5'}`}>
+                                {isBatchMode && (
+                                  <td className="py-3.5 px-4 text-center">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedStudentEmails(prev => 
+                                          prev.includes(email) 
+                                            ? prev.filter(e => e !== email) 
+                                            : [...prev, email]
+                                        );
+                                      }}
+                                      className="text-viking-gold hover:text-white transition-colors focus:outline-none cursor-pointer"
+                                    >
+                                      {isSelected ? (
+                                        <CheckSquare className="w-4 h-4 mx-auto text-viking-gold" />
+                                      ) : (
+                                        <Square className="w-4 h-4 mx-auto text-viking-silver/40" />
+                                      )}
+                                    </button>
+                                  </td>
+                                )}
                                 <td className="py-3.5 px-4 font-bold text-white">{s.name}</td>
                                 <td className="py-3.5 px-4 text-xs font-medium text-viking-silver">{email}</td>
                                 <td className="py-3.5 px-4 text-xs font-medium text-white">{s.plan}</td>
@@ -4184,12 +4543,37 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {filteredStudentEmails.map(email => {
                         const s = studentsData[email];
                         const lastSess = s.sessions[0];
+                        const isSelected = selectedStudentEmails.includes(email);
                         return (
-                          <div key={email} className="p-4 rounded-2xl bg-[#0d0908]/50 border border-viking-gold/15 space-y-3.5 shadow-md">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="font-bold text-[#e0d3a8] text-base">{s.name}</p>
-                                <p className="text-[11px] text-viking-silver mt-0.5">{email}</p>
+                          <div key={email} className={`p-4 rounded-2xl bg-[#0d0908]/50 border space-y-3.5 shadow-md transition-all ${
+                            isSelected 
+                              ? 'border-viking-gold bg-viking-gold/5 shadow-viking-gold/5' 
+                              : 'border-viking-gold/15'
+                          }`}>
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="flex items-start gap-2.5">
+                                {isBatchMode && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedStudentEmails(prev => 
+                                        prev.includes(email) 
+                                          ? prev.filter(e => e !== email) 
+                                          : [...prev, email]
+                                      );
+                                    }}
+                                    className="text-viking-gold hover:text-white transition-colors focus:outline-none cursor-pointer mt-0.5 shrink-0"
+                                  >
+                                    {isSelected ? (
+                                      <CheckSquare className="w-5 h-5 text-viking-gold" />
+                                    ) : (
+                                      <Square className="w-5 h-5 text-viking-silver/40" />
+                                    )}
+                                  </button>
+                                )}
+                                <div>
+                                  <p className="font-bold text-[#e0d3a8] text-base">{s.name}</p>
+                                  <p className="text-[11px] text-viking-silver mt-0.5">{email}</p>
+                                </div>
                               </div>
                               <span className={`inline-block px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border ${
                                 s.status === 'Pago' 
