@@ -181,11 +181,47 @@ export default function App() {
 
   // Search filter state for Trainer dashboard
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [whatsappSearch, setWhatsappSearch] = useState<string>('');
+  const [paymentsSearch, setPaymentsSearch] = useState<string>('');
+  const [rpeSearch, setRpeSearch] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
+
+  // Custom Confirm Modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm: () => void;
+    isDanger?: boolean;
+  } | null>(null);
+
+  const triggerConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    isDanger = false,
+    confirmText = 'Confirmar',
+    cancelText = 'Cancelar'
+  ) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModal(null);
+      },
+      confirmText,
+      cancelText,
+      isDanger
+    });
+  };
 
   // Chat scroll container reference
   const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1162,83 +1198,86 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja enviar a ficha de treino atual de ${s.name} para o e-mail ${studentEmail} via Gmail?`);
-    if (!confirmed) return;
-
-    // Generate HTML for the email
-    const subject = `🛡️ [Viking Force] Sua Ficha de Treino Atualizada - Olá, ${s.name}!`;
-    
-    // Construct active training details
-    let exercisesHTML = '';
-    const currentWeek = 1; // standard or current week
-    const weekWorkout = trainingProgram.weeks[currentWeek] || trainingProgram.weeks[1];
-    
-    if (weekWorkout) {
-      exercisesHTML += `
-        <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px;">Treino Prescrito (Semana ${currentWeek})</h3>
-      `;
-      Object.keys(weekWorkout).sort().forEach((day) => {
-        const exercises = weekWorkout[day] || [];
-        if (exercises.length > 0) {
-          exercisesHTML += `<h4 style="color: #ffffff; font-family: sans-serif; background-color: #1a1210; padding: 6px 12px; margin-top: 15px;">Treino ${day}</h4>`;
-          exercisesHTML += `<table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; color: #e0d3a8; margin-bottom: 15px;">
-            <thead>
-              <tr style="background-color: #261a15; color: #d4af37; text-align: left;">
-                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Exercício</th>
-                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Séries x Reps</th>
-                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Intensidade</th>
-                <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">RPE Alvo</th>
-              </tr>
-            </thead>
-            <tbody>`;
-          exercises.forEach((ex) => {
-            const displayIntensity = typeof ex.intensity === 'number' 
-              ? `${(ex.intensity * 100).toFixed(0)}%` 
-              : ex.intensity;
-            exercisesHTML += `
-              <tr style="border-bottom: 1px solid #3c2a21;">
-                <td style="padding: 8px; font-weight: bold; color: #ffffff;">${ex.name}</td>
-                <td style="padding: 8px; color: #ffffff;">${ex.sets} x ${ex.reps}</td>
-                <td style="padding: 8px; color: #d4af37;">${displayIntensity}</td>
-                <td style="padding: 8px; color: #ffffff;">@${ex.targetRPE}</td>
-              </tr>
-            `;
+    triggerConfirm(
+      "Enviar Ficha de Treino?",
+      `Deseja enviar a ficha de treino atual de ${s.name} para o e-mail ${studentEmail} via Gmail?`,
+      async () => {
+        // Generate HTML for the email
+        const subject = `🛡️ [Viking Force] Sua Ficha de Treino Atualizada - Olá, ${s.name}!`;
+        
+        // Construct active training details
+        let exercisesHTML = '';
+        const currentWeek = 1; // standard or current week
+        const weekWorkout = trainingProgram.weeks[currentWeek] || trainingProgram.weeks[1];
+        
+        if (weekWorkout) {
+          exercisesHTML += `
+            <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px;">Treino Prescrito (Semana ${currentWeek})</h3>
+          `;
+          Object.keys(weekWorkout).sort().forEach((day) => {
+            const exercises = weekWorkout[day] || [];
+            if (exercises.length > 0) {
+              exercisesHTML += `<h4 style="color: #ffffff; font-family: sans-serif; background-color: #1a1210; padding: 6px 12px; margin-top: 15px;">Treino ${day}</h4>`;
+              exercisesHTML += `<table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; color: #e0d3a8; margin-bottom: 15px;">
+                <thead>
+                  <tr style="background-color: #261a15; color: #d4af37; text-align: left;">
+                    <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Exercício</th>
+                    <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Séries x Reps</th>
+                    <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">Intensidade</th>
+                    <th style="padding: 8px; border: 1px solid #3c2a21; background-color: #261a15;">RPE Alvo</th>
+                  </tr>
+                </thead>
+                <tbody>`;
+              exercises.forEach((ex) => {
+                const displayIntensity = typeof ex.intensity === 'number' 
+                  ? `${(ex.intensity * 100).toFixed(0)}%` 
+                  : ex.intensity;
+                exercisesHTML += `
+                  <tr style="border-bottom: 1px solid #3c2a21;">
+                    <td style="padding: 8px; font-weight: bold; color: #ffffff;">${ex.name}</td>
+                    <td style="padding: 8px; color: #ffffff;">${ex.sets} x ${ex.reps}</td>
+                    <td style="padding: 8px; color: #d4af37;">${displayIntensity}</td>
+                    <td style="padding: 8px; color: #ffffff;">@${ex.targetRPE}</td>
+                  </tr>
+                `;
+              });
+              exercisesHTML += `</tbody></table>`;
+            }
           });
-          exercisesHTML += `</tbody></table>`;
         }
-      });
-    }
 
-    const prsHTML = `
-      <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px; margin-top: 25px;">Seus Recordes Pessoais (PRs)</h3>
-      <ul style="font-family: sans-serif; font-size: 14px; color: #ffffff; list-style-type: none; padding-left: 0;">
-        <li style="margin-bottom: 6px;">🏋️ <strong>Agachamento:</strong> ${s.prs.squat ? `${s.prs.squat} kg` : 'Não registrado'}</li>
-        <li style="margin-bottom: 6px;">🏋️ <strong>Supino:</strong> ${s.prs.bench ? `${s.prs.bench} kg` : 'Não registrado'}</li>
-        <li style="margin-bottom: 6px;">🏋️ <strong>Levantamento Terra:</strong> ${s.prs.deadlift ? `${s.prs.deadlift} kg` : 'Não registrado'}</li>
-      </ul>
-    `;
+        const prsHTML = `
+          <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px; margin-top: 25px;">Seus Recordes Pessoais (PRs)</h3>
+          <ul style="font-family: sans-serif; font-size: 14px; color: #ffffff; list-style-type: none; padding-left: 0;">
+            <li style="margin-bottom: 6px;">🏋️ <strong>Agachamento:</strong> ${s.prs.squat ? `${s.prs.squat} kg` : 'Não registrado'}</li>
+            <li style="margin-bottom: 6px;">🏋️ <strong>Supino:</strong> ${s.prs.bench ? `${s.prs.bench} kg` : 'Não registrado'}</li>
+            <li style="margin-bottom: 6px;">🏋️ <strong>Levantamento Terra:</strong> ${s.prs.deadlift ? `${s.prs.deadlift} kg` : 'Não registrado'}</li>
+          </ul>
+        `;
 
-    const emailHTML = `
-      <div style="background-color: #0d0908; color: #e0d3a8; padding: 25px; border-radius: 15px; border: 2px solid #d4af37; font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <h1 style="color: #d4af37; font-family: 'Georgia', serif; font-size: 28px; margin: 0; text-transform: uppercase; letter-spacing: 2px;">Viking Force</h1>
-          <p style="color: #a89a78; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; margin: 5px 0 0 0;">Salão de Powerlifting</p>
-        </div>
-        
-        <p style="font-size: 15px; line-height: 1.6;">Saudações, guerreiro <strong>${s.name}</strong>!</p>
-        <p style="font-size: 14px; line-height: 1.6;">Seu treinador acaba de atualizar sua ficha de batalhas (treino) no painel do templo. Prepare seus eixos, fortaleça sua mente e que os deuses do ferro estejam com você na próxima jornada.</p>
-        
-        ${exercisesHTML}
-        ${prsHTML}
-        
-        <div style="margin-top: 30px; border-top: 1px solid #3c2a21; padding-top: 15px; font-size: 12px; color: #a89a78; text-align: center; line-height: 1.5;">
-          <p>Este e-mail foi disparado diretamente de Valhalla pelo sistema integrado Gmail da Viking Force.</p>
-          <p style="color: #d4af37; font-weight: bold; margin-top: 5px;">"O ferro não mente. 100kg sempre serão 100kg."</p>
-        </div>
-      </div>
-    `;
+        const emailHTML = `
+          <div style="background-color: #0d0908; color: #e0d3a8; padding: 25px; border-radius: 15px; border: 2px solid #d4af37; font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #d4af37; font-family: 'Georgia', serif; font-size: 28px; margin: 0; text-transform: uppercase; letter-spacing: 2px;">Viking Force</h1>
+              <p style="color: #a89a78; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; margin: 5px 0 0 0;">Salão de Powerlifting</p>
+            </div>
+            
+            <p style="font-size: 15px; line-height: 1.6;">Saudações, guerreiro <strong>${s.name}</strong>!</p>
+            <p style="font-size: 14px; line-height: 1.6;">Seu treinador acaba de atualizar sua ficha de batalhas (treino) no painel do templo. Prepare seus eixos, fortaleça sua mente e que os deuses do ferro estejam com você na próxima jornada.</p>
+            
+            ${exercisesHTML}
+            ${prsHTML}
+            
+            <div style="margin-top: 30px; border-top: 1px solid #3c2a21; padding-top: 15px; font-size: 12px; color: #a89a78; text-align: center; line-height: 1.5;">
+              <p>Este e-mail foi disparado diretamente de Valhalla pelo sistema integrado Gmail da Viking Force.</p>
+              <p style="color: #d4af37; font-weight: bold; margin-top: 5px;">"O ferro não mente. 100kg sempre serão 100kg."</p>
+            </div>
+          </div>
+        `;
 
-    await sendGmail(studentEmail, subject, emailHTML);
+        await sendGmail(studentEmail, subject, emailHTML);
+      }
+    );
   };
 
   // --- CHAT / FEEDBACK LOGIC ---
@@ -5218,65 +5257,140 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   );
                 })()}
 
-                {/* 6. WhatsApp billing */}
-                {drawerType === 'whatsapp' && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-viking-silver/85">
-                      Selecione um atleta em atraso ou pendente para abrir o WhatsApp Web com uma mensagem personalizada de lembrete de renovação de forma instantânea.
-                    </p>
-                    <div className="space-y-3">
-                      {Object.keys(studentsData)
-                        .map(email => ({ email, s: studentsData[email] }))
-                        .filter(({ s }) => s.status !== 'Pago')
-                        .map(({ email, s }) => {
-                          const customText = `Saudações, guerreiro ${s.name}! Passando para lembrar sobre a renovação da sua assinatura de acompanhamento na Viking Force. Vamos continuar os treinos e quebrar recordes? 💪⚔️`;
-                          return (
-                            <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
-                              <div>
-                                <p className="text-sm font-bold text-white">{s.name}</p>
-                                <p className="text-[10px] text-viking-gold uppercase mt-0.5 font-viking-medieval font-bold">Mensalidade em {s.status}</p>
-                              </div>
-                              <a 
-                                href={`https://wa.me/5511999990000?text=${encodeURIComponent(customText)}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-3.5 py-2 rounded-xl bg-[#1ea453] hover:bg-[#167d3e] text-white font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                              >
-                                <Phone className="w-3.5 h-3.5" /> Enviar Cobrança
-                              </a>
-                            </div>
-                          );
-                        })}
+                 {/* 6. WhatsApp billing */}
+                 {drawerType === 'whatsapp' && (
+                   <div className="space-y-4">
+                     <p className="text-xs text-viking-silver/85">
+                       Selecione um atleta em atraso ou pendente para abrir o WhatsApp Web com uma mensagem personalizada de lembrete de renovação de forma instantânea.
+                     </p>
+                     
+                     {/* Search Bar */}
+                     <div className="relative">
+                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                         <Search className="h-3.5 w-3.5 text-viking-gold/60" />
+                       </div>
+                       <input
+                         type="text"
+                         placeholder="Buscar guerreiro por nome ou email..."
+                         value={whatsappSearch}
+                         onChange={(e) => setWhatsappSearch(e.target.value)}
+                         className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
+                       />
+                       {whatsappSearch && (
+                         <button
+                           onClick={() => setWhatsappSearch('')}
+                           className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                         >
+                           Limpar
+                         </button>
+                       )}
+                     </div>
 
-                      {Object.keys(studentsData).map(email => studentsData[email]).filter(s => s.status !== 'Pago').length === 0 && (
-                        <p className="text-center py-6 text-xs text-viking-silver/60">Nenhum guerreiro está inadimplente no momento! Todos em dia.</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                     <div className="space-y-3">
+                       {(() => {
+                         const filtered = Object.keys(studentsData)
+                           .map(email => ({ email, s: studentsData[email] }))
+                           .filter(({ email, s }) => {
+                             if (s.status === 'Pago') return false;
+                             const term = whatsappSearch.toLowerCase().trim();
+                             if (!term) return true;
+                             return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
+                           });
+
+                         if (filtered.length === 0) {
+                           return (
+                             <p className="text-center py-6 text-xs text-viking-silver/60">
+                               {whatsappSearch ? 'Nenhum guerreiro correspondente encontrado.' : 'Nenhum guerreiro está inadimplente no momento! Todos em dia.'}
+                             </p>
+                           );
+                         }
+
+                         return filtered.map(({ email, s }) => {
+                           const customText = `Saudações, guerreiro ${s.name}! Passando para lembrar sobre a renovação da sua assinatura de acompanhamento na Viking Force. Vamos continuar os treinos e quebrar recordes? 💪⚔️`;
+                           return (
+                             <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
+                               <div>
+                                 <p className="text-sm font-bold text-white">{s.name}</p>
+                                 <p className="text-[10px] text-viking-gold uppercase mt-0.5 font-viking-medieval font-bold">Mensalidade em {s.status}</p>
+                               </div>
+                               <a 
+                                 href={`https://wa.me/5511999990000?text=${encodeURIComponent(customText)}`}
+                                 target="_blank"
+                                 rel="noreferrer"
+                                 className="px-3.5 py-2 rounded-xl bg-[#1ea453] hover:bg-[#167d3e] text-white font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                               >
+                                 <Phone className="w-3.5 h-3.5" /> Enviar Cobrança
+                               </a>
+                             </div>
+                           );
+                         });
+                       })()}
+                     </div>
+                   </div>
+                 )}
 
                 {/* 7. Payments list (Trainer) */}
                 {drawerType === 'payments' && (
                   <div className="space-y-4">
                     <p className="text-xs text-viking-silver/80">Controle de fluxo de caixa referente à prestação de serviços de treinamento esportivo.</p>
+                    
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-3.5 w-3.5 text-viking-gold/60" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Buscar guerreiro por nome ou email..."
+                        value={paymentsSearch}
+                        onChange={(e) => setPaymentsSearch(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
+                      />
+                      {paymentsSearch && (
+                        <button
+                          onClick={() => setPaymentsSearch('')}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
-                      {Object.keys(studentsData).map(email => {
-                        const s = studentsData[email];
-                        return (
-                          <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
-                            <div>
-                              <p className="text-sm font-bold text-white">{s.name}</p>
-                              <p className="text-xs text-viking-silver">{email}</p>
+                      {(() => {
+                        const filtered = Object.keys(studentsData).filter(email => {
+                          const s = studentsData[email];
+                          const term = paymentsSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <p className="text-center py-6 text-xs text-viking-silver/60">
+                              Nenhum guerreiro correspondente encontrado.
+                            </p>
+                          );
+                        }
+
+                        return filtered.map(email => {
+                          const s = studentsData[email];
+                          return (
+                            <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
+                              <div>
+                                <p className="text-sm font-bold text-white">{s.name}</p>
+                                <p className="text-xs text-viking-silver">{email}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-black text-white">R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                <span className={`text-[9px] font-black uppercase ${s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'}`}>
+                                  {s.status}
+                                </span>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-black text-white">R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                              <span className={`text-[9px] font-black uppercase ${s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'}`}>
-                                {s.status}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 )}
@@ -5286,10 +5400,41 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <div className="space-y-4">
                     <p className="text-xs text-viking-silver/80">Histórico cronológico de feedbacks postados pelos seus atletas. Monitoramento de cansaço extremo.</p>
                     
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-3.5 w-3.5 text-viking-gold/60" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Buscar guerreiro por nome ou email..."
+                        value={rpeSearch}
+                        onChange={(e) => setRpeSearch(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
+                      />
+                      {rpeSearch && (
+                        <button
+                          onClick={() => setRpeSearch('')}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+
                     <div className="space-y-3">
-                      {Object.keys(studentsData).map(email => studentsData[email]).some(s => s.sessions.length > 0) ? (
-                        Object.keys(studentsData).map(email => studentsData[email]).map(student => 
-                          student.sessions.map((sess, sIdx) => (
+                      {(() => {
+                        const filteredEmails = Object.keys(studentsData).filter(email => {
+                          const s = studentsData[email];
+                          const term = rpeSearch.toLowerCase().trim();
+                          if (!term) return true;
+                          return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
+                        });
+                        const hasSessions = filteredEmails.some(email => studentsData[email].sessions.length > 0);
+                        
+                        return hasSessions ? (
+                          filteredEmails.map(email => studentsData[email]).map(student => 
+                            student.sessions.map((sess, sIdx) => (
                             <div key={`${student.name}-${sIdx}`} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-sm font-black text-white">{student.name}</span>
@@ -5364,10 +5509,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               )}
                             </div>
                           ))
-                        )
-                      ) : (
-                        <p className="text-center py-6 text-xs text-viking-silver/60">Nenhum feedback postado ainda.</p>
-                      )}
+                        )) : (
+                          <p className="text-center py-6 text-xs text-viking-silver/60">Nenhum feedback correspondente encontrado.</p>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -6055,7 +6200,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 />
                               </div>
                               <button 
-                                onClick={async () => {
+                                onClick={() => {
                                   const subject = (document.getElementById('broadcastSubject') as HTMLInputElement)?.value || '';
                                   const body = (document.getElementById('broadcastBody') as HTMLTextAreaElement)?.value || '';
                                   if (!subject || !body) {
@@ -6063,29 +6208,35 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     return;
                                   }
                                   const athleteEmails = Object.keys(studentsData);
-                                  const confirmed = window.confirm(`Tem certeza que deseja disparar este e-mail em massa para TODOS os ${athleteEmails.length} atletas?`);
-                                  if (!confirmed) return;
-
-                                  showToast(`Iniciando disparo em massa...`, 'info');
-                                  let sentCount = 0;
-                                  for (const email of athleteEmails) {
-                                    const success = await sendGmail(email, subject, `
-                                      <div style="background-color:#0d0908;color:#e0d3a8;padding:25px;border-radius:15px;border:2px solid #d4af37;font-family:sans-serif;max-width:600px;margin:0 auto;">
-                                        <h2 style="color:#d4af37;text-align:center;text-transform:uppercase;margin-top:0;">🛡️ Comunicado do Templo Viking Force</h2>
-                                        <p style="font-size:15px;line-height:1.6;color:#ffffff;">Olá, Guerreiro!</p>
-                                        <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">${body.replace(/\n/g, '<br/>')}</p>
-                                        <div style="margin-top:25px;border-top:1px solid #3c2a21;padding-top:15px;font-size:11px;color:#a89a78;text-align:center;">
-                                          Viking Force Powerlifting - Central de Comunicação Gmail
-                                        </div>
-                                      </div>
-                                    `);
-                                    if (success) sentCount++;
-                                  }
-                                  showToast(`Disparo concluído: ${sentCount} e-mails enviados com sucesso!`, 'success');
-                                  if (sentCount > 0) {
-                                    (document.getElementById('broadcastSubject') as HTMLInputElement).value = '';
-                                    (document.getElementById('broadcastBody') as HTMLTextAreaElement).value = '';
-                                  }
+                                  
+                                  triggerConfirm(
+                                    "Disparar Comunicado?",
+                                    `Tem certeza que deseja disparar este e-mail em massa para TODOS os ${athleteEmails.length} atletas?`,
+                                    async () => {
+                                      showToast(`Iniciando disparo em massa...`, 'info');
+                                      let sentCount = 0;
+                                      for (const email of athleteEmails) {
+                                        const success = await sendGmail(email, subject, `
+                                          <div style="background-color:#0d0908;color:#e0d3a8;padding:25px;border-radius:15px;border:2px solid #d4af37;font-family:sans-serif;max-width:600px;margin:0 auto;">
+                                            <h2 style="color:#d4af37;text-align:center;text-transform:uppercase;margin-top:0;">🛡️ Comunicado do Templo Viking Force</h2>
+                                            <p style="font-size:15px;line-height:1.6;color:#ffffff;">Olá, Guerreiro!</p>
+                                            <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">${body.replace(/\n/g, '<br/>')}</p>
+                                            <div style="margin-top:25px;border-top:1px solid #3c2a21;padding-top:15px;font-size:11px;color:#a89a78;text-align:center;">
+                                              Viking Force Powerlifting - Central de Comunicação Gmail
+                                            </div>
+                                          </div>
+                                        `);
+                                        if (success) sentCount++;
+                                      }
+                                      showToast(`Disparo concluído: ${sentCount} e-mails enviados com sucesso!`, 'success');
+                                      if (sentCount > 0) {
+                                        const subjectEl = document.getElementById('broadcastSubject') as HTMLInputElement;
+                                        const bodyEl = document.getElementById('broadcastBody') as HTMLTextAreaElement;
+                                        if (subjectEl) subjectEl.value = '';
+                                        if (bodyEl) bodyEl.value = '';
+                                      }
+                                    }
+                                  );
                                 }}
                                 className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
                               >
@@ -6325,21 +6476,26 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       <Edit className="w-3.5 h-3.5" />
                                     </button>
                                     <button 
-                                      onClick={async () => {
-                                        if (window.confirm(`Tem certeza que deseja DELETAR o exercício "${ex.name}" do banco de dados geral do Templo?`)) {
-                                          try {
-                                            showToast('Removendo exercício...', 'info');
-                                            await deleteDbExerciseFromFirebase(ex.id);
-                                            const updated = await fetchDbExercisesFromFirebase();
-                                            if (updated) {
-                                              setDbExercises(updated);
-                                              localStorage.setItem('viking_db_exercises', JSON.stringify(updated));
+                                      onClick={() => {
+                                        triggerConfirm(
+                                          "Excluir Exercício?",
+                                          `Tem certeza que deseja DELETAR o exercício "${ex.name}" do banco de dados geral do Templo?`,
+                                          async () => {
+                                            try {
+                                              showToast('Removendo exercício...', 'info');
+                                              await deleteDbExerciseFromFirebase(ex.id);
+                                              const updated = await fetchDbExercisesFromFirebase();
+                                              if (updated) {
+                                                setDbExercises(updated);
+                                                localStorage.setItem('viking_db_exercises', JSON.stringify(updated));
+                                              }
+                                              showToast('Exercício removido com sucesso!', 'success');
+                                            } catch (e) {
+                                              showToast('Erro ao remover exercício.', 'error');
                                             }
-                                            showToast('Exercício removido com sucesso!', 'success');
-                                          } catch (e) {
-                                            showToast('Erro ao remover exercício.', 'error');
-                                          }
-                                        }
+                                          },
+                                          true
+                                        );
                                       }}
                                       className="p-1.5 rounded-lg bg-viking-red/10 hover:bg-viking-red/20 text-red-400 border border-viking-red/25 transition-all text-[10px] font-bold uppercase cursor-pointer"
                                       title="Excluir"
@@ -7132,6 +7288,76 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   className="py-3 rounded-xl bg-viking-red/20 hover:bg-viking-red/40 border border-viking-red/40 text-red-400 font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer"
                 >
                   Confirmar Exclusão
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Confirm Modal */}
+      <AnimatePresence>
+        {confirmModal && confirmModal.isOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmModal(null)}
+              className="fixed inset-0 bg-black/85 backdrop-blur-md z-60"
+            />
+            
+            {/* Modal */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, x: '-50%', y: '-48%' }}
+              animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+              exit={{ opacity: 0, scale: 0.9, x: '-50%', y: '-48%' }}
+              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+              className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md bg-[#140e0c]/98 border-2 rounded-3xl shadow-[inset_0_0_20px_rgba(0,0,0,0.9)] backdrop-blur-xl z-60 p-6 text-[#e0d3a8] text-center ${
+                confirmModal.isDanger 
+                  ? 'border-viking-red/45 shadow-[0_0_50px_rgba(239,68,68,0.15)]' 
+                  : 'border-viking-gold/45 shadow-[0_0_50px_rgba(212,175,55,0.15)]'
+              }`}
+            >
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse ${
+                confirmModal.isDanger 
+                  ? 'bg-viking-red/10 border border-viking-red/35 text-red-400' 
+                  : 'bg-viking-gold/10 border border-viking-gold/35 text-viking-gold'
+              }`}>
+                {confirmModal.isDanger ? (
+                  <AlertTriangle className="w-8 h-8" />
+                ) : (
+                  <Check className="w-8 h-8" />
+                )}
+              </div>
+              
+              <h3 className="font-viking-display text-lg font-black tracking-wider text-viking-gold mb-2 uppercase">
+                {confirmModal.title}
+              </h3>
+              
+              <p className="text-xs text-viking-silver mb-6 leading-relaxed whitespace-pre-wrap">
+                {confirmModal.message}
+              </p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="py-3 rounded-xl bg-viking-dark border border-viking-gold/20 hover:border-viking-gold text-viking-silver hover:text-viking-gold font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  {confirmModal.cancelText || 'Cancelar'}
+                </button>
+                <button
+                  onClick={() => {
+                    confirmModal.onConfirm();
+                  }}
+                  className={`py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer border ${
+                    confirmModal.isDanger 
+                      ? 'bg-viking-red/20 hover:bg-viking-red/40 border-viking-red/40 text-red-400' 
+                      : 'bg-viking-gold/20 hover:bg-viking-gold/40 border-viking-gold/40 text-viking-gold'
+                  }`}
+                >
+                  {confirmModal.confirmText || 'Confirmar'}
                 </button>
               </div>
             </motion.div>
