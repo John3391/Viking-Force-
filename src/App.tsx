@@ -26,6 +26,8 @@ import {
   Coins, 
   Clock, 
   TrendingUp, 
+  TrendingDown, 
+  Minus, 
   User, 
   Flame, 
   Plus, 
@@ -47,7 +49,8 @@ import {
   Inbox,
   Loader2,
   BookOpen,
-  Upload
+  Upload,
+  Zap
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -78,6 +81,9 @@ import {
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
 import WilksScatterChart from './components/WilksScatterChart';
+import FailureSentinel from './components/FailureSentinel';
+import PatentTimeline from './components/PatentTimeline';
+import WeeklyVolumeLineChart from './components/WeeklyVolumeLineChart';
 
 const TRAINER_EMAIL = 'john.vasquesrodrigues@gmail.com';
 const TRAINER_PASSWORD = '3636';
@@ -161,6 +167,7 @@ export default function App() {
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
+  const [exerciseFailureState, setExerciseFailureState] = useState<Record<string, { failed: boolean; actualReps: number; setsDone: number }>>({});
   const [sessionNote, setSessionNote] = useState<string>('');
 
   // Program Editor state (Trainer)
@@ -1318,6 +1325,233 @@ export default function App() {
     return avg.toFixed(1);
   };
 
+  const renderStrengthEvolution = () => {
+    if (!activeStudentProfile) return null;
+    const sessions = activeStudentProfile.sessions || [];
+    
+    let firstS = 0;
+    let firstB = 0;
+    let firstD = 0;
+    let firstDate = 'Início';
+    
+    let recentS = 0;
+    let recentB = 0;
+    let recentD = 0;
+    let recentDate = 'Atual';
+    
+    let isHistorical = false;
+
+    if (sessions.length > 0) {
+      isHistorical = true;
+      const firstSession = sessions[sessions.length - 1];
+      const recentSession = sessions[0];
+      
+      firstDate = firstSession.date;
+      recentDate = recentSession.date;
+      
+      firstS = firstSession.prsAtSession?.squat ?? activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs.squat ?? 0;
+      firstB = firstSession.prsAtSession?.bench ?? activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs.bench ?? 0;
+      firstD = firstSession.prsAtSession?.deadlift ?? activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+      
+      recentS = recentSession.prsAtSession?.squat ?? activeStudentProfile.prs.squat ?? 0;
+      recentB = recentSession.prsAtSession?.bench ?? activeStudentProfile.prs.bench ?? 0;
+      recentD = recentSession.prsAtSession?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+    } else {
+      // Fallback para os PRs cadastrados vs PRs anteriores
+      firstDate = 'Cadastro Inicial';
+      recentDate = 'Registro Atual';
+      
+      firstS = activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs.squat ?? 0;
+      firstB = activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs.bench ?? 0;
+      firstD = activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+      
+      recentS = activeStudentProfile.prs.squat ?? 0;
+      recentB = activeStudentProfile.prs.bench ?? 0;
+      recentD = activeStudentProfile.prs.deadlift ?? 0;
+    }
+    
+    const firstTotal = firstS + firstB + firstD;
+    const recentTotal = recentS + recentB + recentD;
+    const totalDiff = recentTotal - firstTotal;
+    const totalDiffPercent = firstTotal > 0 ? (totalDiff / firstTotal) * 100 : 0;
+    
+    const squatDiff = recentS - firstS;
+    const benchDiff = recentB - firstB;
+    const deadliftDiff = recentD - firstD;
+    
+    const getTrendIconAndColor = (diff: number) => {
+      if (diff > 0) {
+        return {
+          icon: <TrendingUp className="w-4 h-4 text-emerald-400" />,
+          colorClass: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/20',
+          textClass: 'text-emerald-400',
+          sign: '+'
+        };
+      } else if (diff < 0) {
+        return {
+          icon: <TrendingDown className="w-4 h-4 text-red-400" />,
+          colorClass: 'text-red-400 bg-red-950/30 border-red-500/20',
+          textClass: 'text-red-400',
+          sign: ''
+        };
+      } else {
+        return {
+          icon: <Minus className="w-4 h-4 text-viking-silver/60" />,
+          colorClass: 'text-viking-silver/60 bg-black/30 border-viking-gold/5',
+          textClass: 'text-viking-silver/60',
+          sign: ''
+        };
+      }
+    };
+
+    const totalTrend = getTrendIconAndColor(totalDiff);
+    const squatTrend = getTrendIconAndColor(squatDiff);
+    const benchTrend = getTrendIconAndColor(benchDiff);
+    const deadliftTrend = getTrendIconAndColor(deadliftDiff);
+
+    return (
+      <div id="strength-evolution-panel" className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 shadow-xl relative overflow-hidden backdrop-blur-md">
+        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 opacity-5 pointer-events-none">
+          <TrendingUp className="w-64 h-64 text-viking-gold" />
+        </div>
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-viking-gold/15 pb-4 mb-6">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-viking-gold bg-viking-gold/10 px-2.5 py-1 rounded-md border border-viking-gold/20">
+              Métricas de Desempenho
+            </span>
+            <h3 className="font-viking-display text-lg sm:text-xl font-black text-white tracking-wider flex items-center gap-2 mt-1.5">
+              <Flame className="w-5 h-5 text-viking-gold shrink-0" /> Evolução de Força (SBD)
+            </h3>
+            <p className="text-viking-silver/70 text-xs mt-1">
+              {isHistorical 
+                ? `Análise comparativa da carga total acumulada de Squat, Bench e Deadlift entre a primeira sessão registrada (${firstDate}) e o pergaminho mais recente (${recentDate}).`
+                : 'Seus recordes pessoais (1RM) iniciais vs as marcas atuais calculadas em seu registro de perfil.'
+              }
+            </p>
+          </div>
+
+          {/* SBD Total Badge with Trend Icon */}
+          <div className="flex items-center gap-3 self-start sm:self-center">
+            <div className="text-right">
+              <span className="text-[10px] text-viking-silver/60 font-bold block uppercase tracking-widest">SBD Total</span>
+              <span className="text-lg font-black text-white">{recentTotal} kg</span>
+            </div>
+            
+            <div className={`px-3 py-2 rounded-xl border font-black text-xs flex items-center gap-1.5 ${totalTrend.colorClass}`}>
+              {totalTrend.icon}
+              <span>{totalTrend.sign}{totalDiff} kg ({totalTrend.sign}{totalDiffPercent.toFixed(1)}%)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lifts Grid Comparison */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          {/* SQUAT */}
+          <div className="bg-[#0d0908]/60 border border-viking-gold/10 rounded-2xl p-4.5 space-y-3.5 relative hover:border-viking-gold/25 transition-colors">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-black text-white tracking-wider uppercase flex items-center gap-1.5">
+                🏋️ Agachamento
+              </span>
+              {squatDiff !== 0 && (
+                <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${squatTrend.colorClass}`}>
+                  {squatTrend.icon} {squatTrend.sign}{squatDiff} kg
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-viking-silver/50 uppercase font-black tracking-wider">Primeiro</span>
+                <p className="text-sm font-bold text-viking-silver">{firstS > 0 ? `${firstS} kg` : '---'}</p>
+              </div>
+              
+              <div className="text-viking-gold/30">
+                <ArrowRight className="w-5 h-5" />
+              </div>
+              
+              <div className="space-y-0.5 text-right">
+                <span className="text-[10px] text-viking-gold/60 uppercase font-black tracking-wider">Mais Recente</span>
+                <p className="text-base font-black text-white">{recentS > 0 ? `${recentS} kg` : '---'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* BENCH */}
+          <div className="bg-[#0d0908]/60 border border-viking-gold/10 rounded-2xl p-4.5 space-y-3.5 relative hover:border-viking-gold/25 transition-colors">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-black text-white tracking-wider uppercase flex items-center gap-1.5">
+                🏋️ Supino
+              </span>
+              {benchDiff !== 0 && (
+                <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${benchTrend.colorClass}`}>
+                  {benchTrend.icon} {benchTrend.sign}{benchDiff} kg
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-viking-silver/50 uppercase font-black tracking-wider">Primeiro</span>
+                <p className="text-sm font-bold text-viking-silver">{firstB > 0 ? `${firstB} kg` : '---'}</p>
+              </div>
+              
+              <div className="text-viking-gold/30">
+                <ArrowRight className="w-5 h-5" />
+              </div>
+              
+              <div className="space-y-0.5 text-right">
+                <span className="text-[10px] text-viking-gold/60 uppercase font-black tracking-wider">Mais Recente</span>
+                <p className="text-base font-black text-white">{recentB > 0 ? `${recentB} kg` : '---'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* DEADLIFT */}
+          <div className="bg-[#0d0908]/60 border border-viking-gold/10 rounded-2xl p-4.5 space-y-3.5 relative hover:border-viking-gold/25 transition-colors">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-black text-white tracking-wider uppercase flex items-center gap-1.5">
+                🏋️ Terra
+              </span>
+              {deadliftDiff !== 0 && (
+                <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${deadliftTrend.colorClass}`}>
+                  {deadliftTrend.icon} {deadliftTrend.sign}{deadliftDiff} kg
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-viking-silver/50 uppercase font-black tracking-wider">Primeiro</span>
+                <p className="text-sm font-bold text-viking-silver">{firstD > 0 ? `${firstD} kg` : '---'}</p>
+              </div>
+              
+              <div className="text-viking-gold/30">
+                <ArrowRight className="w-5 h-5" />
+              </div>
+              
+              <div className="space-y-0.5 text-right">
+                <span className="text-[10px] text-viking-gold/60 uppercase font-black tracking-wider">Mais Recente</span>
+                <p className="text-base font-black text-white">{recentD > 0 ? `${recentD} kg` : '---'}</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        
+        {/* Footnote warning if stats are missing */}
+        {recentTotal === 0 && (
+          <div className="mt-4 p-3.5 rounded-xl bg-viking-gold/5 border border-viking-gold/15 text-xs text-viking-silver/80 flex items-center gap-2">
+            <Info className="w-4 h-4 text-viking-gold shrink-0" />
+            <span>Ainda não há recordes (1RM) registrados para cálculo do SBD. Clique em <strong className="text-white">Ajustar 1RM</strong> nas ações rápidas abaixo para começar!</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Generate Warmup sequence based on 1RM and target intensity
   const getWarmupSteps = (pr: number | null, intensity: number | string, customSteps?: WarmupStep[]) => {
     if (!pr || pr <= 0) return null;
@@ -1358,21 +1592,69 @@ export default function App() {
       return;
     }
 
-    const exercisesLog = currentExercises.map(ex => ({
-      name: ex.name,
-      rpe: sessionRpeState[ex.id] || 8
-    }));
+    let totalPlannedVolume = 0;
+    let totalAchievedVolume = 0;
+
+    const exercisesLog = currentExercises.map(ex => {
+      const isFailed = !!exerciseFailureState[ex.id]?.failed;
+      const plannedVol = ex.sets * ex.reps;
+      let achievedVol = plannedVol;
+      
+      if (isFailed) {
+        const sDone = exerciseFailureState[ex.id]?.setsDone || (ex.sets - 1 > 0 ? ex.sets - 1 : 1);
+        const aReps = exerciseFailureState[ex.id]?.actualReps || 1;
+        achievedVol = (sDone * ex.reps) + aReps;
+      }
+
+      totalPlannedVolume += plannedVol;
+      totalAchievedVolume += achievedVol;
+
+      return {
+        name: ex.name,
+        rpe: sessionRpeState[ex.id] || 8,
+        plannedVolume: plannedVol,
+        achievedVolume: achievedVol,
+        failed: isFailed
+      };
+    });
 
     const avgRPE = exercisesLog.reduce((sum, e) => sum + e.rpe, 0) / exercisesLog.length;
     const today = new Date();
     const formattedDate = today.toLocaleDateString('pt-BR');
 
+    const volumeDeficit = Math.max(0, totalPlannedVolume - totalAchievedVolume);
+    let compensationSuggestion = '';
+
+    if (volumeDeficit > 0) {
+      const failedExs = currentExercises.filter(ex => exerciseFailureState[ex.id]?.failed);
+      const suggestions = failedExs.map(ex => {
+        const pVol = ex.sets * ex.reps;
+        const sDone = exerciseFailureState[ex.id]?.setsDone || 1;
+        const aReps = exerciseFailureState[ex.id]?.actualReps || 1;
+        const achVol = (sDone * ex.reps) + aReps;
+        const defVol = Math.max(0, pVol - achVol);
+        const recommendedSets = Math.ceil(defVol / ex.reps);
+        return `• ${ex.name}: Faltaram ${defVol} repetições. Adicione ${recommendedSets} Back-off Set(s) de ${ex.reps} reps com 15% a 20% MENOS carga na Semana ${selectedWeek + 1}.`;
+      });
+      compensationSuggestion = `Déficit total de ${volumeDeficit} repetições detectado.\nPara restaurar o volume total planejado, recomendamos para a próxima semana:\n` + suggestions.join('\n');
+    }
+
     const newSession: LoggedSession = {
+      id: 'session_' + Date.now().toString(),
       date: formattedDate,
       sessionName: `Semana ${selectedWeek} - Treino ${selectedDay}`,
       exercises: exercisesLog,
       avgRPE,
-      note: sessionNote.trim() || undefined
+      note: sessionNote.trim() || undefined,
+      totalPlannedVolume,
+      totalAchievedVolume,
+      volumeDeficit,
+      compensationSuggestion: compensationSuggestion || undefined,
+      prsAtSession: {
+        squat: activeStudentProfile.prs.squat,
+        bench: activeStudentProfile.prs.bench,
+        deadlift: activeStudentProfile.prs.deadlift
+      }
     };
 
     const updatedProfile: StudentProfile = {
@@ -1388,8 +1670,14 @@ export default function App() {
     saveStudentsToDB(updatedStudents);
     setWorkoutModalOpen(false);
     setSessionRpeState({});
+    setExerciseFailureState({});
     setSessionNote('');
-    showToast(`Treino registrado! RPE Médio: ${avgRPE.toFixed(1)}. Seu feedback foi enviado ao John.`, 'success');
+
+    if (volumeDeficit > 0) {
+      showToast(`Treino registrado! Alerta Viking de Volume: Déficit de ${volumeDeficit} reps. Estratégia de compensação gerada em seu Histórico!`, 'info');
+    } else {
+      showToast(`Treino registrado! RPE Médio: ${avgRPE.toFixed(1)}. Seu feedback foi enviado ao John.`, 'success');
+    }
   };
 
   // --- LEADERBOARD LOGIC & HELPERS ---
@@ -1727,6 +2015,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       intensity: 0.75,
       targetRPE: 8,
       main: false,
+      methodology: 'standard',
+      methodologyDetails: '',
       warmup: [
         { percent: 0.40, reps: 5 },
         { percent: 0.55, reps: 4 },
@@ -2647,8 +2937,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             </div>
 
+            {/* Strength Evolution SBD Panel */}
+            {renderStrengthEvolution()}
+
             {/* Training Volume Chart */}
             <VolumeChart profile={activeStudentProfile} />
+
+            {/* 8-Week Workload Progression Line Chart */}
+            <WeeklyVolumeLineChart profile={activeStudentProfile} />
 
             {/* 1RM Progress Chart */}
             <OneRepMaxChart profile={activeStudentProfile} />
@@ -2725,6 +3021,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <p className="text-sm font-bold text-white flex items-center flex-wrap gap-2">
                           <span>{ex.name}</span>
                           {ex.main && <span className="text-[9px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Principal</span>}
+                          {ex.methodology && ex.methodology !== 'standard' && (
+                            <span className="text-[9px] bg-[#140e0c] border border-viking-gold/30 text-viking-gold font-black px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                              ⚡ {
+                                ex.methodology === 'backoff' ? 'Back-off Set' :
+                                ex.methodology === 'myoreps' ? 'Myo-Reps' :
+                                ex.methodology === 'clusters' ? 'Cluster Sets' :
+                                ex.methodology === 'dropset' ? 'Drop Set' : ex.methodology
+                              }
+                            </span>
+                          )}
                           {(() => {
                             const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
                             const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;
@@ -2745,7 +3051,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             );
                           })()}
                         </p>
-                        <p className="text-[11px] text-viking-silver/80 mt-0.5">Séries prescritas de trabalho: <strong className="text-viking-gold">{ex.sets}x{ex.reps}</strong></p>
+                        <p className="text-[11px] text-viking-silver/80 mt-0.5 font-semibold">Séries prescritas de trabalho: <strong className="text-[#e0d3a8]">{ex.sets}x{ex.reps}</strong></p>
+                        {ex.methodologyDetails && (
+                          <p className="text-[10px] text-viking-gold/90 font-semibold mt-1 flex items-center gap-1 bg-[#140e0c] px-2 py-1 rounded border border-viking-gold/20 w-fit">
+                            <Zap className="w-3.5 h-3.5 text-viking-gold shrink-0 animate-pulse" /> Metodologia: {ex.methodologyDetails}
+                          </p>
+                        )}
                         {ex.techniqueTips && (
                           <p className="text-[10px] text-viking-gold/80 italic mt-1 flex items-center gap-1">
                             <Info className="w-3.5 h-3.5 shrink-0 text-viking-gold" /> Dica: {ex.techniqueTips}
@@ -3082,6 +3393,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </div>
                         </div>
                       </div>
+
+                      {/* Patent Timeline & Badges Schedule */}
+                      <PatentTimeline 
+                        studentProfile={activeStudentProfile}
+                        showToast={showToast}
+                      />
 
                       {/* 2. Interactive Wilks Goals Table */}
                       <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
@@ -3601,6 +3918,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               );
             })()}
 
+            {/* Failure Sentinel & Periodization Optimizer */}
+            <FailureSentinel 
+              studentsData={studentsData}
+              trainingProgram={trainingProgram}
+              onSaveProgram={saveProgramToDB}
+              showToast={showToast}
+            />
+
             {/* List of Athletes Table Panel */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 overflow-hidden shadow-xl backdrop-blur-md">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-viking-gold/15">
@@ -4041,8 +4366,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       </div>
                     ) : (
                       activeStudentProfile.sessions.map((sess, idx) => (
-                        <div key={idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15">
-                          <div className="flex justify-between items-center mb-2">
+                        <div key={idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                          <div className="flex justify-between items-center">
                             <span className="text-xs text-viking-silver font-bold">{sess.date}</span>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               sess.avgRPE >= 9 
@@ -4054,16 +4379,50 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               RPE Médio: {sess.avgRPE.toFixed(1)}
                             </span>
                           </div>
-                          <p className="text-sm font-black text-white">{sess.sessionName}</p>
+                          <div>
+                            <p className="text-sm font-black text-white">{sess.sessionName}</p>
+                            {sess.totalPlannedVolume !== undefined && sess.totalAchievedVolume !== undefined && (
+                              <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-viking-silver bg-black/30 px-2 py-1 rounded border border-viking-gold/5">
+                                <span>Volume de Trabalho:</span>
+                                <span className={sess.volumeDeficit && sess.volumeDeficit > 0 ? 'text-viking-gold' : 'text-green-400'}>
+                                  {sess.totalAchievedVolume} / {sess.totalPlannedVolume} reps realizada(s) 
+                                  {sess.volumeDeficit && sess.volumeDeficit > 0 ? ` (-${sess.volumeDeficit})` : ' (100%)'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                           
-                          <div className="mt-3 space-y-1.5 border-t border-viking-gold/15 pt-2.5">
+                          <div className="space-y-1.5 border-t border-viking-gold/15 pt-2.5">
                             {sess.exercises.map((ex, eidx) => (
                               <div key={eidx} className="flex justify-between items-center text-xs">
-                                <span className="text-viking-silver font-medium">{ex.name}</span>
-                                <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-viking-silver font-medium">{ex.name}</span>
+                                  {ex.failed && (
+                                    <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
+                                    <span className="text-[10px] text-viking-silver font-mono">
+                                      {ex.achievedVolume}/{ex.plannedVolume} reps
+                                    </span>
+                                  )}
+                                  <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
+                                </div>
                               </div>
                             ))}
                           </div>
+
+                          {sess.compensationSuggestion && (
+                            <div className="p-3 bg-viking-gold/5 rounded-xl border border-viking-gold/25 space-y-1.5 text-xs">
+                              <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
+                                <Zap className="w-3.5 h-3.5 text-viking-gold animate-bounce" /> Compensação de Volume Sugerida:
+                              </p>
+                              <p className="text-viking-silver leading-relaxed font-semibold whitespace-pre-line">
+                                {sess.compensationSuggestion}
+                              </p>
+                            </div>
+                          )}
 
                           {sess.note && (
                             <div className="mt-3 p-2 rounded bg-black/40 border-l-2 border-viking-gold text-xs text-viking-silver italic">
@@ -4931,21 +5290,65 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {Object.keys(studentsData).map(email => studentsData[email]).some(s => s.sessions.length > 0) ? (
                         Object.keys(studentsData).map(email => studentsData[email]).map(student => 
                           student.sessions.map((sess, sIdx) => (
-                            <div key={`${student.name}-${sIdx}`} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15">
-                              <div className="flex justify-between items-center mb-1">
+                            <div key={`${student.name}-${sIdx}`} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                              <div className="flex justify-between items-center">
                                 <span className="text-sm font-black text-white">{student.name}</span>
                                 <span className="text-[10px] text-viking-silver">{sess.date}</span>
                               </div>
-                              <p className="text-xs text-viking-gold font-bold">{sess.sessionName}</p>
+                              <div className="flex justify-between items-center">
+                                <p className="text-xs text-viking-gold font-bold">{sess.sessionName}</p>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  sess.avgRPE >= 9 
+                                    ? 'bg-red-950/40 text-red-400 border border-red-800/30' 
+                                    : sess.avgRPE >= 7.5
+                                    ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
+                                    : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
+                                }`}>
+                                  RPE Médio: {sess.avgRPE.toFixed(1)}
+                                </span>
+                              </div>
+
+                              {sess.totalPlannedVolume !== undefined && sess.totalAchievedVolume !== undefined && (
+                                <div className="text-[11px] font-bold text-viking-silver bg-black/30 px-2 py-1.5 rounded border border-viking-gold/5 flex justify-between">
+                                  <span>Volume Total Realizado:</span>
+                                  <span className={sess.volumeDeficit && sess.volumeDeficit > 0 ? 'text-viking-gold font-extrabold' : 'text-green-400 font-extrabold'}>
+                                    {sess.totalAchievedVolume} / {sess.totalPlannedVolume} reps
+                                    {sess.volumeDeficit && sess.volumeDeficit > 0 ? ` (Déficit de ${sess.volumeDeficit} reps)` : ' (Completo)'}
+                                  </span>
+                                </div>
+                              )}
                               
-                              <div className="mt-2 text-xs bg-black/40 p-2.5 rounded-lg border border-viking-gold/10 space-y-1">
+                              <div className="text-xs bg-black/40 p-2.5 rounded-lg border border-viking-gold/10 space-y-1.5">
                                 {sess.exercises.map((e, eIdx) => (
-                                  <div key={eIdx} className="flex justify-between">
-                                    <span>{e.name}</span>
-                                    <strong className={e.rpe >= 9 ? 'text-viking-red font-bold' : 'text-[#e0d3a8]'}>RPE {e.rpe}</strong>
+                                  <div key={eIdx} className="flex justify-between items-center">
+                                    <div className="flex items-center gap-1">
+                                      <span>{e.name}</span>
+                                      {e.failed && (
+                                        <span className="text-[8px] bg-red-950 text-red-400 font-bold px-1 rounded border border-red-900/40">FALHOU</span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {e.achievedVolume !== undefined && e.plannedVolume !== undefined && (
+                                        <span className="text-[10px] text-viking-silver/60">
+                                          ({e.achievedVolume}/{e.plannedVolume})
+                                        </span>
+                                      )}
+                                      <strong className={e.rpe >= 9 ? 'text-viking-red font-bold' : 'text-[#e0d3a8]'}>RPE {e.rpe}</strong>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
+
+                              {sess.compensationSuggestion && (
+                                <div className="p-3 bg-viking-gold/5 rounded-xl border border-viking-gold/25 space-y-1.5 text-xs">
+                                  <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
+                                    <Zap className="w-3.5 h-3.5 text-viking-gold animate-pulse" /> Estratégia de Back-off Recomendada:
+                                  </p>
+                                  <p className="text-[#e0d3a8] font-bold leading-relaxed whitespace-pre-line text-[11px]">
+                                    {sess.compensationSuggestion}
+                                  </p>
+                                </div>
+                              )}
 
                               {sess.note && (
                                 <p className="text-xs text-viking-silver/80 italic mt-2 border-l-2 border-viking-gold pl-2">
@@ -5267,6 +5670,40 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   placeholder="Ex: https://www.youtube.com/watch?v=..."
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
                                 />
+                              </div>
+
+                              <div className="col-span-2 pt-2 border-t border-viking-gold/10 mt-1">
+                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 tracking-wider">⚡ Metodologia de Treino</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <select
+                                      value={ex.methodology || 'standard'}
+                                      onChange={e => handleEditorUpdateField(originalIdx, 'methodology', e.target.value)}
+                                      className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                    >
+                                      <option value="standard" className="bg-[#140e0c] text-[#e0d3a8]">Padrão (Séries Lineares)</option>
+                                      <option value="backoff" className="bg-[#140e0c] text-[#e0d3a8]">Back-off Sets (Top Set + Recuo)</option>
+                                      <option value="myoreps" className="bg-[#140e0c] text-[#e0d3a8]">Myo-Reps (Mini-Séries de Estimulação)</option>
+                                      <option value="clusters" className="bg-[#140e0c] text-[#e0d3a8]">Cluster Sets (Repetições Agrupadas)</option>
+                                      <option value="dropset" className="bg-[#140e0c] text-[#e0d3a8]">Drop Sets (Redução Pós-Falha)</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <input
+                                      type="text"
+                                      value={ex.methodologyDetails || ''}
+                                      onChange={e => handleEditorUpdateField(originalIdx, 'methodologyDetails', e.target.value)}
+                                      placeholder={
+                                        ex.methodology === 'backoff' ? "Ex: 1 Top Set + 3 Sets de Recuo com -10%" :
+                                        ex.methodology === 'myoreps' ? "Ex: Série Ativadora + 4 mini-sets de 3 reps" :
+                                        ex.methodology === 'clusters' ? "Ex: 4x(3+3+3 reps com 15s descanso)" :
+                                        ex.methodology === 'dropset' ? "Ex: Reduzir a carga em 30% após a falha" :
+                                        "Opcional: Detalhes da metodologia..."
+                                      }
+                                      className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
@@ -6020,7 +6457,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Semana</label>
                       <select 
                         value={selectedWeek}
-                        onChange={e => { setSelectedWeek(parseInt(e.target.value)); setSessionRpeState({}); }}
+                        onChange={e => { setSelectedWeek(parseInt(e.target.value)); setSessionRpeState({}); setExerciseFailureState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
                         {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
@@ -6034,7 +6471,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
                       <select 
                         value={selectedDay}
-                        onChange={e => { setSelectedDay(e.target.value); setSessionRpeState({}); }}
+                        onChange={e => { setSelectedDay(e.target.value); setSessionRpeState({}); setExerciseFailureState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
                         {Object.keys(trainingProgram.weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
@@ -6128,6 +6565,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             </div>
                           )}
 
+                          {/* Training Methodology Badge & Description inside active session */}
+                          {ex.methodology && ex.methodology !== 'standard' && (
+                            <div className="mb-4 px-3 py-2 rounded-xl bg-viking-gold/5 border border-viking-gold/25 text-xs text-viking-silver flex flex-col gap-1.5">
+                              <div className="flex items-center gap-1.5 font-bold text-viking-gold">
+                                <Zap className="w-4 h-4 text-viking-gold animate-bounce" />
+                                <span>METODOLOGIA ATIVA:</span>
+                                <span className="uppercase text-[11px] tracking-wider text-white">
+                                  {ex.methodology === 'backoff' ? 'Back-off Set (Top Set + Séries de Recuo)' :
+                                   ex.methodology === 'myoreps' ? 'Myo-Reps (Mini-Séries Rest-Pause)' :
+                                   ex.methodology === 'clusters' ? 'Cluster Sets (Séries Agrupadas com Pausa)' :
+                                   ex.methodology === 'dropset' ? 'Drop Set (Reduções Pós-Falha)' : ex.methodology}
+                                </span>
+                              </div>
+                              {ex.methodologyDetails && (
+                                <div className="text-[11px] text-[#e0d3a8] font-bold bg-[#140e0c]/80 p-2 rounded-lg border border-viking-gold/15">
+                                  📋 Diretriz Viking: {ex.methodologyDetails}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Render automated warmup sequence */}
                           {ex.main && (
                             <div className="mb-4 pt-2 pb-1 text-xs">
@@ -6154,6 +6612,149 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               )}
                             </div>
                           )}
+
+                          {/* Interactive Failure & Volume Adjustment Section */}
+                          <div className="my-4 p-4 rounded-xl bg-black/40 border border-viking-gold/15 space-y-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-viking-gold animate-pulse shrink-0" />
+                                <span className="text-xs font-black text-white uppercase tracking-wider">Falhou na Carga ou Repetições Planejadas?</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const isCurrentlyFailed = exerciseFailureState[ex.id]?.failed;
+                                  if (isCurrentlyFailed) {
+                                    setExerciseFailureState(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[ex.id];
+                                      return copy;
+                                    });
+                                  } else {
+                                    setExerciseFailureState(prev => ({
+                                      ...prev,
+                                      [ex.id]: { failed: true, actualReps: ex.reps - 2 > 0 ? ex.reps - 2 : 1, setsDone: ex.sets - 1 > 0 ? ex.sets - 1 : 1 }
+                                    }));
+                                  }
+                                }}
+                                className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                                  exerciseFailureState[ex.id]?.failed
+                                    ? 'bg-red-500/20 border-red-500 text-red-300 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
+                                    : 'bg-[#140e0c] border-viking-gold/30 hover:border-viking-gold text-viking-silver hover:text-viking-gold'
+                                }`}
+                              >
+                                {exerciseFailureState[ex.id]?.failed ? '⚠️ Sim, Falhei!' : 'Não'}
+                              </button>
+                            </div>
+
+                            {exerciseFailureState[ex.id]?.failed && (
+                              <div className="pt-2.5 border-t border-viking-gold/15 space-y-3 text-xs">
+                                <p className="text-viking-silver/90 leading-relaxed">
+                                  O Oráculo Viking detectou a falha! Para não comprometer a hipertrofia e garantir o <strong className="text-viking-gold">volume total de trabalho planejado ({ex.sets * ex.reps} reps totais)</strong>, siga as instruções de recuo ajustadas abaixo:
+                                </p>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-viking-gold/5 p-3 rounded-xl border border-viking-gold/20">
+                                  <div className="space-y-1.5">
+                                    <label className="block text-[9px] font-bold text-viking-silver uppercase">Séries realizadas completas:</label>
+                                    <div className="flex items-center gap-2">
+                                      <button 
+                                        type="button"
+                                        disabled={(exerciseFailureState[ex.id]?.setsDone || 1) <= 1}
+                                        onClick={() => setExerciseFailureState(prev => ({
+                                          ...prev,
+                                          [ex.id]: { ...prev[ex.id]!, setsDone: (prev[ex.id]?.setsDone || 1) - 1 }
+                                        }))}
+                                        className="w-6 h-6 rounded bg-black/40 border border-viking-gold/20 text-viking-gold hover:border-viking-gold flex items-center justify-center font-bold disabled:opacity-40 cursor-pointer"
+                                      >
+                                        -
+                                      </button>
+                                      <span className="text-white font-black">{exerciseFailureState[ex.id]?.setsDone || 1} série(s)</span>
+                                      <button 
+                                        type="button"
+                                        disabled={(exerciseFailureState[ex.id]?.setsDone || 1) >= ex.sets}
+                                        onClick={() => setExerciseFailureState(prev => ({
+                                          ...prev,
+                                          [ex.id]: { ...prev[ex.id]!, setsDone: (prev[ex.id]?.setsDone || 1) + 1 }
+                                        }))}
+                                        className="w-6 h-6 rounded bg-black/40 border border-viking-gold/20 text-viking-gold hover:border-viking-gold flex items-center justify-center font-bold disabled:opacity-40 cursor-pointer"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <label className="block text-[9px] font-bold text-viking-silver uppercase">Reps completadas na série da falha:</label>
+                                    <div className="flex items-center gap-2">
+                                      <button 
+                                        type="button"
+                                        disabled={(exerciseFailureState[ex.id]?.actualReps || 1) <= 1}
+                                        onClick={() => setExerciseFailureState(prev => ({
+                                          ...prev,
+                                          [ex.id]: { ...prev[ex.id]!, actualReps: (prev[ex.id]?.actualReps || 1) - 1 }
+                                        }))}
+                                        className="w-6 h-6 rounded bg-black/40 border border-viking-gold/20 text-viking-gold hover:border-viking-gold flex items-center justify-center font-bold disabled:opacity-40 cursor-pointer"
+                                      >
+                                        -
+                                      </button>
+                                      <span className="text-white font-black">{exerciseFailureState[ex.id]?.actualReps || 1} rep(s)</span>
+                                      <button 
+                                        type="button"
+                                        disabled={(exerciseFailureState[ex.id]?.actualReps || 1) >= ex.reps}
+                                        onClick={() => setExerciseFailureState(prev => ({
+                                          ...prev,
+                                          [ex.id]: { ...prev[ex.id]!, actualReps: (prev[ex.id]?.actualReps || 1) + 1 }
+                                        }))}
+                                        className="w-6 h-6 rounded bg-black/40 border border-viking-gold/20 text-viking-gold hover:border-viking-gold flex items-center justify-center font-bold disabled:opacity-40 cursor-pointer"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {(() => {
+                                  const targetVolume = ex.sets * ex.reps;
+                                  const setsDone = exerciseFailureState[ex.id]?.setsDone || 1;
+                                  const actualReps = exerciseFailureState[ex.id]?.actualReps || 1;
+                                  
+                                  // Volume achieved so far: setsDone completed series of ex.reps plus actualReps achieved in the failed series
+                                  const achievedVolume = (setsDone * ex.reps) + actualReps;
+                                  const deficitVolume = Math.max(0, targetVolume - achievedVolume);
+                                  
+                                  // Suggest remaining sets to fulfill the deficit volume
+                                  // e.g. back-off set usually has a bit less load (-15%) but let's match target reps or reps + 2
+                                  const recommendedReps = ex.reps;
+                                  const remainingSetsToCompleteVolume = deficitVolume > 0 ? Math.ceil(deficitVolume / recommendedReps) : 0;
+
+                                  return (
+                                    <div className="p-3.5 bg-black/60 rounded-xl border border-viking-gold/30 space-y-2">
+                                      <p className="text-[10px] text-viking-gold font-bold uppercase tracking-widest flex items-center gap-1">
+                                        <Zap className="w-3.5 h-3.5 text-viking-gold animate-bounce" /> Estratégia de Recuo Ativa (Compensação de Volume):
+                                      </p>
+                                      <div className="space-y-1 text-[11px] text-viking-silver">
+                                        <div>• <strong className="text-white">Volume Prescrito:</strong> {targetVolume} repetições totais</div>
+                                        <div>• <strong className="text-white">Volume Acumulado:</strong> {achievedVolume} repetições (Déficit de {deficitVolume} reps)</div>
+                                        
+                                        {deficitVolume > 0 ? (
+                                          <div className="pt-2 mt-2 border-t border-viking-gold/15 text-[#e0d3a8] font-bold text-xs">
+                                            🔥 Recomendação de Recuo: Execute mais <span className="text-white font-black bg-viking-gold/10 px-1.5 py-0.5 rounded border border-viking-gold/30">{remainingSetsToCompleteVolume} série(s)</span> de <span className="text-white font-black bg-viking-gold/10 px-1.5 py-0.5 rounded border border-viking-gold/30">{recommendedReps} repetições</span> com <span className="text-green-400 font-black">15% a 20% MENOS carga</span>.
+                                          </div>
+                                        ) : (
+                                          <div className="pt-2 mt-2 border-t border-viking-gold/15 text-green-400 font-bold text-xs flex items-center gap-1">
+                                            ⚔️ Volume Prescrito já Completado! Parabéns, guerreiro!
+                                          </div>
+                                        )}
+                                        <p className="text-[10px] text-viking-silver/50 italic leading-snug pt-1">
+                                          Reduzir a carga (Back-off set de volume) mantém a intensidade mecânica do treino, protege suas articulações da fadiga excessiva e assegura 100% do estímulo anabólico planejado hoje!
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
 
                           <div className="space-y-2">
                             <label className="block text-[10px] font-bold uppercase text-viking-silver tracking-widest">Selecione RPE Real da Última Série</label>

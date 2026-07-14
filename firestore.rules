@@ -16,6 +16,15 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\+\\.\\@]+$');
     }
 
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidDbExercise(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 200;
+    }
+
     // 2. Rules for Students collection
     match /students/{studentEmail} {
       allow get, create, update, delete: if isSignedIn() && isValidId(studentEmail);
@@ -29,7 +38,9 @@ service cloud.firestore {
 
     // 4. Rules for Exercises collection
     match /exercises/{exerciseId} {
-      allow read, write: if isSignedIn();
+      allow get, delete: if isSignedIn() && isValidId(exerciseId);
+      allow create, update: if isSignedIn() && isValidId(exerciseId) && isValidDbExercise(incoming());
+      allow list: if isSignedIn();
     }
   }
 }

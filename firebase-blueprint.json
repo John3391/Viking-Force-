@@ -98,6 +98,38 @@
         }
       },
       "required": ["id", "name", "price"]
+    },
+    "DbExercise": {
+      "title": "DbExercise",
+      "description": "Custom or default gym exercise with instruction tips and video reference.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the exercise"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the exercise"
+        },
+        "techniqueTips": {
+          "type": "string",
+          "description": "Tips on execution form"
+        },
+        "videoUrl": {
+          "type": "string",
+          "description": "Video tutorial URL"
+        },
+        "videoBase64": {
+          "type": "string",
+          "description": "Raw video data base64 string"
+        },
+        "videoFileType": {
+          "type": "string",
+          "description": "Video media format type"
+        }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
@@ -114,6 +146,10 @@
         "$ref": "VikingPlan"
       },
       "description": "Global custom commercial subscription options"
+    },
+    "exercises/{exerciseId}": {
+      "schema": "DbExercise",
+      "description": "Exercises database containing standard and custom exercises."
     }
   }
 }

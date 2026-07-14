@@ -20,6 +20,8 @@ export interface Exercise {
   warmup?: WarmupStep[];
   techniqueTips?: string;
   videoUrl?: string;
+  methodology?: 'standard' | 'backoff' | 'myoreps' | 'clusters' | 'dropset';
+  methodologyDetails?: string;
 }
 
 export interface WeekWorkout {
@@ -36,14 +38,27 @@ export interface TrainingProgram {
 export interface LoggedExercise {
   name: string;
   rpe: number;
+  plannedVolume?: number;
+  achievedVolume?: number;
+  failed?: boolean;
 }
 
 export interface LoggedSession {
+  id?: string;
   date: string;       // "09/07/2026"
   sessionName: string; // e.g. "Semana 1 - Treino A"
   exercises: LoggedExercise[];
   avgRPE: number;
   note?: string;
+  totalPlannedVolume?: number;
+  totalAchievedVolume?: number;
+  volumeDeficit?: number;
+  compensationSuggestion?: string;
+  prsAtSession?: {
+    squat: number | null;
+    bench: number | null;
+    deadlift: number | null;
+  };
 }
 
 export interface ChatMessage {
