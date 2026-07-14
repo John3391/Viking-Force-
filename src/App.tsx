@@ -159,13 +159,13 @@ export default function App() {
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
-  const [selectedDay, setSelectedDay] = useState<'A' | 'B' | 'C'>('A');
+  const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
   const [sessionNote, setSessionNote] = useState<string>('');
 
   // Program Editor state (Trainer)
   const [editorWeek, setEditorWeek] = useState<number>(1);
-  const [editorDay, setEditorDay] = useState<'A' | 'B' | 'C'>('A');
+  const [editorDay, setEditorDay] = useState<string>('A');
   const [editorExercises, setEditorExercises] = useState<Exercise[]>([]);
 
   // Toast notification stack
@@ -1169,8 +1169,8 @@ export default function App() {
       exercisesHTML += `
         <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px;">Treino Prescrito (Semana ${currentWeek})</h3>
       `;
-      ['A', 'B', 'C'].forEach((day) => {
-        const exercises = weekWorkout[day as 'A' | 'B' | 'C'] || [];
+      Object.keys(weekWorkout).sort().forEach((day) => {
+        const exercises = weekWorkout[day] || [];
         if (exercises.length > 0) {
           exercisesHTML += `<h4 style="color: #ffffff; font-family: sans-serif; background-color: #1a1210; padding: 6px 12px; margin-top: 15px;">Treino ${day}</h4>`;
           exercisesHTML += `<table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; color: #e0d3a8; margin-bottom: 15px;">
@@ -1678,11 +1678,41 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     setDrawerOpen(true);
   };
 
-  const handleEditorLoadWeekDay = (week: number, day: 'A' | 'B' | 'C') => {
+  const handleEditorLoadWeekDay = (week: number, day: string) => {
     setEditorWeek(week);
     setEditorDay(day);
     const currentExercises = trainingProgram.weeks[week]?.[day] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
+  };
+
+  const handleEditorAddWeek = () => {
+    const existingWeeks = Object.keys(trainingProgram.weeks).map(Number);
+    const nextWeek = existingWeeks.length > 0 ? Math.max(...existingWeeks) + 1 : 1;
+    
+    const updatedWeeks = { ...trainingProgram.weeks };
+    updatedWeeks[nextWeek] = { A: [], B: [], C: [] };
+    
+    saveProgramToDB({ weeks: updatedWeeks });
+    handleEditorLoadWeekDay(nextWeek, 'A');
+    showToast(`Semana ${nextWeek} adicionada com sucesso ao cronograma de treinos!`, 'success');
+  };
+
+  const handleEditorAddWorkoutDay = () => {
+    const currentWeekWorkout = trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] };
+    const existingDays = Object.keys(currentWeekWorkout).sort();
+    
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+    const nextDay = letters.find(l => !existingDays.includes(l)) || String.fromCharCode(65 + existingDays.length);
+    
+    const updatedWeeks = { ...trainingProgram.weeks };
+    if (!updatedWeeks[editorWeek]) {
+      updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
+    }
+    updatedWeeks[editorWeek][nextDay] = [];
+    
+    saveProgramToDB({ weeks: updatedWeeks });
+    handleEditorLoadWeekDay(editorWeek, nextDay);
+    showToast(`Treino ${nextDay} adicionado com sucesso à Semana ${editorWeek}!`, 'success');
   };
 
   const handleEditorAddExercise = () => {
@@ -4950,24 +4980,44 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
                             className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                           >
-                            <option value="1" className="bg-[#140e0c] text-[#e0d3a8]">Semana 1</option>
-                            <option value="2" className="bg-[#140e0c] text-[#e0d3a8]">Semana 2</option>
-                            <option value="3" className="bg-[#140e0c] text-[#e0d3a8]">Semana 3</option>
-                            <option value="4" className="bg-[#140e0c] text-[#e0d3a8]">Semana 4</option>
+                            {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                              <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Semana {wk}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
                           <select 
                             value={editorDay}
-                            onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value as any)}
+                            onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
                             className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                           >
-                            <option value="A" className="bg-[#140e0c] text-[#e0d3a8]">Treino A</option>
-                            <option value="B" className="bg-[#140e0c] text-[#e0d3a8]">Treino B</option>
-                            <option value="C" className="bg-[#140e0c] text-[#e0d3a8]">Treino C</option>
+                            {Object.keys(trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                              <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Treino {day}
+                              </option>
+                            ))}
                           </select>
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-viking-gold/10">
+                        <button
+                          type="button"
+                          onClick={handleEditorAddWeek}
+                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Semanas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleEditorAddWorkoutDay}
+                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Treino A, B, C
+                        </button>
                       </div>
                     </div>
 
@@ -5928,22 +5978,31 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         onChange={e => { setSelectedWeek(parseInt(e.target.value)); setSessionRpeState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
-                        <option value="1" className="bg-[#140e0c] text-[#e0d3a8]">Semana 1</option>
-                        <option value="2" className="bg-[#140e0c] text-[#e0d3a8]">Semana 2</option>
-                        <option value="3" className="bg-[#140e0c] text-[#e0d3a8]">Semana 3</option>
-                        <option value="4" className="bg-[#140e0c] text-[#e0d3a8]">Semana 4 (Deload)</option>
+                        {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                          <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                            Semana {wk} {wk === 4 ? '(Deload)' : ''}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
                       <select 
                         value={selectedDay}
-                        onChange={e => { setSelectedDay(e.target.value as any); setSessionRpeState({}); }}
+                        onChange={e => { setSelectedDay(e.target.value); setSessionRpeState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
-                        <option value="A" className="bg-[#140e0c] text-[#e0d3a8]">Treino A (Agachamento Principal)</option>
-                        <option value="B" className="bg-[#140e0c] text-[#e0d3a8]">Treino B (Supino/Terra)</option>
-                        <option value="C" className="bg-[#140e0c] text-[#e0d3a8]">Treino C (GPP/Acessórios)</option>
+                        {Object.keys(trainingProgram.weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
+                          let label = `Treino ${day}`;
+                          if (day === 'A') label = 'Treino A (Agachamento Principal)';
+                          else if (day === 'B') label = 'Treino B (Supino/Terra)';
+                          else if (day === 'C') label = 'Treino C (GPP/Acessórios)';
+                          return (
+                            <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                              {label}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>

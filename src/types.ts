@@ -26,6 +26,7 @@ export interface WeekWorkout {
   A: Exercise[];
   B: Exercise[];
   C: Exercise[];
+  [key: string]: Exercise[];
 }
 
 export interface TrainingProgram {
