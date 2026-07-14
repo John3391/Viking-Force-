@@ -59,11 +59,12 @@ import {
   Maximize2,
   Minimize2,
   Columns,
-  Lock
+  Lock,
+  Calendar
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, CalendarEvent } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import { 
   fetchStudentsFromFirebase, 
@@ -76,6 +77,9 @@ import {
   fetchDbExercisesFromFirebase,
   saveDbExerciseToFirebase,
   deleteDbExerciseFromFirebase,
+  fetchCalendarEventsFromFirebase,
+  saveCalendarEventToFirebase,
+  deleteCalendarEventFromFirebase,
   auth,
   subscribeStudents
 } from './firebase';
@@ -131,6 +135,7 @@ export default function App() {
   const [regBodyWeight, setRegBodyWeight] = useState<string>('80');
   const [regGender, setRegGender] = useState<'male' | 'female'>('male');
   const [regPreferredTime, setRegPreferredTime] = useState<string>('18:00');
+  const [regPlan, setRegPlan] = useState<string>('Mensal');
   const [simulatedTime, setSimulatedTime] = useState<string>(() => {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
@@ -265,6 +270,8 @@ export default function App() {
   // Exercises Database state
   const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
   const [dbExercisesLoading, setDbExercisesLoading] = useState<boolean>(false);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [editingEvent, setEditingEvent] = useState<Partial<CalendarEvent> | null>(null);
   const [editingDbExercise, setEditingDbExercise] = useState<DbExercise | null>(null);
   const [dbExerciseSearch, setDbExerciseSearch] = useState<string>('');
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
@@ -535,6 +542,20 @@ export default function App() {
           syncSuccess = false;
         }
 
+        try {
+          const remoteEvents = await fetchCalendarEventsFromFirebase();
+          if (remoteEvents) {
+            setCalendarEvents(remoteEvents);
+            localStorage.setItem('viking_calendar_events', JSON.stringify(remoteEvents));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for calendar events:", e);
+          const cached = localStorage.getItem('viking_calendar_events');
+          if (cached) {
+            setCalendarEvents(JSON.parse(cached));
+          }
+        }
+
         setIsOnline(syncSuccess);
       } else {
         // Not signed in to Firebase Auth
@@ -602,6 +623,17 @@ export default function App() {
       if (cached) {
         setDbExercises(JSON.parse(cached));
       }
+      syncSuccess = false;
+    }
+
+    try {
+      const remoteEvents = await fetchCalendarEventsFromFirebase();
+      if (remoteEvents) {
+        setCalendarEvents(remoteEvents);
+        localStorage.setItem('viking_calendar_events', JSON.stringify(remoteEvents));
+      }
+    } catch (e) {
+      console.warn("Using offline storage for calendar events:", e);
       syncSuccess = false;
     }
 
@@ -1167,8 +1199,8 @@ export default function App() {
         const existingStudent = studentsData[email];
         const newStudent: StudentProfile = {
           name: existingStudent?.name || regName.trim(),
-          plan: existingStudent?.plan || 'Mensal',
-          status: existingStudent?.status || 'Pago',
+          plan: existingStudent?.plan || regPlan,
+          status: existingStudent?.status || 'Pendente',
           prs: {
             squat: existingStudent?.prs?.squat ?? (parseFloat(prSquat) || null),
             bench: existingStudent?.prs?.bench ?? (parseFloat(prBench) || null),
@@ -1186,6 +1218,14 @@ export default function App() {
 
         const updated = { ...studentsData, [email]: newStudent };
         saveStudentsToDB(updated);
+        
+        // Se não tinha plano pré-cadastrado e é um novo registro, encaminha para WhatsApp
+        if (!existingStudent?.plan) {
+           const waMessage = `Olá! Acabei de me cadastrar no app Diário do Guerreiro com o email ${email} e escolhi o plano ${regPlan}. Segue o meu comprovante:`;
+           const waUrl = `https://wa.me/5551998612067?text=${encodeURIComponent(waMessage)}`;
+           window.open(waUrl, '_blank');
+        }
+
         handleLoginSuccess({ name: newStudent.name, email, role: 'student' });
       }
     } catch (error: any) {
@@ -2448,6 +2488,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <Trophy className={`w-4 h-4 ${drawerOpen && drawerType === 'ranking' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Classificação
                 </button>
+                <button 
+                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                    drawerOpen && drawerType === 'calendar' 
+                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                  }`}
+                >
+                  <Calendar className={`w-4 h-4 ${drawerOpen && drawerType === 'calendar' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Calendário
+                </button>
 
                 <button 
                   onClick={() => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Aliança Viking - Planos'); setDrawerOpen(true); }}
@@ -2825,6 +2875,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
                           <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
                         </select>
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1.5">Escolha seu Plano</label>
+                        <select 
+                          disabled={authLoading}
+                          value={regPlan}
+                          onChange={e => setRegPlan(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {vikingPlans.map(plan => (
+                            <option key={plan.id} value={plan.name} className="bg-[#140e0c] text-[#e0d3a8]">
+                              {plan.name} - R$ {plan.price} ({plan.period})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[9px] text-viking-gold/80 mt-1.5">
+                          Após o cadastro, você será redirecionado ao WhatsApp (51 998612067) para enviar o comprovante de pagamento.
+                        </p>
                       </div>
 
                       <div className="pt-2">
@@ -4929,6 +4998,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 <h3 className="font-viking-display text-sm sm:text-base font-black tracking-wider text-viking-gold flex items-center gap-2 uppercase">
                   {drawerType === 'history' && <History className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'ranking' && <Trophy className="w-5 h-5 text-viking-gold" />}
+                  {drawerType === 'calendar' && <Calendar className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'plans' && <CreditCard className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'settings' && <Settings className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'editStudent' && <Edit className="w-5 h-5 text-viking-gold" />}
@@ -5046,6 +5116,129 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         </div>
                       ))
                     )}
+                  </div>
+                )}
+
+                {/* Calendar Drawer */}
+                {drawerType === 'calendar' && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-viking-silver/80 leading-relaxed text-center mb-4">
+                      Calendário competitivo oficial e dias de teste de força. Prepare-se para a glória.
+                    </p>
+
+                    {currentUser?.role === 'trainer' && (
+                      <div className="bg-[#0d0908]/60 border border-viking-gold/20 p-4 rounded-xl mb-6 shadow-inner">
+                        <h4 className="text-xs font-bold text-viking-gold uppercase mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" /> Adicionar Novo Evento</h4>
+                        <div className="space-y-3">
+                          <input 
+                            type="text" 
+                            id="newEventTitle" 
+                            placeholder="Nome do Evento (ex: Campeonato Estadual)" 
+                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input 
+                              type="date" 
+                              id="newEventDate" 
+                              className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
+                            />
+                            <select 
+                              id="newEventType"
+                              className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              <option value="competition">Campeonato</option>
+                              <option value="test">Teste de 1RM</option>
+                              <option value="other">Outro</option>
+                            </select>
+                          </div>
+                          <textarea 
+                            id="newEventDesc"
+                            placeholder="Descrição do evento..."
+                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold min-h-[60px]"
+                          ></textarea>
+                          <button
+                            onClick={() => {
+                              const title = (document.getElementById('newEventTitle') as HTMLInputElement).value;
+                              const date = (document.getElementById('newEventDate') as HTMLInputElement).value;
+                              const type = (document.getElementById('newEventType') as HTMLSelectElement).value as any;
+                              const desc = (document.getElementById('newEventDesc') as HTMLTextAreaElement).value;
+                              if (!title || !date) {
+                                showToast('Título e data são obrigatórios!', 'error');
+                                return;
+                              }
+                              const newEvent: CalendarEvent = {
+                                id: Date.now().toString(),
+                                title,
+                                date,
+                                type,
+                                description: desc
+                              };
+                              const updated = [...calendarEvents, newEvent].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                              setCalendarEvents(updated);
+                              saveCalendarEventToFirebase(newEvent);
+                              showToast('Evento adicionado ao calendário!', 'success');
+                              
+                              // Clear fields
+                              (document.getElementById('newEventTitle') as HTMLInputElement).value = '';
+                              (document.getElementById('newEventDate') as HTMLInputElement).value = '';
+                              (document.getElementById('newEventDesc') as HTMLTextAreaElement).value = '';
+                            }}
+                            className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase rounded-lg transition-all"
+                          >
+                            Forjar Evento
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      {calendarEvents.length === 0 ? (
+                         <div className="text-center py-6 text-viking-silver/50 text-xs italic">
+                           Nenhum evento profetizado ainda. O horizonte está calmo.
+                         </div>
+                      ) : (
+                        calendarEvents.map(ev => (
+                          <div key={ev.id} className="bg-[#1a1210]/95 border border-viking-gold/30 p-4 rounded-xl relative overflow-hidden group shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
+                            <div className={`absolute top-0 left-0 w-1.5 h-full ${ev.type === 'competition' ? 'bg-red-500' : ev.type === 'test' ? 'bg-blue-500' : 'bg-viking-gold'}`}></div>
+                            <div className="flex justify-between items-start pl-3">
+                              <div>
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${ev.type === 'competition' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : ev.type === 'test' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-viking-gold/10 text-viking-gold border border-viking-gold/30'}`}>
+                                  {ev.type === 'competition' ? 'Torneio' : ev.type === 'test' ? 'Dia de Teste' : 'Evento'}
+                                </span>
+                                <h4 className="text-sm font-bold text-[#e0d3a8] mt-1.5">{ev.title}</h4>
+                                <div className="flex items-center gap-1.5 text-[10px] text-viking-silver/70 font-semibold mt-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {/* Handling date strictly as UTC to avoid timezone shifts when just selecting a date */}
+                                  {(() => {
+                                    const parts = ev.date.split('-');
+                                    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ev.date;
+                                  })()}
+                                </div>
+                                {ev.description && (
+                                  <p className="text-[11px] text-viking-silver mt-2.5 leading-relaxed whitespace-pre-wrap">{ev.description}</p>
+                                )}
+                              </div>
+                              {currentUser?.role === 'trainer' && (
+                                <button
+                                  onClick={() => {
+                                    if(confirm('Apagar este evento do calendário?')) {
+                                      const updated = calendarEvents.filter(e => e.id !== ev.id);
+                                      setCalendarEvents(updated);
+                                      deleteCalendarEventFromFirebase(ev.id);
+                                      showToast('Evento removido.', 'info');
+                                    }
+                                  }}
+                                  className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                                  title="Remover Evento"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -8046,12 +8239,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         if (sets[setIdx]) {
                                           const nextDone = !sets[setIdx].done;
                                           sets[setIdx] = { ...sets[setIdx], done: nextDone };
-                                          if (nextDone) {
-                                            // Start Viking rest timer automatically!
-                                            setRestTimerRemaining(restTimerSeconds);
-                                            setRestTimerActive(true);
-                                            showToast(`⚔️ Série ${setIdx + 1} Concluída! Descanso iniciado de ${Math.floor(restTimerSeconds / 60)}m ${restTimerSeconds % 60}s.`, 'success');
-                                          }
                                         }
                                         return { ...prev, [ex.id]: sets };
                                       });
@@ -8078,8 +8265,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   </div>
 
                                   {/* Reps selector */}
-                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1">
-                                    <span className="text-[9px] text-viking-silver/60 uppercase font-bold mr-1">Reps:</span>
+                                  <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-2">
+                                    <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1">Reps:</span>
                                     <button
                                       type="button"
                                       disabled={set.done}
@@ -8092,7 +8279,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                                      className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                                     >
                                       -
                                     </button>
@@ -8110,7 +8297,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-10 bg-transparent text-center font-mono text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:text-white/40"
+                                      className="w-10 bg-transparent text-center font-mono text-base font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:text-white/40"
                                     />
                                     <button
                                       type="button"
@@ -8124,15 +8311,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                                      className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                                     >
                                       +
                                     </button>
                                   </div>
 
                                   {/* Weight selector */}
-                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1 flex-1 max-w-[115px]">
-                                    <span className="text-[9px] text-viking-silver/60 uppercase font-bold">Peso:</span>
+                                  <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-2 flex-1 min-w-[100px]">
+                                    <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1">Peso:</span>
                                     <input
                                       type="number"
                                       value={set.weight || ''}
@@ -8148,24 +8335,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-full bg-transparent text-right font-mono text-xs font-bold focus:outline-none text-viking-gold disabled:text-viking-gold/50"
+                                      className="w-full bg-transparent text-right font-mono text-base font-bold focus:outline-none text-white disabled:text-viking-gold/50"
                                       title={ex.main ? "Carga sugerida pelo treinador. Você pode alterar se realizou uma carga diferente." : "Carga realizada (kg)"}
                                     />
-                                    <span className="text-[9px] text-viking-silver/70 font-bold">kg</span>
-                                    {ex.main && <Flame className="w-2.5 h-2.5 text-viking-gold/45 shrink-0" title="Carga sugerida pelo treinador. Altere se precisar ajustar." />}
+                                    <span className="text-[10px] text-viking-gold/70 font-bold ml-1">kg</span>
+                                    {ex.main && <Flame className="w-3.5 h-3.5 text-viking-gold/60 shrink-0" title="Carga sugerida pelo treinador. Altere se precisar ajustar." />}
                                   </div>
 
                                   {/* Delete set */}
                                   <button
                                     type="button"
-                                    disabled={(exerciseSetsState[ex.id] || []).length <= 1}
+                                    disabled={set.done || (exerciseSetsState[ex.id]?.length || 0) <= 1}
                                     onClick={() => {
                                       setExerciseSetsState(prev => {
-                                        const sets = (prev[ex.id] || []).filter((_, i) => i !== setIdx);
+                                        const sets = [...(prev[ex.id] || [])];
+                                        sets.splice(setIdx, 1);
                                         return { ...prev, [ex.id]: sets };
                                       });
                                     }}
-                                    className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-all shrink-0"
+                                    className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-35 shrink-0"
                                     title="Remover série"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -8575,6 +8763,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Trophy className="w-4 h-4" /> Classificação Geral
+                  </button>
+
+                  <button 
+                    onClick={() => { setMobileMenuOpen(false); setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
+                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4" /> Calendário Competitivo
                   </button>
 
                   <button 

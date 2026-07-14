@@ -10,7 +10,7 @@ import {
   deleteDoc,
   onSnapshot
 } from 'firebase/firestore';
-import { StudentProfile, TrainingProgram, VikingPlan, DbExercise } from './types';
+import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, CalendarEvent } from './types';
 import { DEFAULT_STUDENTS, DEFAULT_PROGRAM } from './data';
 
 const firebaseConfig = {
@@ -655,6 +655,49 @@ export async function deleteDbExerciseFromFirebase(id: string): Promise<void> {
     await deleteDoc(doc(db, 'exercises', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `exercises/${id}`);
+  }
+}
+
+/**
+ * Fetch calendar events from Firestore
+ */
+export async function fetchCalendarEventsFromFirebase(): Promise<CalendarEvent[]> {
+  try {
+    const colRef = collection(db, 'calendar_events');
+    const snapshot = await getDocs(colRef);
+    const events: CalendarEvent[] = [];
+    snapshot.forEach(docSnap => {
+      events.push(docSnap.data() as CalendarEvent);
+    });
+    return events;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'calendar_events');
+  }
+}
+
+/**
+ * Save calendar event to Firestore
+ */
+export async function saveCalendarEventToFirebase(event: CalendarEvent): Promise<void> {
+  try {
+    if (!event.id) {
+      const newDocRef = doc(collection(db, 'calendar_events'));
+      event.id = newDocRef.id;
+    }
+    await setDoc(doc(db, 'calendar_events', event.id), event);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `calendar_events/${event.id}`);
+  }
+}
+
+/**
+ * Delete calendar event from Firestore
+ */
+export async function deleteCalendarEventFromFirebase(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'calendar_events', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `calendar_events/${id}`);
   }
 }
 

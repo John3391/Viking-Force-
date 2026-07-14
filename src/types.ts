@@ -125,6 +125,14 @@ export interface GymLeaderboardEntry {
   weightClass: string;
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string; // ISO format or DD/MM/YYYY
+  type: 'competition' | 'test' | 'other';
+  description?: string;
+}
+
 export interface DbExercise {
   id: string;
   name: string;
