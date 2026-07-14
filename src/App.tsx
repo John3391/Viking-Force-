@@ -226,6 +226,9 @@ export default function App() {
   // Chat scroll container reference
   const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Drawer scroll container reference
+  const drawerContentRef = useRef<HTMLDivElement | null>(null);
+
   // PR Celebration state (Student)
   const [prCelebration, setPrCelebration] = useState<{ lifts: string[] } | null>(null);
 
@@ -2252,7 +2255,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 )}
 
                 <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                  onClick={() => { setWorkoutModalOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'exerciseLibrary' 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -4385,7 +4388,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6 space-y-5">
+              <div ref={drawerContentRef} className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6 space-y-5">
                 
                 {/* 1. History Drawer */}
                 {drawerType === 'history' && activeStudentProfile && (
@@ -6276,7 +6279,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                       {currentUser?.role === 'trainer' && !editingDbExercise && (
                         <button 
-                          onClick={() => setEditingDbExercise({ id: '', name: '', techniqueTips: '', videoUrl: '' })}
+                          onClick={() => {
+                            setEditingDbExercise({ id: '', name: '', techniqueTips: '', videoUrl: '' });
+                            setTimeout(() => {
+                              drawerContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 50);
+                          }}
                           className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-viking-gold/10"
                         >
                           <Plus className="w-4 h-4" /> Incluir Exercício
@@ -6294,6 +6302,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <button 
                             onClick={() => {
                               setEditingDbExercise(null);
+                              setTimeout(() => {
+                                drawerContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                              }, 50);
                             }}
                             className="p-1 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-viking-silver hover:text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                           >
@@ -6418,6 +6429,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 // 2. Return to the start of the library immediately
                                 setEditingDbExercise(null);
                                 setDbExerciseSearch('');
+                                setTimeout(() => {
+                                  drawerContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                                }, 50);
 
                                 // 3. Show success message instantly
                                 showToast('Exercício salvo com sucesso!', 'success');
@@ -6494,6 +6508,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <button 
                                       onClick={() => {
                                         setEditingDbExercise(ex);
+                                        setTimeout(() => {
+                                          drawerContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }, 50);
                                       }}
                                       className="p-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/20 transition-all text-[10px] font-bold uppercase cursor-pointer"
                                       title="Editar"
@@ -7079,7 +7096,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   )}
 
                   <button 
-                    onClick={() => { setMobileMenuOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                    onClick={() => { setMobileMenuOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <BookOpen className="w-4 h-4 text-viking-gold" /> Biblioteca de Exercícios
