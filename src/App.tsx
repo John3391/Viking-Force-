@@ -52,7 +52,8 @@ import {
   Upload,
   Zap,
   Square,
-  CheckSquare
+  CheckSquare,
+  Filter
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -135,6 +136,9 @@ export default function App() {
   const [leaderboardTab, setLeaderboardTab] = useState<'all' | 'age' | 'weight'>('all');
   const [leaderboardSortCol, setLeaderboardSortCol] = useState<'position' | 'name' | 'age' | 'bodyWeight' | 'squat' | 'bench' | 'deadlift' | 'total' | 'wilks'>('wilks');
   const [leaderboardSortDesc, setLeaderboardSortDesc] = useState<boolean>(true);
+  const [leaderboardAgeFilter, setLeaderboardAgeFilter] = useState<string>('all');
+  const [leaderboardWeightFilter, setLeaderboardWeightFilter] = useState<string>('all');
+  const [leaderboardGenderFilter, setLeaderboardGenderFilter] = useState<string>('all');
 
   // App core database state
   const [trainingProgram, setTrainingProgram] = useState<TrainingProgram>(DEFAULT_PROGRAM);
@@ -1874,6 +1878,24 @@ export default function App() {
       }
       return leaderboardSortDesc ? (valB - valA) : (valA - valB);
     });
+
+    return entries.map((entry, idx) => ({ ...entry, position: idx + 1 }));
+  };
+
+  const getFilteredLeaderboard = (): GymLeaderboardEntry[] => {
+    let entries = getLeaderboard();
+
+    if (leaderboardGenderFilter !== 'all') {
+      entries = entries.filter(w => w.gender === leaderboardGenderFilter);
+    }
+
+    if (leaderboardAgeFilter !== 'all') {
+      entries = entries.filter(w => w.ageDivision === leaderboardAgeFilter);
+    }
+
+    if (leaderboardWeightFilter !== 'all') {
+      entries = entries.filter(w => w.weightClass === leaderboardWeightFilter);
+    }
 
     return entries.map((entry, idx) => ({ ...entry, position: idx + 1 }));
   };
@@ -4510,6 +4532,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       <span className="text-xs font-bold">Feedback</span>
                                     </button>
                                     <button 
+                                      onClick={() => {
+                                        setEditingStudentEmail(email);
+                                        setDrawerTitle(`Editar Dados & 1RM de ${s.name}`);
+                                        setDrawerType('editStudent');
+                                        setDrawerOpen(true);
+                                      }}
+                                      className="p-2 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500 text-indigo-400 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
+                                      title="Editar 1RMs e Informações do Guerreiro"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                      <span className="text-xs font-bold">Editar 1RM</span>
+                                    </button>
+                                    <button 
                                       onClick={() => openProgramEditor(email)}
                                       className="px-3.5 py-2 rounded-xl bg-viking-dark border border-viking-gold/25 hover:border-viking-gold hover:bg-viking-gold/10 text-viking-silver hover:text-viking-gold font-bold text-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
                                     >
@@ -4572,7 +4607,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   </button>
                                 )}
                                 <div>
-                                  <p className="font-bold text-[#e0d3a8] text-base">{s.name}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="font-bold text-[#e0d3a8] text-base">{s.name}</p>
+                                    <button
+                                      onClick={() => {
+                                        setEditingStudentEmail(email);
+                                        setDrawerTitle(`Editar Dados & 1RM de ${s.name}`);
+                                        setDrawerType('editStudent');
+                                        setDrawerOpen(true);
+                                      }}
+                                      className="p-1 rounded-lg bg-[#140e0c]/80 border border-viking-gold/20 hover:border-viking-gold text-viking-gold cursor-pointer inline-flex items-center justify-center"
+                                      title="Editar Dados & 1RMs"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                  </div>
                                   <p className="text-[11px] text-viking-silver mt-0.5">{email}</p>
                                 </div>
                               </div>
@@ -4756,6 +4805,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   {drawerType === 'ranking' && <Trophy className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'plans' && <CreditCard className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'settings' && <Settings className="w-5 h-5 text-viking-gold" />}
+                  {drawerType === 'editStudent' && <Edit className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'addStudent' && <UserPlus className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'whatsapp' && <Phone className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'payments' && <CreditCard className="w-5 h-5 text-viking-gold" />}
@@ -4911,6 +4961,99 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       );
                     })()}
 
+                    {/* Filtros de Competição Viking */}
+                    <div className="p-3.5 bg-[#0a0605]/80 rounded-2xl border border-viking-gold/20 space-y-3">
+                      <div className="flex items-center justify-between border-b border-viking-gold/10 pb-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                          <Filter className="w-3.5 h-3.5 animate-pulse" /> Filtros de Competição
+                        </span>
+                        {(leaderboardAgeFilter !== 'all' || leaderboardWeightFilter !== 'all' || leaderboardGenderFilter !== 'all') && (
+                          <button
+                            onClick={() => {
+                              setLeaderboardAgeFilter('all');
+                              setLeaderboardWeightFilter('all');
+                              setLeaderboardGenderFilter('all');
+                            }}
+                            className="text-[9px] font-black text-viking-red hover:underline uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                          >
+                            Limpar Filtros
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {/* Gênero */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Gênero</label>
+                          <select
+                            value={leaderboardGenderFilter}
+                            onChange={(e) => {
+                              setLeaderboardGenderFilter(e.target.value);
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#140e0c] border border-viking-gold/15 text-xs font-medium text-[#e0d3a8] focus:outline-none focus:border-viking-gold"
+                          >
+                            <option value="all">Todos</option>
+                            <option value="male">Masculino ♂</option>
+                            <option value="female">Feminino ♀</option>
+                          </select>
+                        </div>
+
+                        {/* Categoria de Idade */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Categoria de Idade</label>
+                          <select
+                            value={leaderboardAgeFilter}
+                            onChange={(e) => setLeaderboardAgeFilter(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#140e0c] border border-viking-gold/15 text-xs font-medium text-[#e0d3a8] focus:outline-none focus:border-viking-gold"
+                          >
+                            <option value="all">Todas as Categorias</option>
+                            <option value="Sub-Júnior (≤18)">Sub-Júnior (≤18)</option>
+                            <option value="Júnior (19-23)">Júnior (19-23)</option>
+                            <option value="Open (24-39)">Open (24-39)</option>
+                            <option value="Master (40+)">Master (40+)</option>
+                          </select>
+                        </div>
+
+                        {/* Classe de Peso */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Classe de Peso</label>
+                          <select
+                            value={leaderboardWeightFilter}
+                            onChange={(e) => setLeaderboardWeightFilter(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#140e0c] border border-viking-gold/15 text-xs font-medium text-[#e0d3a8] focus:outline-none focus:border-viking-gold"
+                          >
+                            <option value="all">Todas as Classes</option>
+                            {leaderboardGenderFilter === 'female' ? (
+                              <>
+                                <option value="Até 57kg">F: Até 57kg</option>
+                                <option value="57.1kg - 72kg">F: 57.1kg - 72kg</option>
+                                <option value="Mais de 72kg">F: Mais de 72kg</option>
+                              </>
+                            ) : leaderboardGenderFilter === 'male' ? (
+                              <>
+                                <option value="Até 74kg">M: Até 74kg</option>
+                                <option value="74.1kg - 93kg">M: 74.1kg - 93kg</option>
+                                <option value="Mais de 93kg">M: Mais de 93kg</option>
+                              </>
+                            ) : (
+                              <>
+                                <optgroup label="Feminino" className="text-viking-gold font-bold">
+                                  <option value="Até 57kg">Até 57kg</option>
+                                  <option value="57.1kg - 72kg">57.1kg - 72kg</option>
+                                  <option value="Mais de 72kg">Mais de 72kg</option>
+                                </optgroup>
+                                <optgroup label="Masculino" className="text-viking-silver font-bold">
+                                  <option value="Até 74kg">Até 74kg</option>
+                                  <option value="74.1kg - 93kg">74.1kg - 93kg</option>
+                                  <option value="Mais de 93kg">Mais de 93kg</option>
+                                </optgroup>
+                              </>
+                            )}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Leaderboard Tabs */}
                     <div className="flex bg-[#0d0908]/80 p-1 rounded-xl border border-viking-gold/15 gap-1">
                       <button 
@@ -4978,7 +5121,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {/* 2.1 General Absoluto Leaderboard */}
                       {leaderboardTab === 'all' && (
                         <div className="space-y-2">
-                          {getLeaderboard().map((warrior, idx) => {
+                          {getFilteredLeaderboard().length === 0 ? (
+                            <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
+                              <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
+                              Nenhum guerreiro atende aos filtros selecionados.
+                            </div>
+                          ) : (
+                            getFilteredLeaderboard().map((warrior, idx) => {
                             const isSelf = currentUser && currentUser.email === warrior.email;
                             const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
                             return (
@@ -5036,15 +5185,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       )}
 
                       {/* 2.2 Leaderboard Grouped by Age Division */}
                       {leaderboardTab === 'age' && (
                         <div className="space-y-6">
-                          {['Sub-Júnior (≤18)', 'Júnior (19-23)', 'Open (24-39)', 'Master (40+)'].map(division => {
-                            const competitors = getLeaderboard()
+                          {getFilteredLeaderboard().length === 0 ? (
+                            <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
+                              <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
+                              Nenhum guerreiro atende aos filtros selecionados.
+                            </div>
+                          ) : (
+                            ['Sub-Júnior (≤18)', 'Júnior (19-23)', 'Open (24-39)', 'Master (40+)'].map(division => {
+                            const competitors = getFilteredLeaderboard()
                               .filter(w => w.ageDivision === division)
                               .sort((a, b) => b.wilks - a.wilks);
 
@@ -5107,15 +5263,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       )}
 
                       {/* 2.3 Leaderboard Grouped by Weight Class */}
                       {leaderboardTab === 'weight' && (
                         <div className="space-y-6">
-                          {['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg', 'Até 74kg', '74.1kg - 93kg', 'Mais de 93kg'].map(wClass => {
-                            const competitors = getLeaderboard()
+                          {getFilteredLeaderboard().length === 0 ? (
+                            <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
+                              <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
+                              Nenhum guerreiro atende aos filtros selecionados.
+                            </div>
+                          ) : (
+                            ['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg', 'Até 74kg', '74.1kg - 93kg', 'Mais de 93kg'].map(wClass => {
+                            const competitors = getFilteredLeaderboard()
                               .filter(w => w.weightClass === wClass)
                               .sort((a, b) => b.wilks - a.wilks);
 
@@ -5181,7 +5344,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       )}
                     </div>
@@ -5572,6 +5736,218 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     </button>
                   </form>
                 )}
+
+                {/* Edit Student (Trainer) */}
+                {drawerType === 'editStudent' && (() => {
+                  const s = studentsData[editingStudentEmail.toLowerCase()];
+                  if (!s) return <p className="text-sm text-viking-silver">Selecione um atleta válido para editar.</p>;
+
+                  return (
+                    <div className="space-y-4 text-left">
+                      <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-1">
+                        <p className="text-[10px] text-viking-silver/60 uppercase font-black tracking-wider">Guerreiro em Edição</p>
+                        <p className="text-base font-black text-white">{s.name}</p>
+                        <p className="text-xs text-viking-silver">{editingStudentEmail}</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Nome do Atleta</label>
+                          <input 
+                            id="editStudentName"
+                            required 
+                            defaultValue={s.name}
+                            placeholder="Ex: Lagertha Ironside"
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-bold"
+                          />
+                        </div>
+
+                        <div className="p-4 rounded-xl border border-viking-gold/15 bg-viking-gold/5 space-y-3">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                            ⚔️ Calibragem de 1 Repetição Máxima (1RM)
+                          </h4>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-bold text-viking-silver mb-1">Agachamento Máximo (kg)</label>
+                              <input 
+                                type="number" 
+                                id="editStudentSquat"
+                                defaultValue={s.prs.squat || ''}
+                                placeholder="Ex: 150"
+                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-viking-silver mb-1">Supino Máximo (kg)</label>
+                              <input 
+                                type="number" 
+                                id="editStudentBench"
+                                defaultValue={s.prs.bench || ''}
+                                placeholder="Ex: 110"
+                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-viking-silver mb-1">Levantamento Terra Máximo (kg)</label>
+                              <input 
+                                type="number" 
+                                id="editStudentDeadlift"
+                                defaultValue={s.prs.deadlift || ''}
+                                placeholder="Ex: 190"
+                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl border border-viking-gold/15 bg-black/30 space-y-3">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                            🏆 Parâmetros de Competição (Wilks)
+                          </h4>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-viking-silver mb-1">Idade (anos)</label>
+                              <input 
+                                type="number" 
+                                id="editStudentAge"
+                                defaultValue={s.age || 25}
+                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-viking-silver mb-1">Peso Corporal (kg)</label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                id="editStudentBodyWeight"
+                                defaultValue={s.bodyWeight || 80}
+                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver mb-1">Gênero</label>
+                            <select 
+                              id="editStudentGender"
+                              defaultValue={s.gender || 'male'}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold"
+                            >
+                              <option value="male" className="bg-[#140e0c] text-[#e0d3a8]">Masculino</option>
+                              <option value="female" className="bg-[#140e0c] text-[#e0d3a8]">Feminino</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Horário de Preferência para Treinar</label>
+                          <input 
+                            type="time" 
+                            id="editStudentPreferredTime"
+                            defaultValue={s.preferredTime || '18:00'}
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none [color-scheme:dark]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Plano Assinado</label>
+                            <select 
+                              id="editStudentPlan" 
+                              defaultValue={s.plan || 'Mensal'}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none"
+                            >
+                              <option value="Mensal" className="bg-[#140e0c] text-[#e0d3a8]">Mensal</option>
+                              <option value="Trimestral" className="bg-[#140e0c] text-[#e0d3a8]">Trimestral</option>
+                              <option value="Semestral" className="bg-[#140e0c] text-[#e0d3a8]">Semestral</option>
+                              <option value="Anual" className="bg-[#140e0c] text-[#e0d3a8]">Anual</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Estado de Pagamento</label>
+                            <select 
+                              id="editStudentStatus" 
+                              defaultValue={s.status || 'Pago'}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none"
+                            >
+                              <option value="Pago" className="bg-[#140e0c] text-[#e0d3a8]">Pago</option>
+                              <option value="Pendente" className="bg-[#140e0c] text-[#e0d3a8]">Pendente</option>
+                              <option value="Atrasado" className="bg-[#140e0c] text-[#e0d3a8]">Atrasado</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            const name = (document.getElementById('editStudentName') as HTMLInputElement).value || s.name;
+                            const sq = parseFloat((document.getElementById('editStudentSquat') as HTMLInputElement).value) || null;
+                            const be = parseFloat((document.getElementById('editStudentBench') as HTMLInputElement).value) || null;
+                            const de = parseFloat((document.getElementById('editStudentDeadlift') as HTMLInputElement).value) || null;
+                            const age = parseInt((document.getElementById('editStudentAge') as HTMLInputElement).value) || s.age || 25;
+                            const bw = parseFloat((document.getElementById('editStudentBodyWeight') as HTMLInputElement).value) || s.bodyWeight || 80;
+                            const gen = (document.getElementById('editStudentGender') as HTMLSelectElement).value as 'male' | 'female';
+                            const pt = (document.getElementById('editStudentPreferredTime') as HTMLInputElement).value || s.preferredTime || '18:00';
+                            const plan = (document.getElementById('editStudentPlan') as HTMLSelectElement).value as any;
+                            const status = (document.getElementById('editStudentStatus') as HTMLSelectElement).value as any;
+
+                            const oldPrs = s.prs || { squat: null, bench: null, deadlift: null };
+                            const prevPrs = {
+                              squat: sq !== oldPrs.squat ? oldPrs.squat : (s.prevPrs?.squat ?? null),
+                              bench: be !== oldPrs.bench ? oldPrs.bench : (s.prevPrs?.bench ?? null),
+                              deadlift: de !== oldPrs.deadlift ? oldPrs.deadlift : (s.prevPrs?.deadlift ?? null),
+                            };
+
+                            const improvedLifts: string[] = [];
+                            if (sq !== null && sq > 0 && (oldPrs.squat === null || sq > oldPrs.squat)) {
+                              const diff = oldPrs.squat ? sq - oldPrs.squat : 0;
+                              improvedLifts.push(`Agachamento: ${sq}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                            }
+                            if (be !== null && be > 0 && (oldPrs.bench === null || be > oldPrs.bench)) {
+                              const diff = oldPrs.bench ? be - oldPrs.bench : 0;
+                              improvedLifts.push(`Supino: ${be}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                            }
+                            if (de !== null && de > 0 && (oldPrs.deadlift === null || de > oldPrs.deadlift)) {
+                              const diff = oldPrs.deadlift ? de - oldPrs.deadlift : 0;
+                              improvedLifts.push(`Levantamento Terra: ${de}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+                            }
+
+                            const updatedProfile: StudentProfile = {
+                              ...s,
+                              name,
+                              prs: { squat: sq, bench: be, deadlift: de },
+                              prevPrs,
+                              age,
+                              bodyWeight: bw,
+                              gender: gen,
+                              preferredTime: pt,
+                              plan,
+                              status
+                            };
+
+                            saveStudentsToDB({ ...studentsData, [editingStudentEmail.toLowerCase()]: updatedProfile });
+                            setDrawerOpen(false);
+
+                            if (improvedLifts.length > 0) {
+                              triggerPrConfetti();
+                              setPrCelebration({ lifts: improvedLifts });
+                              showToast(`Novo Recorde de Força registrado para ${name}! Os deuses celebram!`, 'success');
+                            } else {
+                              showToast(`Dados de ${name} atualizados com sucesso!`, 'success');
+                            }
+                          }}
+                          className="w-full py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 mt-4 cursor-pointer"
+                        >
+                          Confirmar Alterações e Recalcular
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Public Note / Parabenizar Panel */}
                 {drawerType === 'publicNote' && (() => {
