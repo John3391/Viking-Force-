@@ -2897,9 +2897,28 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   ⚔️ Saudações, <span className="text-viking-gold font-bold">{activeStudentProfile.name}</span>! O ferro espera sua soberania.
                 </p>
               </div>
-              <div className="flex items-center gap-2 bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">Ciclo de Força Ativo</span>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2 bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">Ciclo de Força Ativo</span>
+                </div>
+                {activeStudentProfile.competitionDate && (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl">
+                      <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">
+                        {Math.max(0, Math.ceil((new Date(activeStudentProfile.competitionDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)))} dias para competição
+                      </span>
+                    </div>
+                    <a 
+                      href={`https://www.google.com/calendar/render?action=TEMPLATE&text=Competição+de+Força&dates=${activeStudentProfile.competitionDate.replace(/-/g, '')}/${activeStudentProfile.competitionDate.replace(/-/g, '')}&details=Dia+da+competição+alvo+no+Viking+Force`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-viking-silver hover:text-viking-gold underline"
+                    >
+                      Adicionar ao Google Calendar
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -5672,6 +5691,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </div>
                         </div>
                         <div>
+                          <label className="block text-xs font-bold text-viking-silver mb-1">Data da Competição Alvo</label>
+                          <input 
+                            type="date" 
+                            id="cfgCompetitionDate"
+                            defaultValue={activeStudentProfile.competitionDate || ''}
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
+                          />
+                        </div>
+                        <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Gênero</label>
                           <select 
                             id="cfgGender"
@@ -5710,6 +5738,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           const pt = (document.getElementById('cfgPreferredTime') as HTMLInputElement).value || '18:00';
                           const age = parseInt((document.getElementById('cfgAge') as HTMLInputElement).value) || 25;
                           const bodyWeight = parseFloat((document.getElementById('cfgBodyWeight') as HTMLInputElement).value) || 80;
+                          const competitionDate = (document.getElementById('cfgCompetitionDate') as HTMLInputElement).value || '';
                           const gender = (document.getElementById('cfgGender') as HTMLSelectElement).value as 'male' | 'female';
                           
                           const oldPrs = activeStudentProfile.prs || { squat: null, bench: null, deadlift: null };
@@ -5740,7 +5769,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             preferredTime: pt,
                             age,
                             bodyWeight,
-                            gender
+                            gender,
+                            competitionDate
                           };
                           saveStudentsToDB({ ...studentsData, [currentUser!.email.toLowerCase()]: updatedProfile });
                           setDrawerOpen(false);

@@ -51,6 +51,10 @@
         "bodyWeight": {
           "type": "number",
           "description": "Current body weight in kg"
+        },
+        "competitionDate": {
+          "type": "string",
+          "description": "Date of the target competition"
         }
       },
       "required": ["name", "plan", "status"]

@@ -96,6 +96,7 @@ export interface StudentProfile {
   gender?: 'male' | 'female';
   age?: number;
   bodyWeight?: number;
+  competitionDate?: string;
   publicNote?: string;
 }
 
