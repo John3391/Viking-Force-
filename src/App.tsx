@@ -167,6 +167,7 @@ export default function App() {
   const [editorWeek, setEditorWeek] = useState<number>(1);
   const [editorDay, setEditorDay] = useState<string>('A');
   const [editorExercises, setEditorExercises] = useState<Exercise[]>([]);
+  const [editorSearchQuery, setEditorSearchQuery] = useState<string>('');
 
   // Toast notification stack
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -1673,6 +1674,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     // Let's copy current week/day program to editor state
     const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
+    setEditorSearchQuery('');
     setDrawerType('editProgram');
     setDrawerTitle(`Prescrever Treino`);
     setDrawerOpen(true);
@@ -1683,6 +1685,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     setEditorDay(day);
     const currentExercises = trainingProgram.weeks[week]?.[day] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
+    setEditorSearchQuery('');
   };
 
   const handleEditorAddWeek = () => {
@@ -5032,25 +5035,67 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         </button>
                       </div>
 
-                      {editorExercises.length === 0 ? (
-                        <p className="text-center py-6 text-xs text-viking-silver/60 border border-viking-gold/10 rounded-xl">Treino limpo ou sem exercícios.</p>
-                      ) : (
-                        editorExercises.map((ex, idx) => (
-                          <div key={ex.id || idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3 relative transition-all duration-300 hover:scale-[1.02] hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.25)]">
+                      {/* Search Bar inside Program Editor */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-viking-gold/65">
+                          <Search className="w-4 h-4" />
+                        </div>
+                        <input
+                          type="text"
+                          value={editorSearchQuery}
+                          onChange={(e) => setEditorSearchQuery(e.target.value)}
+                          placeholder="Buscar exercício pelo nome..."
+                          className="w-full pl-9 pr-8 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/40 font-medium"
+                        />
+                        {editorSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setEditorSearchQuery('')}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver/60 hover:text-viking-gold cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {(() => {
+                        const indexedExercises = editorExercises.map((ex, originalIdx) => ({ ex, originalIdx }));
+                        const query = editorSearchQuery.trim().toLowerCase();
+                        const filtered = query === '' 
+                          ? indexedExercises 
+                          : indexedExercises.filter(({ ex }) => ex.name.toLowerCase().includes(query));
+
+                        if (editorExercises.length === 0) {
+                          return (
+                            <p className="text-center py-6 text-xs text-viking-silver/60 border border-viking-gold/10 rounded-xl">Treino limpo ou sem exercícios.</p>
+                          );
+                        }
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-xs text-viking-silver/50 border border-dashed border-viking-gold/15 rounded-xl space-y-1">
+                              <p className="font-bold">Nenhum exercício corresponde à sua busca.</p>
+                              <p className="text-[11px] text-viking-silver/40">Tente buscar por termos diferentes ou limpe a busca.</p>
+                            </div>
+                          );
+                        }
+
+                        return filtered.map(({ ex, originalIdx }) => (
+                          <div key={ex.id || originalIdx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3 relative transition-all duration-300 hover:scale-[1.02] hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.25)]">
                             
                             {/* Header row */}
                             <div className="flex justify-between items-center pb-2 border-b border-viking-gold/15">
-                              <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{idx + 1} Exercício</span>
+                              <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} Exercício</span>
                               <div className="flex items-center gap-1">
                                 <button 
-                                  onClick={() => handleEditorDuplicateExercise(idx)}
+                                  onClick={() => handleEditorDuplicateExercise(originalIdx)}
                                   className="p-1 rounded hover:bg-viking-gold/10 text-viking-gold cursor-pointer"
                                   title="Duplicar Exercício"
                                 >
                                   <Copy className="w-3.5 h-3.5" />
                                 </button>
                                 <button 
-                                  onClick={() => handleEditorRemoveExercise(idx)}
+                                  onClick={() => handleEditorRemoveExercise(originalIdx)}
                                   className="p-1 rounded hover:bg-red-950/40 text-red-400 cursor-pointer"
                                   title="Remover Exercício"
                                 >
@@ -5067,24 +5112,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   <input 
                                     value={ex.name}
                                     onChange={e => {
-                                      handleEditorUpdateField(idx, 'name', e.target.value);
-                                      setOpenDropdownIdx(idx);
+                                      handleEditorUpdateField(originalIdx, 'name', e.target.value);
+                                      setOpenDropdownIdx(originalIdx);
                                     }}
-                                    onFocus={() => setOpenDropdownIdx(idx)}
+                                    onFocus={() => setOpenDropdownIdx(originalIdx)}
                                     className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                     placeholder="Escreva ou selecione..."
                                   />
                                   <button 
                                     type="button"
-                                    onClick={() => setOpenDropdownIdx(openDropdownIdx === idx ? null : idx)}
+                                    onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)}
                                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer"
                                     title="Abrir Banco de Exercícios"
                                   >
-                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === idx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} />
+                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} />
                                   </button>
                                 </div>
 
-                                {openDropdownIdx === idx && (
+                                {openDropdownIdx === originalIdx && (
                                   <>
                                     <div 
                                       className="fixed inset-0 z-40" 
@@ -5112,7 +5157,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                             type="button"
                                             onClick={() => {
                                               setEditorExercises(prev => prev.map((item, i) => {
-                                                if (i === idx) {
+                                                if (i === originalIdx) {
                                                   return {
                                                     ...item,
                                                     name: dbEx.name,
@@ -5144,7 +5189,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <input 
                                   type="number"
                                   value={ex.sets}
-                                  onChange={e => handleEditorUpdateField(idx, 'sets', parseInt(e.target.value) || 0)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', parseInt(e.target.value) || 0)}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -5154,7 +5199,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <input 
                                   type="number"
                                   value={ex.reps}
-                                  onChange={e => handleEditorUpdateField(idx, 'reps', parseInt(e.target.value) || 0)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', parseInt(e.target.value) || 0)}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -5167,9 +5212,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     const val = e.target.value;
                                     const parsedNum = parseFloat(val);
                                     if (!isNaN(parsedNum) && parsedNum <= 100) {
-                                      handleEditorUpdateField(idx, 'intensity', parsedNum / 100);
+                                      handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100);
                                     } else {
-                                      handleEditorUpdateField(idx, 'intensity', val);
+                                      handleEditorUpdateField(originalIdx, 'intensity', val);
                                     }
                                   }}
                                   placeholder="Ex: 80 ou Carga Livre"
@@ -5183,7 +5228,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   type="number"
                                   step="0.5"
                                   value={ex.targetRPE}
-                                  onChange={e => handleEditorUpdateField(idx, 'targetRPE', parseFloat(e.target.value) || 0)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -5191,12 +5236,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <div className="col-span-2 flex items-center gap-2 pt-1.5">
                                 <input 
                                   type="checkbox"
-                                  id={`chk-main-${idx}`}
+                                  id={`chk-main-${originalIdx}`}
                                   checked={ex.main}
-                                  onChange={e => handleEditorUpdateField(idx, 'main', e.target.checked)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'main', e.target.checked)}
                                   className="rounded border-viking-gold/30 text-viking-gold focus:ring-viking-gold bg-black/40 cursor-pointer"
                                 />
-                                <label htmlFor={`chk-main-${idx}`} className="text-[10px] font-bold text-viking-silver uppercase tracking-wider cursor-pointer select-none">
+                                <label htmlFor={`chk-main-${originalIdx}`} className="text-[10px] font-bold text-viking-silver uppercase tracking-wider cursor-pointer select-none">
                                   Habilitar Aquecimento Inteligente (Para agacho, supino e terra)
                                 </label>
                               </div>
@@ -5205,7 +5250,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Dicas de Técnica / Orientações para o Aluno</label>
                                 <textarea 
                                   value={ex.techniqueTips || ''}
-                                  onChange={e => handleEditorUpdateField(idx, 'techniqueTips', e.target.value)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'techniqueTips', e.target.value)}
                                   placeholder="Ex: Controlar a descida por 3s, expandir o peito na subida, forçar os joelhos para fora."
                                   rows={2}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
@@ -5218,7 +5263,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </label>
                                 <input 
                                   value={ex.videoUrl || ''}
-                                  onChange={e => handleEditorUpdateField(idx, 'videoUrl', e.target.value)}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'videoUrl', e.target.value)}
                                   placeholder="Ex: https://www.youtube.com/watch?v=..."
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
                                 />
@@ -5233,7 +5278,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <Flame className="w-3.5 h-3.5" /> Passos de Aquecimento (%)
                                   </span>
                                   <button 
-                                    onClick={() => handleEditorAddWarmupStep(idx)}
+                                    onClick={() => handleEditorAddWarmupStep(originalIdx)}
                                     className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
                                   >
                                     + Adicionar
@@ -5246,19 +5291,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       <input 
                                         type="number"
                                         value={Math.round(step.percent * 100)}
-                                        onChange={e => handleEditorUpdateWarmupStep(idx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
+                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
                                         className="w-8 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
                                       />
                                       <span className="text-viking-silver/80">% ×</span>
                                       <input 
                                         type="number"
                                         value={step.reps}
-                                        onChange={e => handleEditorUpdateWarmupStep(idx, sIdx, 'reps', parseInt(e.target.value) || 1)}
+                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', parseInt(e.target.value) || 1)}
                                         className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
                                       />
                                       <span className="text-viking-silver/80">reps</span>
                                       <button 
-                                        onClick={() => handleEditorRemoveWarmupStep(idx, sIdx)}
+                                        onClick={() => handleEditorRemoveWarmupStep(originalIdx, sIdx)}
                                         className="text-viking-red hover:brightness-125 ml-1 cursor-pointer"
                                       >
                                         <X className="w-3 h-3" />
@@ -5270,8 +5315,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             )}
 
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
 
                       <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
                         <button 
