@@ -546,6 +546,10 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
  */
 export async function saveDbExerciseToFirebase(exercise: DbExercise): Promise<void> {
   try {
+    if (!exercise.id) {
+      const newDocRef = doc(collection(db, 'exercises'));
+      exercise.id = newDocRef.id;
+    }
     await setDoc(doc(db, 'exercises', exercise.id), exercise);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `exercises/${exercise.id}`);

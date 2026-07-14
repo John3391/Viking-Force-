@@ -6396,20 +6396,45 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 return;
                               }
                               try {
-                                showToast(editingDbExercise.id ? 'Atualizando exercício...' : 'Armazenando exercício...', 'info');
-                                await saveDbExerciseToFirebase(editingDbExercise);
-                                
-                                const updatedExs = await fetchDbExercisesFromFirebase();
-                                if (updatedExs) {
-                                  setDbExercises(updatedExs);
-                                  localStorage.setItem('viking_db_exercises', JSON.stringify(updatedExs));
+                                const exerciseToSave = { ...editingDbExercise };
+                                if (!exerciseToSave.id) {
+                                  exerciseToSave.id = 'ex_' + Date.now().toString() + '_' + Math.random().toString(36).substr(2, 5);
                                 }
 
+                                // 1. Save immediately in the local UI state & localStorage
+                                setDbExercises(prev => {
+                                  const index = prev.findIndex(ex => ex.id === exerciseToSave.id);
+                                  let newList;
+                                  if (index > -1) {
+                                    newList = [...prev];
+                                    newList[index] = exerciseToSave;
+                                  } else {
+                                    newList = [exerciseToSave, ...prev];
+                                  }
+                                  localStorage.setItem('viking_db_exercises', JSON.stringify(newList));
+                                  return newList;
+                                });
+
+                                // 2. Return to the start of the library immediately
                                 setEditingDbExercise(null);
-                                showToast('Exercício salvo com sucesso no Banco do Templo!', 'success');
+                                setDbExerciseSearch('');
+
+                                // 3. Show success message instantly
+                                showToast('Exercício salvo com sucesso!', 'success');
+
+                                // 4. Save to Firestore asynchronously in the background
+                                saveDbExerciseToFirebase(exerciseToSave).then(async () => {
+                                  const updatedExs = await fetchDbExercisesFromFirebase();
+                                  if (updatedExs) {
+                                    setDbExercises(updatedExs);
+                                    localStorage.setItem('viking_db_exercises', JSON.stringify(updatedExs));
+                                  }
+                                }).catch(err => {
+                                  console.error("Error in async Firestore save:", err);
+                                });
                               } catch (err) {
                                 console.error("Error saving db exercise:", err);
-                                showToast('Falha ao salvar exercício no servidor.', 'error');
+                                showToast('Falha ao salvar exercício.', 'error');
                               }
                             }}
                             className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
