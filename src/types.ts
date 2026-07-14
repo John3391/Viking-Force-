@@ -35,12 +35,18 @@ export interface TrainingProgram {
   weeks: Record<number, WeekWorkout>;
 }
 
+export interface LoggedSet {
+  reps: number;
+  weight: number;
+}
+
 export interface LoggedExercise {
   name: string;
   rpe: number;
   plannedVolume?: number;
   achievedVolume?: number;
   failed?: boolean;
+  sets?: LoggedSet[];
 }
 
 export interface LoggedSession {

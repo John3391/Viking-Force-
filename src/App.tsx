@@ -11,6 +11,8 @@ import {
   Edit, 
   X, 
   Play, 
+  Pause,
+  Timer,
   History, 
   UserPlus, 
   Check, 
@@ -181,6 +183,10 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
   const [exerciseFailureState, setExerciseFailureState] = useState<Record<string, { failed: boolean; actualReps: number; setsDone: number }>>({});
+  const [exerciseSetsState, setExerciseSetsState] = useState<Record<string, { reps: number; weight: number }[]>>({});
+  const [restTimerSeconds, setRestTimerSeconds] = useState<number>(120);
+  const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
+  const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
   const [sessionNote, setSessionNote] = useState<string>('');
 
   // Program Editor state (Trainer)
@@ -323,14 +329,67 @@ export default function App() {
     }
   }, [drawerType, activeChatStudentEmail, currentUser?.email, studentsData, drawerOpen]);
 
-  // Reset workout panel view configuration to sidebar + slide mode on open
+  // Reset workout panel view configuration, initialize sets and rest timer
   useEffect(() => {
     if (workoutModalOpen) {
       setWorkoutLayout('sidebar');
       setWorkoutViewMode('slide');
       setCurrentExerciseIndex(0);
+      setRestTimerActive(false);
+      setRestTimerRemaining(restTimerSeconds);
+
+      // Initialize sets state for the exercises in the current selected training day
+      const currentExercises = trainingProgram.weeks[selectedWeek]?.[selectedDay] || [];
+      const initialSets: Record<string, { reps: number; weight: number }[]> = {};
+      
+      currentExercises.forEach(ex => {
+        let defaultWeight = 0;
+        const exNameLower = ex.name.toLowerCase();
+        let pr: number | null = null;
+        if (activeStudentProfile) {
+          if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+            pr = activeStudentProfile.prs.squat;
+          } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+            pr = activeStudentProfile.prs.bench;
+          } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+            pr = activeStudentProfile.prs.deadlift;
+          }
+        }
+        if (pr && typeof ex.intensity === 'number') {
+          defaultWeight = Math.round(pr * ex.intensity);
+        }
+        
+        // Populate sets with ex.sets count
+        const setsCount = ex.sets || 3;
+        initialSets[ex.id] = Array.from({ length: setsCount }, () => ({
+          reps: ex.reps || 8,
+          weight: defaultWeight
+        }));
+      });
+      
+      setExerciseSetsState(initialSets);
     }
-  }, [workoutModalOpen]);
+  }, [workoutModalOpen, selectedWeek, selectedDay]);
+
+  // Rest Timer countdown logic
+  useEffect(() => {
+    let intervalId: any = null;
+    if (restTimerActive && restTimerRemaining > 0) {
+      intervalId = setInterval(() => {
+        setRestTimerRemaining(prev => {
+          if (prev <= 1) {
+            setRestTimerActive(false);
+            showToast('🛡️ Intervalo Concluído! De volta à batalha, guerreiro!', 'success');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [restTimerActive, restTimerRemaining]);
 
   // --- LOCALSTORAGE & FIREBASE SYNC ---
   useEffect(() => {
@@ -1696,15 +1755,13 @@ export default function App() {
     let totalAchievedVolume = 0;
 
     const exercisesLog = currentExercises.map(ex => {
+      const setsLogged = exerciseSetsState[ex.id] || [];
       const isFailed = !!exerciseFailureState[ex.id]?.failed;
       const plannedVol = ex.sets * ex.reps;
-      let achievedVol = plannedVol;
       
-      if (isFailed) {
-        const sDone = exerciseFailureState[ex.id]?.setsDone || (ex.sets - 1 > 0 ? ex.sets - 1 : 1);
-        const aReps = exerciseFailureState[ex.id]?.actualReps || 1;
-        achievedVol = (sDone * ex.reps) + aReps;
-      }
+      const achievedVol = setsLogged.length > 0 
+        ? setsLogged.reduce((sum, s) => sum + s.reps, 0)
+        : (isFailed ? ((exerciseFailureState[ex.id]?.setsDone || 1) * ex.reps) + (exerciseFailureState[ex.id]?.actualReps || 1) : plannedVol);
 
       totalPlannedVolume += plannedVol;
       totalAchievedVolume += achievedVol;
@@ -1714,7 +1771,8 @@ export default function App() {
         rpe: sessionRpeState[ex.id] || 8,
         plannedVolume: plannedVol,
         achievedVolume: achievedVol,
-        failed: isFailed
+        failed: isFailed,
+        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight })) : undefined
       };
     });
 
@@ -1771,6 +1829,8 @@ export default function App() {
     setWorkoutModalOpen(false);
     setSessionRpeState({});
     setExerciseFailureState({});
+    setExerciseSetsState({});
+    setRestTimerActive(false);
     setSessionNote('');
 
     // Smooth scroll to top of screen
@@ -4887,23 +4947,34 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             )}
                           </div>
                           
-                          <div className="space-y-1.5 border-t border-viking-gold/15 pt-2.5">
+                          <div className="space-y-2.5 border-t border-viking-gold/15 pt-2.5">
                             {sess.exercises.map((ex, eidx) => (
-                              <div key={eidx} className="flex justify-between items-center text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-viking-silver font-medium">{ex.name}</span>
-                                  {ex.failed && (
-                                    <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
-                                  )}
+                              <div key={eidx} className="space-y-1">
+                                <div className="flex justify-between items-center text-xs">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-viking-silver font-medium">{ex.name}</span>
+                                    {ex.failed && (
+                                      <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
+                                      <span className="text-[10px] text-viking-silver font-mono">
+                                        {ex.achievedVolume}/{ex.plannedVolume} reps
+                                      </span>
+                                    )}
+                                    <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
-                                    <span className="text-[10px] text-viking-silver font-mono">
-                                      {ex.achievedVolume}/{ex.plannedVolume} reps
-                                    </span>
-                                  )}
-                                  <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
-                                </div>
+                                {ex.sets && ex.sets.length > 0 && (
+                                  <div className="pl-2.5 flex flex-wrap gap-1 text-[9px]">
+                                    {ex.sets.map((s, sidx) => (
+                                      <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono">
+                                        S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -6247,21 +6318,32 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               
                               <div className="text-xs bg-black/40 p-2.5 rounded-lg border border-viking-gold/10 space-y-1.5">
                                 {sess.exercises.map((e, eIdx) => (
-                                  <div key={eIdx} className="flex justify-between items-center">
-                                    <div className="flex items-center gap-1">
-                                      <span>{e.name}</span>
-                                      {e.failed && (
-                                        <span className="text-[8px] bg-red-950 text-red-400 font-bold px-1 rounded border border-red-900/40">FALHOU</span>
-                                      )}
+                                  <div key={eIdx} className="space-y-1 py-1 border-b border-viking-gold/5 last:border-0 last:pb-0">
+                                    <div className="flex justify-between items-center">
+                                      <div className="flex items-center gap-1">
+                                        <span>{e.name}</span>
+                                        {e.failed && (
+                                          <span className="text-[8px] bg-red-950 text-red-400 font-bold px-1 rounded border border-red-900/40">FALHOU</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {e.achievedVolume !== undefined && e.plannedVolume !== undefined && (
+                                          <span className="text-[10px] text-viking-silver/60 font-mono">
+                                            ({e.achievedVolume}/{e.plannedVolume})
+                                          </span>
+                                        )}
+                                        <strong className={e.rpe >= 9 ? 'text-viking-red font-bold' : 'text-[#e0d3a8]'}>RPE {e.rpe}</strong>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      {e.achievedVolume !== undefined && e.plannedVolume !== undefined && (
-                                        <span className="text-[10px] text-viking-silver/60">
-                                          ({e.achievedVolume}/{e.plannedVolume})
-                                        </span>
-                                      )}
-                                      <strong className={e.rpe >= 9 ? 'text-viking-red font-bold' : 'text-[#e0d3a8]'}>RPE {e.rpe}</strong>
-                                    </div>
+                                    {e.sets && e.sets.length > 0 && (
+                                      <div className="pl-2 flex flex-wrap gap-1 text-[9px]">
+                                        {e.sets.map((s, sidx) => (
+                                          <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver/80 font-mono">
+                                            S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -7534,6 +7616,103 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </div>
                 </div>
 
+                {/* VIKING REST TIMER */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-[#1a1210] to-[#120b09] border border-viking-gold/25 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2.5 rounded-lg bg-viking-gold/10 border border-viking-gold/25 flex items-center justify-center ${restTimerActive ? 'animate-pulse text-viking-gold' : 'text-viking-silver'}`}>
+                      <Timer className="w-5 h-5 animate-spin-slow" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                        Cronômetro de Descanso Viking
+                      </p>
+                      <p className="text-[10px] text-viking-silver">Regule seu tempo de intervalo para manter a intensidade alta!</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                    {/* Time Display */}
+                    <div className="bg-black/60 px-4 py-2 rounded-xl border border-viking-gold/15 flex items-center justify-center font-mono text-xl font-black tracking-widest text-viking-gold min-w-[90px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]">
+                      {(() => {
+                        const mins = Math.floor(restTimerRemaining / 60);
+                        const secs = restTimerRemaining % 60;
+                        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                      })()}
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRestTimerActive(false);
+                          setRestTimerRemaining(prev => Math.max(0, prev - 30));
+                        }}
+                        className="p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[10px] font-black cursor-pointer transition-all"
+                        title="Remover 30 segundos"
+                      >
+                        -30s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRestTimerActive(false);
+                          setRestTimerRemaining(prev => prev + 30);
+                        }}
+                        className="p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[10px] font-black cursor-pointer transition-all"
+                        title="Adicionar 30 segundos"
+                      >
+                        +30s
+                      </button>
+
+                      {/* Play / Pause */}
+                      <button
+                        type="button"
+                        onClick={() => setRestTimerActive(!restTimerActive)}
+                        className={`p-2 rounded-lg text-black font-black flex items-center justify-center cursor-pointer transition-all ${restTimerActive ? 'bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.4)]' : 'bg-[#d4af37] hover:brightness-110'}`}
+                        title={restTimerActive ? 'Pausar' : 'Iniciar'}
+                      >
+                        {restTimerActive ? <Pause className="w-4 h-4 text-black" /> : <Play className="w-4 h-4 text-black fill-black" />}
+                      </button>
+
+                      {/* Reset */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRestTimerActive(false);
+                          setRestTimerRemaining(restTimerSeconds);
+                        }}
+                        className="p-2 rounded-lg bg-[#0d0908] hover:bg-[#140e0c] text-viking-silver hover:text-viking-gold border border-viking-gold/20 cursor-pointer transition-all"
+                        title="Reiniciar"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Adjust Presets */}
+                    <div className="flex gap-1 bg-black/30 p-1 rounded-lg border border-viking-gold/5 text-[9px] font-bold">
+                      {[60, 90, 120, 180].map(sec => {
+                        const label = sec === 60 ? '1m' : sec === 90 ? '1m30' : sec === 120 ? '2m' : '3m';
+                        return (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => {
+                              setRestTimerActive(false);
+                              setRestTimerSeconds(sec);
+                              setRestTimerRemaining(sec);
+                              showToast(`Intervalo ajustado para ${label}!`, 'info');
+                            }}
+                            className={`px-2 py-1 rounded transition-all cursor-pointer ${restTimerSeconds === sec ? 'bg-viking-gold/20 text-viking-gold border border-viking-gold/30' : 'text-viking-silver hover:text-viking-gold'}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
                 {/* RPE Explanatory note */}
                 <div className="p-3.5 rounded-xl border border-dashed border-viking-gold/25 text-[11px] text-viking-silver leading-relaxed flex gap-2.5 bg-viking-gold/5">
                   <Info className="w-5 h-5 text-viking-gold shrink-0" />
@@ -7675,6 +7854,135 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               )}
                             </div>
                           )}
+
+                          {/* SÉRIES E REPETIÇÕES (Custom log per set) */}
+                          <div className="mb-4 p-4 rounded-xl bg-[#0d0908]/80 border border-viking-gold/25 space-y-3">
+                            <div className="flex justify-between items-center pb-2 border-b border-viking-gold/15">
+                              <span className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-1.5">
+                                <Dumbbell className="w-4 h-4 text-viking-gold" /> Séries e Repetições Realizadas
+                              </span>
+                              <span className="text-[10px] text-viking-gold font-bold uppercase">Prescrito: {ex.sets}x{ex.reps}</span>
+                            </div>
+
+                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                              {(exerciseSetsState[ex.id] || []).map((set, setIdx) => (
+                                <div key={setIdx} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/40 border border-viking-gold/5 hover:border-viking-gold/10 transition-all">
+                                  {/* Set label */}
+                                  <div className="flex items-center gap-1.5 min-w-[55px]">
+                                    <span className="text-[9px] font-black bg-viking-gold text-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                      SET {setIdx + 1}
+                                    </span>
+                                  </div>
+
+                                  {/* Reps selector */}
+                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1">
+                                    <span className="text-[9px] text-viking-silver/60 uppercase font-bold mr-1">Reps:</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExerciseSetsState(prev => {
+                                          const sets = [...(prev[ex.id] || [])];
+                                          if (sets[setIdx]) {
+                                            sets[setIdx] = { ...sets[setIdx], reps: Math.max(0, sets[setIdx].reps - 1) };
+                                          }
+                                          return { ...prev, [ex.id]: sets };
+                                        });
+                                      }}
+                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer"
+                                    >
+                                      -
+                                    </button>
+                                    <input
+                                      type="number"
+                                      value={set.reps}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setExerciseSetsState(prev => {
+                                          const sets = [...(prev[ex.id] || [])];
+                                          if (sets[setIdx]) {
+                                            sets[setIdx] = { ...sets[setIdx], reps: val };
+                                          }
+                                          return { ...prev, [ex.id]: sets };
+                                        });
+                                      }}
+                                      className="w-10 bg-transparent text-center font-mono text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExerciseSetsState(prev => {
+                                          const sets = [...(prev[ex.id] || [])];
+                                          if (sets[setIdx]) {
+                                            sets[setIdx] = { ...sets[setIdx], reps: sets[setIdx].reps + 1 };
+                                          }
+                                          return { ...prev, [ex.id]: sets };
+                                        });
+                                      }}
+                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+
+                                  {/* Weight selector */}
+                                  <div className="flex items-center gap-1 bg-[#140e0c] border border-viking-gold/15 rounded-lg px-2 py-1 flex-1 max-w-[110px]">
+                                    <span className="text-[9px] text-viking-silver/60 uppercase font-bold">Peso:</span>
+                                    <input
+                                      type="number"
+                                      value={set.weight || ''}
+                                      placeholder="0"
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        setExerciseSetsState(prev => {
+                                          const sets = [...(prev[ex.id] || [])];
+                                          if (sets[setIdx]) {
+                                            sets[setIdx] = { ...sets[setIdx], weight: val };
+                                          }
+                                          return { ...prev, [ex.id]: sets };
+                                        });
+                                      }}
+                                      className="w-full bg-transparent text-right font-mono text-xs font-bold text-viking-gold focus:outline-none"
+                                    />
+                                    <span className="text-[9px] text-viking-silver/70 font-bold">kg</span>
+                                  </div>
+
+                                  {/* Delete set */}
+                                  <button
+                                    type="button"
+                                    disabled={(exerciseSetsState[ex.id] || []).length <= 1}
+                                    onClick={() => {
+                                      setExerciseSetsState(prev => {
+                                        const sets = (prev[ex.id] || []).filter((_, i) => i !== setIdx);
+                                        return { ...prev, [ex.id]: sets };
+                                      });
+                                    }}
+                                    className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-all"
+                                    title="Remover série"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExerciseSetsState(prev => {
+                                    const sets = [...(prev[ex.id] || [])];
+                                    const lastSet = sets[sets.length - 1] || { reps: ex.reps || 8, weight: 0 };
+                                    sets.push({ reps: lastSet.reps, weight: lastSet.weight });
+                                    return { ...prev, [ex.id]: sets };
+                                  });
+                                  showToast('Série adicionada!', 'success');
+                                }}
+                                className="flex-1 py-1.5 rounded-lg border border-dashed border-viking-gold/30 hover:border-viking-gold/60 text-viking-silver hover:text-viking-gold text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer bg-viking-gold/[0.02] transition-all"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Adicionar Série (Set)
+                              </button>
+                            </div>
+                          </div>
 
                           {/* Interactive Failure & Volume Adjustment Section */}
                           <div className="my-4 p-4 rounded-xl bg-black/40 border border-viking-gold/15 space-y-3">
