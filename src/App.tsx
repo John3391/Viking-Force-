@@ -184,7 +184,7 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
   const [exerciseFailureState, setExerciseFailureState] = useState<Record<string, { failed: boolean; actualReps: number; setsDone: number }>>({});
-  const [exerciseSetsState, setExerciseSetsState] = useState<Record<string, { reps: number; weight: number }[]>>({});
+  const [exerciseSetsState, setExerciseSetsState] = useState<Record<string, { reps: number; weight: number; done?: boolean }[]>>({});
   const [restTimerSeconds, setRestTimerSeconds] = useState<number>(120);
   const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
   const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
@@ -351,28 +351,33 @@ export default function App() {
       
       currentExercises.forEach(ex => {
         let defaultWeight = 0;
-        const exNameLower = ex.name.toLowerCase();
-        let pr: number | null = null;
-        if (ex.baseWeight) {
-          pr = ex.baseWeight;
-        } else if (activeStudentProfile) {
-          if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-            pr = activeStudentProfile.prs.squat;
-          } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-            pr = activeStudentProfile.prs.bench;
-          } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-            pr = activeStudentProfile.prs.deadlift;
+        if (ex.main) {
+          const exNameLower = ex.name.toLowerCase();
+          let pr = ex.baseWeight || null;
+          if (!pr && activeStudentProfile) {
+            if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+              pr = activeStudentProfile.prs.squat;
+            } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+              pr = activeStudentProfile.prs.bench;
+            } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+              pr = activeStudentProfile.prs.deadlift;
+            }
           }
-        }
-        if (pr && typeof ex.intensity === 'number') {
-          defaultWeight = Math.round(pr * ex.intensity);
+          if (pr && typeof ex.intensity === 'number') {
+            defaultWeight = Math.round(pr * ex.intensity);
+          } else if (pr) {
+            defaultWeight = pr;
+          }
+        } else {
+          defaultWeight = ex.baseWeight || 0;
         }
         
         // Populate sets with ex.sets count
         const setsCount = ex.sets || 3;
         initialSets[ex.id] = Array.from({ length: setsCount }, () => ({
           reps: ex.reps || 8,
-          weight: defaultWeight
+          weight: defaultWeight,
+          done: false
         }));
       });
       
@@ -1768,8 +1773,9 @@ export default function App() {
       const isFailed = !!exerciseFailureState[ex.id]?.failed;
       const plannedVol = ex.sets * ex.reps;
       
+      const doneSets = setsLogged.filter(s => s.done);
       const achievedVol = setsLogged.length > 0 
-        ? setsLogged.reduce((sum, s) => sum + s.reps, 0)
+        ? (doneSets.length > 0 ? doneSets.reduce((sum, s) => sum + s.reps, 0) : setsLogged.reduce((sum, s) => sum + s.reps, 0))
         : (isFailed ? ((exerciseFailureState[ex.id]?.setsDone || 1) * ex.reps) + (exerciseFailureState[ex.id]?.actualReps || 1) : plannedVol);
 
       totalPlannedVolume += plannedVol;
@@ -1781,7 +1787,7 @@ export default function App() {
         plannedVolume: plannedVol,
         achievedVolume: achievedVol,
         failed: isFailed,
-        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight })) : undefined
+        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight, done: s.done })) : undefined
       };
     });
 
@@ -3277,7 +3283,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <div>
                         <p className="text-[10px] text-viking-silver uppercase font-viking-medieval">Intensidade</p>
                         <p className="text-[#e0d3a8] font-bold mt-0.5">
-                          {typeof ex.intensity === 'number' ? `${Math.round(ex.intensity * 100)}% 1RM` : ex.intensity}
+                          {ex.main ? (
+                            ex.baseWeight && typeof ex.intensity === 'number' ? (
+                              `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)`
+                            ) : typeof ex.intensity === 'number' ? (
+                              `${Math.round(ex.intensity * 100)}% 1RM`
+                            ) : (
+                              ex.intensity
+                            )
+                          ) : (
+                            ex.baseWeight ? (
+                              `${ex.baseWeight} kg` + (ex.intensity && ex.intensity !== 'carga livre' ? ` (${ex.intensity})` : '')
+                            ) : (
+                              ex.intensity
+                            )
+                          )}
                         </p>
                       </div>
                       <div className="border-l border-viking-gold/15 pl-4">
@@ -6654,21 +6674,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 />
                               </div>
 
-                              {ex.main && (
-                                <div>
-                                  <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">
-                                    <Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)
-                                  </label>
-                                  <input 
-                                    type="number"
-                                    value={ex.baseWeight || ''}
-                                    onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)}
-                                    placeholder="Ex: 150"
-                                    className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                    title="Defina a carga máxima (1RM) ou carga de referência para este exercício para calcular a porcentagem"
-                                  />
-                                </div>
-                              )}
+                              <div>
+                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">
+                                  {ex.main ? (
+                                    <>
+                                      <Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)
+                                    </>
+                                  )}
+                                </label>
+                                <input 
+                                  type="number"
+                                  value={ex.baseWeight || ''}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)}
+                                  placeholder={ex.main ? "Ex: 150" : "Ex: 24"}
+                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                  title={ex.main ? "Defina a carga de referência para calcular a porcentagem do lift" : "Defina a carga exata sugerida para o aluno neste exercício acessório"}
+                                />
+                              </div>
 
                               {ex.main && typeof ex.intensity === 'number' && (
                                 <div className="col-span-2 text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver mt-1">
@@ -7884,7 +7910,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 })()}
                               </div>
                             </div>
-                            <span className="text-xs text-viking-silver">Séries: <strong className="text-white">{ex.sets}x{ex.reps}</strong> @ <strong className="text-viking-gold">{intensityStr}</strong></span>
+                            <span className="text-xs text-viking-silver">
+                              Séries: <strong className="text-white">{ex.sets}x{ex.reps}</strong> @{' '}
+                              <strong className="text-viking-gold">
+                                {ex.main ? (
+                                  currentPr && typeof ex.intensity === 'number' ? (
+                                    `${Math.round(currentPr * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)`
+                                  ) : (
+                                    intensityStr
+                                  )
+                                ) : (
+                                  ex.baseWeight ? (
+                                    `${ex.baseWeight} kg` + (ex.intensity && ex.intensity !== 'carga livre' ? ` (${ex.intensity})` : '')
+                                  ) : (
+                                    intensityStr
+                                  )
+                                )}
+                              </strong>
+                            </span>
                           </div>
 
                           {ex.techniqueTips && (
@@ -7954,12 +7997,52 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <span className="text-[10px] text-viking-gold font-bold uppercase">Prescrito: {ex.sets}x{ex.reps}</span>
                             </div>
 
-                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                               {(exerciseSetsState[ex.id] || []).map((set, setIdx) => (
-                                <div key={setIdx} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/40 border border-viking-gold/5 hover:border-viking-gold/10 transition-all">
+                                <div 
+                                  key={setIdx} 
+                                  className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 p-2 rounded-lg transition-all border ${
+                                    set.done 
+                                      ? 'bg-green-950/20 border-green-500/30' 
+                                      : 'bg-black/40 border-viking-gold/5 hover:border-viking-gold/10'
+                                  }`}
+                                >
+                                  {/* Checkoff / Done Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExerciseSetsState(prev => {
+                                        const sets = [...(prev[ex.id] || [])];
+                                        if (sets[setIdx]) {
+                                          const nextDone = !sets[setIdx].done;
+                                          sets[setIdx] = { ...sets[setIdx], done: nextDone };
+                                          if (nextDone) {
+                                            // Start Viking rest timer automatically!
+                                            setRestTimerRemaining(restTimerSeconds);
+                                            setRestTimerActive(true);
+                                            showToast(`⚔️ Série ${setIdx + 1} Concluída! Descanso iniciado de ${Math.floor(restTimerSeconds / 60)}m ${restTimerSeconds % 60}s.`, 'success');
+                                          }
+                                        }
+                                        return { ...prev, [ex.id]: sets };
+                                      });
+                                    }}
+                                    className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all shrink-0 cursor-pointer ${
+                                      set.done 
+                                        ? 'bg-green-500 border-green-400 text-black shadow-[0_0_8px_rgba(34,197,94,0.6)] hover:bg-green-600' 
+                                        : 'bg-black/40 border-viking-gold/30 text-viking-gold/40 hover:border-viking-gold hover:text-viking-gold hover:bg-viking-gold/5'
+                                    }`}
+                                    title={set.done ? "Desmarcar Série" : "Marcar como Feito"}
+                                  >
+                                    <Check className={`w-4 h-4 stroke-[3] ${set.done ? 'text-black' : ''}`} />
+                                  </button>
+
                                   {/* Set label */}
                                   <div className="flex items-center gap-1.5 min-w-[55px]">
-                                    <span className="text-[9px] font-black bg-viking-gold text-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider transition-all ${
+                                      set.done 
+                                        ? 'bg-green-500/20 text-green-400 border border-green-500/20' 
+                                        : 'bg-viking-gold text-black'
+                                    }`}>
                                       SET {setIdx + 1}
                                     </span>
                                   </div>
@@ -7969,6 +8052,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <span className="text-[9px] text-viking-silver/60 uppercase font-bold mr-1">Reps:</span>
                                     <button
                                       type="button"
+                                      disabled={set.done}
                                       onClick={() => {
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
@@ -7978,13 +8062,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer"
+                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                                     >
                                       -
                                     </button>
                                     <input
                                       type="number"
                                       value={set.reps}
+                                      disabled={set.done}
                                       onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
                                         setExerciseSetsState(prev => {
@@ -7995,10 +8080,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-10 bg-transparent text-center font-mono text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      className="w-10 bg-transparent text-center font-mono text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:text-white/40"
                                     />
                                     <button
                                       type="button"
+                                      disabled={set.done}
                                       onClick={() => {
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
@@ -8008,7 +8094,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer"
+                                      className="w-5 h-5 rounded bg-viking-gold/10 text-viking-gold flex items-center justify-center font-bold text-xs hover:bg-viking-gold/20 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                                     >
                                       +
                                     </button>
@@ -8020,10 +8106,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     <input
                                       type="number"
                                       value={set.weight || ''}
-                                      disabled={ex.main}
+                                      disabled={set.done}
                                       placeholder="0"
                                       onChange={(e) => {
-                                        if (ex.main) return;
                                         const val = parseFloat(e.target.value) || 0;
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
@@ -8033,11 +8118,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           return { ...prev, [ex.id]: sets };
                                         });
                                       }}
-                                      className={`w-full bg-transparent text-right font-mono text-xs font-bold focus:outline-none ${ex.main ? 'text-viking-gold/60 cursor-not-allowed font-black' : 'text-viking-gold'}`}
-                                      title={ex.main ? "Carga do lift calculada pelo treinador (Bloqueada)" : "Carga do acessório livre"}
+                                      className="w-full bg-transparent text-right font-mono text-xs font-bold focus:outline-none text-viking-gold disabled:text-viking-gold/50"
+                                      title={ex.main ? "Carga sugerida pelo treinador. Você pode alterar se realizou uma carga diferente." : "Carga realizada (kg)"}
                                     />
                                     <span className="text-[9px] text-viking-silver/70 font-bold">kg</span>
-                                    {ex.main && <Lock className="w-2.5 h-2.5 text-viking-gold/40 shrink-0" title="Calculada e bloqueada pelo Treinador" />}
+                                    {ex.main && <Flame className="w-2.5 h-2.5 text-viking-gold/45 shrink-0" title="Carga sugerida pelo treinador. Altere se precisar ajustar." />}
                                   </div>
 
                                   {/* Delete set */}
@@ -8050,7 +8135,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         return { ...prev, [ex.id]: sets };
                                       });
                                     }}
-                                    className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-all"
+                                    className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-all shrink-0"
                                     title="Remover série"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -8067,11 +8152,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     const sets = [...(prev[ex.id] || [])];
                                     let defaultWeight = 0;
                                     if (ex.main) {
-                                      let pr: number | null = null;
+                                      let pr = ex.baseWeight || null;
                                       const exNameLower = ex.name.toLowerCase();
-                                      if (ex.baseWeight) {
-                                        pr = ex.baseWeight;
-                                      } else if (activeStudentProfile) {
+                                      if (!pr && activeStudentProfile) {
                                         if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
                                           pr = activeStudentProfile.prs.squat;
                                         } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
@@ -8082,10 +8165,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       }
                                       if (pr && typeof ex.intensity === 'number') {
                                         defaultWeight = Math.round(pr * ex.intensity);
+                                      } else if (pr) {
+                                        defaultWeight = pr;
                                       }
+                                    } else {
+                                      defaultWeight = ex.baseWeight || 0;
                                     }
                                     const lastSet = sets[sets.length - 1] || { reps: ex.reps || 8, weight: defaultWeight };
-                                    sets.push({ reps: lastSet.reps, weight: ex.main ? defaultWeight : lastSet.weight });
+                                    sets.push({ reps: lastSet.reps, weight: lastSet.weight || defaultWeight });
                                     return { ...prev, [ex.id]: sets };
                                   });
                                   showToast('Série adicionada!', 'success');

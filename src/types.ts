@@ -39,6 +39,7 @@ export interface TrainingProgram {
 export interface LoggedSet {
   reps: number;
   weight: number;
+  done?: boolean;
 }
 
 export interface LoggedExercise {
