@@ -174,6 +174,8 @@ export default function App() {
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
   const [workoutLayout, setWorkoutLayout] = useState<'modal' | 'sidebar'>('modal');
+  const [workoutViewMode, setWorkoutViewMode] = useState<'list' | 'slide'>('list');
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
@@ -7494,6 +7496,36 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </div>
                 </div>
 
+                {/* Mode toggle */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-viking-gold" /> Modelo de Visualização
+                    </p>
+                    <p className="text-[10px] text-viking-silver mt-0.5">Alterne entre ver todos os exercícios ou focar em um por um deslizando-os.</p>
+                  </div>
+                  <div className="flex gap-1.5 bg-black/40 p-1 rounded-lg border border-viking-gold/10 self-start sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setWorkoutViewMode('list')}
+                      className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer ${workoutViewMode === 'list' ? 'bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]' : 'text-viking-silver hover:text-viking-gold'}`}
+                    >
+                      Lista Completa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkoutViewMode('slide');
+                        setCurrentExerciseIndex(0);
+                        showToast('Modo de Foco Ativado! Deslize ou use os botões para avançar.', 'info');
+                      }}
+                      className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${workoutViewMode === 'slide' ? 'bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]' : 'text-viking-silver hover:text-viking-gold'}`}
+                    >
+                      <Sparkles className="w-3 h-3 text-current animate-pulse" /> Modo Slide Foco
+                    </button>
+                  </div>
+                </div>
+
                 {/* RPE Explanatory note */}
                 <div className="p-3.5 rounded-xl border border-dashed border-viking-gold/25 text-[11px] text-viking-silver leading-relaxed flex gap-2.5 bg-viking-gold/5">
                   <Info className="w-5 h-5 text-viking-gold shrink-0" />
@@ -7509,8 +7541,20 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       Nenhum exercício prescrito para a Semana {selectedWeek} - Treino {selectedDay} no momento.
                     </div>
                   ) : (
-                    (trainingProgram.weeks[selectedWeek]?.[selectedDay] || []).map((ex, idx) => {
-                      // Determine proper 1RM based on exercise identifier
+                    (() => {
+                      const list = trainingProgram.weeks[selectedWeek]?.[selectedDay] || [];
+                      const filteredList = workoutViewMode === 'list' 
+                        ? list 
+                        : [list[currentExerciseIndex]].filter(Boolean);
+
+                      return (
+                        <div className="space-y-4">
+                          <AnimatePresence mode="wait">
+                            {filteredList.map((ex) => {
+                              const actualIdx = list.findIndex(item => item.id === ex.id);
+                              const idx = actualIdx !== -1 ? actualIdx : 0;
+                              
+                              // Determine proper 1RM based on exercise identifier
                       let currentPr: number | null = null;
                       const exNameLower = ex.name.toLowerCase();
                       if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
@@ -7525,7 +7569,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       const warmupArray = ex.main ? getWarmupSteps(currentPr, ex.intensity, ex.warmup) : null;
 
                       return (
-                        <div key={ex.id || idx} className={`p-5 rounded-2xl border ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'}`}>
+                        <motion.div 
+                          key={ex.id || idx}
+                          initial={workoutViewMode === 'slide' ? { opacity: 0, x: 25 } : { opacity: 1, x: 0 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={workoutViewMode === 'slide' ? { opacity: 0, x: -25 } : undefined}
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          className={`p-5 rounded-2xl border ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'}`}
+                        >
                           
                           <div className="flex justify-between items-start gap-2 mb-3">
                             <div>
@@ -7793,11 +7844,71 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             </div>
                           </div>
 
-                        </div>
+                        </motion.div>
                       );
-                    })
+                    })}
+                  </AnimatePresence>
+
+                  {/* Slide View Navigation Panel */}
+                  {workoutViewMode === 'slide' && list.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border border-viking-gold/25 shadow-xl relative overflow-hidden">
+                      <div className="absolute inset-0 bg-viking-gold/[0.02] pointer-events-none" />
+                      
+                      <button
+                        type="button"
+                        disabled={currentExerciseIndex === 0}
+                        onClick={() => {
+                          setCurrentExerciseIndex(prev => Math.max(0, prev - 1));
+                        }}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-[#e0d3a8] hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:border-viking-gold/10 disabled:text-viking-silver/50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Anterior
+                      </button>
+                      
+                      <div className="flex flex-col items-center gap-1.5 py-1">
+                        <span className="text-[9px] text-viking-silver uppercase font-black tracking-widest">Navegação Viking</span>
+                        <div className="flex gap-2 items-center">
+                          {list.map((_, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setCurrentExerciseIndex(i)}
+                              className={`w-3 h-3 rounded-full transition-all duration-300 relative ${
+                                i === currentExerciseIndex 
+                                  ? 'bg-viking-gold scale-125 shadow-[0_0_10px_rgba(212,175,55,0.8)]' 
+                                  : 'bg-viking-silver/20 hover:bg-viking-gold/40'
+                              }`}
+                              title={`Ir para o exercício ${i + 1}`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[11px] font-black text-viking-gold mt-1">
+                          EXERCÍCIO {currentExerciseIndex + 1} DE {list.length}
+                        </span>
+                      </div>
+
+                      {currentExerciseIndex === list.length - 1 ? (
+                        <div className="w-full sm:w-auto bg-[#140e0c] border border-green-500/30 text-green-400 px-4 py-2.5 rounded-xl text-center text-[10px] font-black uppercase tracking-widest animate-pulse">
+                          ⚔️ Último Exercício!
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCurrentExerciseIndex(prev => Math.min(list.length - 1, prev + 1));
+                          }}
+                          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-[#e0d3a8] hover:text-white flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                        >
+                          Próximo <ArrowRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
+              );
+            })()
+          )}
+        </div>
 
                 {/* Session observation box */}
                 <div className="space-y-2 pt-2">
