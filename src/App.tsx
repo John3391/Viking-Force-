@@ -173,9 +173,10 @@ export default function App() {
 
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
-  const [workoutLayout, setWorkoutLayout] = useState<'modal' | 'sidebar'>('modal');
-  const [workoutViewMode, setWorkoutViewMode] = useState<'list' | 'slide'>('list');
+  const [workoutLayout, setWorkoutLayout] = useState<'modal' | 'sidebar'>('sidebar');
+  const [workoutViewMode, setWorkoutViewMode] = useState<'list' | 'slide'>('slide');
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
+  const [slideDirection, setSlideDirection] = useState<'forward' | 'backward'>('forward');
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedDay, setSelectedDay] = useState<string>('A');
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
@@ -314,13 +315,22 @@ export default function App() {
   // Auto-scroll chat container to the bottom when chat is active or new messages arrive
   useEffect(() => {
     if (drawerType === 'chat' && chatMessagesContainerRef.current) {
-      requestAnimationFrame(() => {
-        if (chatMessagesContainerRef.current) {
-          chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
-        }
-      });
+       requestAnimationFrame(() => {
+         if (chatMessagesContainerRef.current) {
+           chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+         }
+       });
     }
   }, [drawerType, activeChatStudentEmail, currentUser?.email, studentsData, drawerOpen]);
+
+  // Reset workout panel view configuration to sidebar + slide mode on open
+  useEffect(() => {
+    if (workoutModalOpen) {
+      setWorkoutLayout('sidebar');
+      setWorkoutViewMode('slide');
+      setCurrentExerciseIndex(0);
+    }
+  }, [workoutModalOpen]);
 
   // --- LOCALSTORAGE & FIREBASE SYNC ---
   useEffect(() => {
@@ -7382,15 +7392,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       <AnimatePresence>
         {workoutModalOpen && activeStudentProfile && (
           <>
-            {workoutLayout === 'modal' ? (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setWorkoutModalOpen(false)}
-                className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-              />
-            ) : null}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setWorkoutModalOpen(false)}
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50"
+            />
             
             <motion.div 
               key={workoutLayout}
@@ -7571,10 +7579,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       return (
                         <motion.div 
                           key={ex.id || idx}
-                          initial={workoutViewMode === 'slide' ? { opacity: 0, x: 25 } : { opacity: 1, x: 0 }}
+                          initial={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? 50 : -50 } : { opacity: 1, x: 0 }}
                           animate={{ opacity: 1, x: 0 }}
-                          exit={workoutViewMode === 'slide' ? { opacity: 0, x: -25 } : undefined}
-                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          exit={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? -50 : 50 } : undefined}
+                          transition={{ duration: 0.28, ease: 'easeInOut' }}
                           className={`p-5 rounded-2xl border ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'}`}
                         >
                           
@@ -7858,6 +7866,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         type="button"
                         disabled={currentExerciseIndex === 0}
                         onClick={() => {
+                          setSlideDirection('backward');
                           setCurrentExerciseIndex(prev => Math.max(0, prev - 1));
                         }}
                         className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-[#e0d3a8] hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:border-viking-gold/10 disabled:text-viking-silver/50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
@@ -7872,7 +7881,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <button
                               key={i}
                               type="button"
-                              onClick={() => setCurrentExerciseIndex(i)}
+                              onClick={() => {
+                                setSlideDirection(i > currentExerciseIndex ? 'forward' : 'backward');
+                                setCurrentExerciseIndex(i);
+                              }}
                               className={`w-3 h-3 rounded-full transition-all duration-300 relative ${
                                 i === currentExerciseIndex 
                                   ? 'bg-viking-gold scale-125 shadow-[0_0_10px_rgba(212,175,55,0.8)]' 
@@ -7895,6 +7907,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <button
                           type="button"
                           onClick={() => {
+                            setSlideDirection('forward');
                             setCurrentExerciseIndex(prev => Math.min(list.length - 1, prev + 1));
                           }}
                           className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-[#e0d3a8] hover:text-white flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
