@@ -189,6 +189,12 @@ export default function App() {
   const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
   const [sessionNote, setSessionNote] = useState<string>('');
 
+  // Touch swiping states for mobile exercise card slide navigation
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [touchEndY, setTouchEndY] = useState<number | null>(null);
+
   // Program Editor state (Trainer)
   const [editorWeek, setEditorWeek] = useState<number>(1);
   const [editorDay, setEditorDay] = useState<string>('A');
@@ -7592,7 +7598,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-viking-gold" /> Modelo de Visualização
                     </p>
-                    <p className="text-[10px] text-viking-silver mt-0.5">Alterne entre ver todos os exercícios ou focar em um por um deslizando-os.</p>
+                    <p className="text-[10px] text-viking-silver mt-0.5">Alterne entre ver todos os exercícios ou focar em um por um. No celular, deslize a tela (swipe) para os lados para navegar!</p>
                   </div>
                   <div className="flex gap-1.5 bg-black/40 p-1 rounded-lg border border-viking-gold/10 self-start sm:self-auto shrink-0">
                     <button
@@ -7762,7 +7768,57 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           animate={{ opacity: 1, x: 0 }}
                           exit={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? -50 : 50 } : undefined}
                           transition={{ duration: 0.28, ease: 'easeInOut' }}
-                          className={`p-5 rounded-2xl border ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'}`}
+                          className={`p-5 rounded-2xl border relative ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'} select-none`}
+                          onTouchStart={(e) => {
+                            if (workoutViewMode !== 'slide') return;
+                            const tagName = (e.target as HTMLElement).tagName.toLowerCase();
+                            if (
+                              tagName === 'input' || 
+                              tagName === 'button' || 
+                              tagName === 'textarea' || 
+                              (e.target as HTMLElement).closest('button') || 
+                              (e.target as HTMLElement).closest('input') ||
+                              (e.target as HTMLElement).closest('textarea')
+                            ) {
+                              return; // Ignore if interacting with form elements or buttons
+                            }
+                            setTouchStartX(e.targetTouches[0].clientX);
+                            setTouchStartY(e.targetTouches[0].clientY);
+                            setTouchEndX(e.targetTouches[0].clientX);
+                            setTouchEndY(e.targetTouches[0].clientY);
+                          }}
+                          onTouchMove={(e) => {
+                            if (workoutViewMode !== 'slide' || touchStartX === null) return;
+                            setTouchEndX(e.targetTouches[0].clientX);
+                            setTouchEndY(e.targetTouches[0].clientY);
+                          }}
+                          onTouchEnd={() => {
+                            if (workoutViewMode !== 'slide' || touchStartX === null || touchEndX === null || touchStartY === null || touchEndY === null) return;
+                            const diffX = touchStartX - touchEndX;
+                            const diffY = touchStartY - touchEndY;
+                            
+                            if (Math.abs(diffX) > Math.abs(diffY)) {
+                              if (Math.abs(diffX) > 60) { // minimum threshold of 60px
+                                if (diffX > 0) {
+                                  // Swiped left -> Next
+                                  if (currentExerciseIndex < list.length - 1) {
+                                    setSlideDirection('forward');
+                                    setCurrentExerciseIndex(prev => Math.min(list.length - 1, prev + 1));
+                                  }
+                                } else {
+                                  // Swiped right -> Previous
+                                  if (currentExerciseIndex > 0) {
+                                    setSlideDirection('backward');
+                                    setCurrentExerciseIndex(prev => Math.max(0, prev - 1));
+                                  }
+                                }
+                              }
+                            }
+                            setTouchStartX(null);
+                            setTouchStartY(null);
+                            setTouchEndX(null);
+                            setTouchEndY(null);
+                          }}
                         >
                           
                           <div className="flex justify-between items-start gap-2 mb-3">
