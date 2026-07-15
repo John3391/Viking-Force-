@@ -1,0 +1,15 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -681,13 +681,14 @@
+       unsubscribe();
+       if (unsubscribeStudents) {
+         unsubscribeStudents();
+-      const checkPaymentReminders = (autoCheck = false) => {
++      }
++    };
++  }, []);
++
++  const checkPaymentReminders = (autoCheck = false) => {
+     if (Object.keys(studentsData).length === 0) return;
+ 
+     const today = new Date();

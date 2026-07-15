@@ -347,9 +347,10 @@ export default function App() {
     if (!s) return;
     
     let nextDueDate = s.dueDate;
+
     if (s.dueDate) {
       const [year, month, day] = s.dueDate.split('-');
-      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
       if (s.plan === 'Mensal') date.setMonth(date.getMonth() + 1);
       else if (s.plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
       else if (s.plan === 'Semestral') date.setMonth(date.getMonth() + 6);
@@ -357,6 +358,7 @@ export default function App() {
       nextDueDate = date.toISOString().split('T')[0];
     } else {
       const date = new Date();
+      date.setHours(12, 0, 0, 0);
       if (s.plan === 'Mensal') date.setMonth(date.getMonth() + 1);
       else if (s.plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
       else if (s.plan === 'Semestral') date.setMonth(date.getMonth() + 6);
@@ -367,7 +369,7 @@ export default function App() {
     const newPayment = {
       id: 'pay_' + Date.now().toString(),
       amount: getPlanPrice(s.plan),
-      datePaid: new Date().toISOString().split('T')[0],
+      datePaid: new Date(new Date().setHours(12, 0, 0, 0)).toISOString().split('T')[0],
       plan: s.plan,
       dueDate: s.dueDate || 'N/A'
     };
@@ -683,32 +685,76 @@ export default function App() {
     };
   }, []);
 
+  const checkPaymentReminders = (autoCheck = false) => {
+    if (Object.keys(studentsData).length === 0) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const threeDaysFromNow = new Date(today);
+    threeDaysFromNow.setDate(today.getDate() + 3);
+
+    let anyUpdates = false;
+    const newStudentsData = { ...studentsData };
+    const expiringStudents: string[] = [];
+
+    Object.keys(newStudentsData).forEach(email => {
+      const student = newStudentsData[email];
+      if (!student.dueDate) return;
+
+      const [year, month, day] = student.dueDate.split('-');
+      if (!year || !month || !day) return;
+      
+      const dueDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+      
+      if (dueDate <= threeDaysFromNow) {
+        expiringStudents.push(student.name);
+
+        const formattedDate = student.dueDate.split('-').reverse().join('/');
+        const reminderText = `⚠️ Aviso automático: Seu plano está vencendo ou já venceu em ${formattedDate}. Por favor, regularize seu pagamento.`;
+        
+        const alreadyNotified = student.chatHistory?.some(
+          msg => msg.sender === 'trainer' && msg.text === reminderText
+        );
+
+        if (!alreadyNotified) {
+          const newMessage: ChatMessage = {
+            id: String(Date.now()) + Math.random().toString(36).substring(7),
+            sender: 'trainer',
+            text: reminderText,
+            timestamp: new Date().toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+          };
+
+          newStudentsData[email] = {
+            ...student,
+            chatHistory: [...(student.chatHistory || []), newMessage]
+          };
+          anyUpdates = true;
+        }
+      }
+    });
+
+    if (anyUpdates) {
+      saveStudentsToDB(newStudentsData);
+    }
+
+    if (expiringStudents.length > 0) {
+      const names = expiringStudents.join(', ');
+      if (autoCheck) {
+        setTimeout(() => {
+          showToast(`Aviso: ${expiringStudents.length} aluno(s) com vencimento a menos de 3 dias ou atrasado(s): ${names}`, 'warning');
+        }, 1500);
+      } else {
+        showToast(`Aviso: ${expiringStudents.length} aluno(s) com vencimento a menos de 3 dias ou atrasado(s): ${names}`, 'warning');
+      }
+    } else if (!autoCheck) {
+      showToast('Nenhum aluno com vencimento próximo.', 'info');
+    }
+  };
+
   useEffect(() => {
     if (isLoggedIn && currentUser?.role === 'trainer' && !hasCheckedDueDatesRef.current && Object.keys(studentsData).length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const threeDaysFromNow = new Date(today);
-      threeDaysFromNow.setDate(today.getDate() + 3);
-
-      const expiringStudents = (Object.values(studentsData) as StudentProfile[]).filter(student => {
-        if (!student.dueDate) return false;
-        const [year, month, day] = student.dueDate.split('-');
-        if (!year || !month || !day) return false;
-        
-        const dueDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        
-        // Check if the due date is within the next 3 days (or already past)
-        return dueDate <= threeDaysFromNow;
-      });
-
-      if (expiringStudents.length > 0) {
-        const names = expiringStudents.map(s => s.name).join(', ');
-        setTimeout(() => {
-          showToast(`Aviso: ${expiringStudents.length} aluno(s) com vencimento a menos de 3 dias ou atrasado(s): ${names}`, 'error');
-        }, 1500);
-      }
-
+      checkPaymentReminders(true);
       hasCheckedDueDatesRef.current = true;
     }
   }, [isLoggedIn, currentUser, studentsData]);
@@ -7152,12 +7198,19 @@ Equipe Viking Force`);
                     <p className="text-xs text-viking-silver/80">Controle de fluxo de caixa referente à prestação de serviços de treinamento esportivo.</p>
                      
                      <div className="flex gap-2">
-                       <button 
+                       <button
                          onClick={handleExportFinancialSummary}
                          className="flex-1 px-3 py-2 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
                        >
                          <FileDown className="w-3.5 h-3.5" />
                          Exportar Resumo (CSV)
+                       </button>
+                       <button
+                         onClick={() => checkPaymentReminders()}
+                         className="flex-1 px-3 py-2 rounded-xl bg-viking-silver/10 hover:bg-viking-silver/20 text-viking-silver border border-viking-silver/30 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                       >
+                         <Bell className="w-3.5 h-3.5" />
+                         Verificar Vencimentos
                        </button>
                      </div>
                     
