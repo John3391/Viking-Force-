@@ -20,6 +20,7 @@ export interface Exercise {
   baseWeight?: number; // Carga do lift (1RM ou Peso Base) configurado pelo treinador
   warmup?: WarmupStep[];
   techniqueTips?: string;
+  trainerNote?: string;
   videoUrl?: string;
   methodology?: 'standard' | 'backoff' | 'myoreps' | 'clusters' | 'dropset';
   methodologyDetails?: string;
@@ -100,6 +101,8 @@ export interface StudentProfile {
   targetEventId?: string;
   targetEventName?: string;
   publicNote?: string;
+  dueDate?: string;
+  accessBlocked?: boolean;
 }
 
 export interface VikingPlan {

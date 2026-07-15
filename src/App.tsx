@@ -1961,13 +1961,17 @@ export default function App() {
 
   const getWeightClass = (gender: 'male' | 'female', weight: number): string => {
     if (gender === 'female') {
-      if (weight <= 57) return 'Até 57kg';
-      if (weight <= 72) return '57.1kg - 72kg';
-      return 'Mais de 72kg';
+      const classes = [43, 44, 47, 48, 52, 56, 57, 60, 63, 67.5, 69, 75, 76, 82.5, 84, 90, 100, 110];
+      for (const w of classes) {
+        if (weight <= w) return `Até ${w}kg`;
+      }
+      return 'Mais de 110kg';
     } else {
-      if (weight <= 74) return 'Até 74kg';
-      if (weight <= 93) return '74.1kg - 93kg';
-      return 'Mais de 93kg';
+      const classes = [52, 53, 56, 59, 60, 66, 67.5, 74, 75, 82.5, 83, 90, 93, 100, 105, 110, 120, 125, 140];
+      for (const w of classes) {
+        if (weight <= w) return `Até ${w}kg`;
+      }
+      return 'Mais de 140kg';
     }
   };
 
@@ -2167,6 +2171,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const bodyWeight = parseFloat((e.currentTarget as any).newStudentBodyWeight.value) || 80.0;
     const gender = ((e.currentTarget as any).newStudentGender.value || 'male') as 'male' | 'female';
     const preferredTime = (e.currentTarget as any).newStudentPreferredTime?.value || '18:00';
+    const dueDate = (e.currentTarget as any).newStudentDueDate?.value || '';
+    const accessBlocked = (e.currentTarget as any).newStudentAccess?.value === 'blocked';
 
     if (!name || !email) {
       showToast('Por favor, digite o nome e email do novo guerreiro!', 'error');
@@ -2187,7 +2193,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       sessions: [],
       age,
       bodyWeight,
-      gender
+      gender,
+      dueDate,
+      accessBlocked
     };
 
     saveStudentsToDB({ ...studentsData, [email]: newStudent });
@@ -2948,6 +2956,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
         {/* --- STUDENT DASHBOARD PANEL --- */}
         {isLoggedIn && currentUser?.role === 'student' && activeStudentProfile && (
+          (() => {
+            const today = new Date();
+            const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const isBlocked = activeStudentProfile.accessBlocked || (activeStudentProfile.dueDate && todayStr > activeStudentProfile.dueDate);
+
+            if (isBlocked) {
+              return (
+                <div className="flex flex-col items-center justify-center p-10 bg-[#1a1210]/95 border border-red-900/50 rounded-3xl text-center space-y-4 min-h-[400px]">
+                  <Shield className="w-20 h-20 text-red-500 mb-2" />
+                  <h2 className="text-3xl font-black text-red-400 uppercase tracking-widest font-viking-display">Acesso Bloqueado</h2>
+                  <p className="text-viking-silver text-sm max-w-md">Seu acesso ao salão de treinamento foi suspenso temporariamente. Verifique suas pendências financeiras com o treinador para retornar às batalhas.</p>
+                </div>
+              );
+            }
+            return (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }}
@@ -3390,6 +3413,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         {ex.techniqueTips && (
                           <p className="text-[10px] text-viking-gold/80 italic mt-1 flex items-center gap-1">
                             <Info className="w-3.5 h-3.5 shrink-0 text-viking-gold" /> Dica: {ex.techniqueTips}
+                          </p>
+                        )}
+                        {ex.trainerNote && (
+                          <p className="text-[10px] text-[#e0d3a8] font-bold mt-1 flex items-start gap-1.5 bg-viking-gold/10 px-2.5 py-1.5 rounded-md border border-viking-gold/30">
+                            <Info className="w-3.5 h-3.5 shrink-0 text-viking-gold mt-0.5" /> 
+                            <span className="leading-tight">Obs: {ex.trainerNote}</span>
                           </p>
                         )}
                       </div>
@@ -3918,6 +3947,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             )}
 
           </motion.div>
+          );
+        })()
         )}
 
         {/* --- TRAINER DASHBOARD PANEL --- */}
@@ -4642,6 +4673,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <th className="py-3 px-4 font-bold">Guerreiro</th>
                             <th className="py-3 px-4 font-bold">Email</th>
                             <th className="py-3 px-4 font-bold">Assinatura</th>
+                            <th className="py-3 px-4 font-bold">Acesso & Vencimento</th>
                             <th className="py-3 px-4 font-bold">Estado Financeiro</th>
                             <th className="py-3 px-4 font-bold">Último RPE Médio</th>
                             <th className="py-3 px-4 font-bold">Sentinela (Treino Hoje)</th>
@@ -4683,6 +4715,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <td className="py-3.5 px-4 font-bold text-white">{s.name}</td>
                                 <td className="py-3.5 px-4 text-xs font-medium text-viking-silver">{email}</td>
                                 <td className="py-3.5 px-4 text-xs font-medium text-white">{s.plan}</td>
+                                <td className="py-3.5 px-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className={`inline-block px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border text-center ${
+                                      !s.accessBlocked 
+                                        ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
+                                        : 'bg-red-950/40 text-red-400 border-red-800/40'
+                                    }`}>
+                                      {!s.accessBlocked ? 'LIBERADO' : 'BLOQUEADO'}
+                                    </span>
+                                    {s.dueDate && (
+                                      <span className="text-[9px] text-viking-silver/70 text-center font-bold">
+                                        Vence: {s.dueDate.split('-').reverse().join('/')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="py-3.5 px-4">
                                   <span className={`inline-block px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border ${
                                     s.status === 'Pago' 
@@ -4847,15 +4895,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   <p className="text-[11px] text-viking-silver mt-0.5">{email}</p>
                                 </div>
                               </div>
-                              <span className={`inline-block px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border ${
-                                s.status === 'Pago' 
-                                  ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
-                                  : s.status === 'Pendente'
-                                  ? 'bg-amber-950/40 text-amber-400 border-amber-800/40'
-                                  : 'bg-red-950/40 text-red-400 border-red-800/40'
-                              }`}>
-                                {s.status}
-                              </span>
+                              <div className="flex flex-col gap-1 items-end">
+                                <span className={`inline-block px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border ${
+                                  s.status === 'Pago' 
+                                    ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
+                                    : s.status === 'Pendente'
+                                    ? 'bg-amber-950/40 text-amber-400 border-amber-800/40'
+                                    : 'bg-red-950/40 text-red-400 border-red-800/40'
+                                }`}>
+                                  {s.status}
+                                </span>
+                                <span className={`inline-block px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border ${
+                                  !s.accessBlocked 
+                                    ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
+                                    : 'bg-red-950/40 text-red-400 border-red-800/40'
+                                }`}>
+                                  {!s.accessBlocked ? 'LIBERADO' : 'BLOQUEADO'}
+                                </span>
+                              </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 border-t border-viking-gold/10 pt-2 text-xs">
@@ -5153,31 +5210,30 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       Calendário competitivo oficial e dias de teste de força. Prepare-se para a glória.
                     </p>
 
-                    {currentUser?.role === 'trainer' && (
-                      <div className="bg-[#0d0908]/60 border border-viking-gold/20 p-4 rounded-xl mb-6 shadow-inner">
-                        <h4 className="text-xs font-bold text-viking-gold uppercase mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" /> Adicionar Novo Evento</h4>
-                        <div className="space-y-3">
+                    <div className="bg-[#0d0908]/60 border border-viking-gold/20 p-4 rounded-xl mb-6 shadow-inner">
+                      <h4 className="text-xs font-bold text-viking-gold uppercase mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" /> Adicionar Novo Evento</h4>
+                      <div className="space-y-3">
+                        <input 
+                          type="text" 
+                          id="newEventTitle" 
+                          placeholder="Nome do Evento (ex: Campeonato Estadual)" 
+                          className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
                           <input 
-                            type="text" 
-                            id="newEventTitle" 
-                            placeholder="Nome do Evento (ex: Campeonato Estadual)" 
-                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            type="date" 
+                            id="newEventDate" 
+                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
                           />
-                          <div className="grid grid-cols-2 gap-2">
-                            <input 
-                              type="date" 
-                              id="newEventDate" 
-                              className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
-                            />
-                            <select 
-                              id="newEventType"
-                              className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                            >
-                              <option value="competition">Campeonato</option>
-                              <option value="test">Teste de 1RM</option>
-                              <option value="other">Outro</option>
-                            </select>
-                          </div>
+                          <select 
+                            id="newEventType"
+                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                          >
+                            <option value="competition">Campeonato</option>
+                            <option value="test">Teste de 1RM</option>
+                            <option value="other">Outro</option>
+                          </select>
+                        </div>
                           <textarea 
                             id="newEventDesc"
                             placeholder="Descrição do evento..."
@@ -5216,7 +5272,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </button>
                         </div>
                       </div>
-                    )}
 
                     <div className="space-y-3">
                       {calendarEvents.length === 0 ? (
@@ -5273,7 +5328,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       };
                                       const updatedData = { ...studentsData, [currentUser.email]: updatedStudent };
                                       setStudentsData(updatedData);
-                                      saveStudentToFirebase(updatedStudent, currentUser.email);
+                                      saveStudentToFirebase(currentUser.email, updatedStudent);
                                       showToast('Evento definido como alvo!', 'success');
                                       setDrawerOpen(false);
                                     }}
@@ -5660,21 +5715,35 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               Nenhum guerreiro atende aos filtros selecionados.
                             </div>
                           ) : (
-                            ['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg', 'Até 74kg', '74.1kg - 93kg', 'Mais de 93kg'].map(wClass => {
-                            const competitors = getFilteredLeaderboard()
-                              .filter(w => w.weightClass === wClass)
-                              .sort((a, b) => b.wilks - a.wilks);
+                            (() => {
+                              const filtered = getFilteredLeaderboard();
+                              const categoriesMap = new Map<string, { gender: string, weightClass: string }>();
+                              filtered.forEach(w => {
+                                const key = `${w.gender}-${w.weightClass}`;
+                                if (!categoriesMap.has(key)) {
+                                  categoriesMap.set(key, { gender: w.gender, weightClass: w.weightClass });
+                                }
+                              });
+                              const categories = Array.from(categoriesMap.values());
+                              categories.sort((a, b) => {
+                                if (a.gender !== b.gender) return a.gender === "female" ? -1 : 1;
+                                const numA = parseFloat(a.weightClass.match(/\d+(\.\d+)?/)?.[0] || "999");
+                                const numB = parseFloat(b.weightClass.match(/\d+(\.\d+)?/)?.[0] || "999");
+                                return numA - numB;
+                              });
+                              return categories.map(cat => {
+                                const competitors = filtered
+                                  .filter(w => w.gender === cat.gender && w.weightClass === cat.weightClass)
+                                  .sort((a, b) => b.wilks - a.wilks);
+                                if (competitors.length === 0) return null;
+                                const isFemaleClass = cat.gender === "female";
+                                return (
+                                  <div key={`${cat.gender}-${cat.weightClass}`} className="space-y-2">
+                                    <h4 className="text-xs font-black text-viking-silver uppercase tracking-widest border-b border-viking-silver/20 pb-1 flex items-center gap-1.5">
+                                      <Scale className="w-3.5 h-3.5 text-viking-silver" />
+                                      Classe {cat.weightClass} ({isFemaleClass ? "Feminino" : "Masculino"})
+                                    </h4>
 
-                            if (competitors.length === 0) return null;
-
-                            const isFemaleClass = ['Até 57kg', '57.1kg - 72kg', 'Mais de 72kg'].includes(wClass);
-
-                            return (
-                              <div key={wClass} className="space-y-2">
-                                <h4 className="text-xs font-black text-viking-silver uppercase tracking-widest border-b border-viking-silver/20 pb-1 flex items-center gap-1.5">
-                                  <Scale className="w-3.5 h-3.5 text-viking-silver" /> 
-                                  Classe {wClass} ({isFemaleClass ? 'Feminino' : 'Masculino'})
-                                </h4>
                                 <div className="space-y-1.5">
                                   {competitors.map((warrior, idx) => {
                                     const isSelf = currentUser && currentUser.email === warrior.email;
@@ -5727,7 +5796,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </div>
                               </div>
                             );
-                          })
+                            });
+                            })()
                           )}
                         </div>
                       )}
@@ -5936,14 +6006,26 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             />
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-viking-silver mb-1">Data da Competição Alvo</label>
-                          <input 
-                            type="date" 
-                            id="cfgCompetitionDate"
-                            defaultValue={activeStudentProfile.competitionDate || ''}
-                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver mb-1">Nome do Evento Alvo</label>
+                            <input 
+                              type="text" 
+                              id="cfgTargetEventName"
+                              defaultValue={activeStudentProfile.targetEventName || ''}
+                              placeholder="Ex: Campeonato Estadual"
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver mb-1">Data da Competição</label>
+                            <input 
+                              type="date" 
+                              id="cfgCompetitionDate"
+                              defaultValue={activeStudentProfile.competitionDate || ''}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [color-scheme:dark]"
+                            />
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Gênero</label>
@@ -5985,6 +6067,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           const age = parseInt((document.getElementById('cfgAge') as HTMLInputElement).value) || 25;
                           const bodyWeight = parseFloat((document.getElementById('cfgBodyWeight') as HTMLInputElement).value) || 80;
                           const competitionDate = (document.getElementById('cfgCompetitionDate') as HTMLInputElement).value || '';
+                          const targetEventName = (document.getElementById('cfgTargetEventName') as HTMLInputElement).value || '';
                           const gender = (document.getElementById('cfgGender') as HTMLSelectElement).value as 'male' | 'female';
                           
                           const oldPrs = activeStudentProfile.prs || { squat: null, bench: null, deadlift: null };
@@ -6016,7 +6099,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             age,
                             bodyWeight,
                             gender,
-                            competitionDate
+                            competitionDate,
+                            targetEventName
                           };
                           saveStudentsToDB({ ...studentsData, [currentUser!.email.toLowerCase()]: updatedProfile });
                           setDrawerOpen(false);
@@ -6077,6 +6161,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <option value="Pendente" className="bg-[#140e0c] text-[#e0d3a8]">Pendente</option>
                         <option value="Atrasado" className="bg-[#140e0c] text-[#e0d3a8]">Atrasado</option>
                       </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-3 mb-2">
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Data de Vencimento</label>
+                        <input 
+                          type="date" 
+                          name="newStudentDueDate"
+                          className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none [color-scheme:dark]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Acesso Inicial</label>
+                        <select 
+                          name="newStudentAccess"
+                          className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none"
+                        >
+                          <option value="granted" className="bg-[#140e0c] text-emerald-400">Liberado</option>
+                          <option value="blocked" className="bg-[#140e0c] text-red-400">Bloqueado</option>
+                        </select>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -6294,6 +6399,29 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </div>
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3 mt-3 mb-2">
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Data de Vencimento</label>
+                            <input 
+                              type="date" 
+                              id="editStudentDueDate"
+                              defaultValue={s.dueDate || ''}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none [color-scheme:dark]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Acesso ao App</label>
+                            <select 
+                              id="editStudentAccess"
+                              defaultValue={s.accessBlocked ? 'blocked' : 'granted'}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none"
+                            >
+                              <option value="granted" className="bg-[#140e0c] text-emerald-400">Liberado</option>
+                              <option value="blocked" className="bg-[#140e0c] text-red-400">Bloqueado</option>
+                            </select>
+                          </div>
+                        </div>
+
                         <button 
                           onClick={() => {
                             const name = (document.getElementById('editStudentName') as HTMLInputElement).value || s.name;
@@ -6306,6 +6434,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const pt = (document.getElementById('editStudentPreferredTime') as HTMLInputElement).value || s.preferredTime || '18:00';
                             const plan = (document.getElementById('editStudentPlan') as HTMLSelectElement).value as any;
                             const status = (document.getElementById('editStudentStatus') as HTMLSelectElement).value as any;
+                            const dueDate = (document.getElementById('editStudentDueDate') as HTMLInputElement).value;
+                            const accessBlocked = (document.getElementById('editStudentAccess') as HTMLSelectElement).value === 'blocked';
 
                             const eventId = (document.getElementById('editStudentTargetEvent') as HTMLSelectElement).value;
                             let targetEvtDate = s.competitionDate;
@@ -6353,6 +6483,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               preferredTime: pt,
                               plan,
                               status,
+                              dueDate,
+                              accessBlocked,
                               targetEventId: eventId,
                               competitionDate: targetEvtDate,
                               targetEventName: targetEvtName
@@ -7039,6 +7171,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   placeholder="Ex: Controlar a descida por 3s, expandir o peito na subida, forçar os joelhos para fora."
                                   rows={2}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
+                                />
+                              </div>
+
+                              <div className="col-span-2 pt-1">
+                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">Observações do Treinador (Específico p/ o Treino)</label>
+                                <textarea 
+                                  value={ex.trainerNote || ''}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'trainerNote', e.target.value)}
+                                  placeholder="Ex: Fazer com band pra baixo + box squat"
+                                  rows={2}
+                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none"
                                 />
                               </div>
 
@@ -8245,8 +8388,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <div className="mb-4 p-3 rounded-xl bg-viking-gold/5 border border-viking-gold/15 flex items-start gap-2.5">
                               <Info className="w-4 h-4 text-viking-gold shrink-0 mt-0.5" />
                               <div className="text-xs">
-                                <span className="font-bold text-viking-gold">Orientações do Treinador:</span>{' '}
+                                <span className="font-bold text-viking-gold">Dica de Técnica:</span>{' '}
                                 <span className="text-viking-silver/90">{ex.techniqueTips}</span>
+                              </div>
+                            </div>
+                          )}
+                          {ex.trainerNote && (
+                            <div className="mb-4 p-3 rounded-xl bg-viking-gold/10 border border-viking-gold/30 flex items-start gap-2.5 shadow-sm">
+                              <Info className="w-4 h-4 text-viking-gold shrink-0 mt-0.5" />
+                              <div className="text-xs">
+                                <span className="font-bold text-viking-gold uppercase tracking-wide">Observações do Treinador:</span>{' '}
+                                <span className="text-[#e0d3a8] font-medium">{ex.trainerNote}</span>
                               </div>
                             </div>
                           )}
