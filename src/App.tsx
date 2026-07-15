@@ -861,7 +861,7 @@ export default function App() {
     });
   };
 
-  const handleBatchUpdateStatus = (newStatus: 'Pago' | 'Pendente' | 'Atrasado') => {
+  const handleBatchUpdateStatus = (newStatus: 'Ativo' | 'Pendente' | 'Atrasado') => {
     if (selectedStudentEmails.length === 0) {
       showToast('Nenhum guerreiro selecionado!', 'info');
       return;
@@ -1598,7 +1598,7 @@ export default function App() {
       trainingProgram,
       vikingPlans,
       calendarEvents,
-      library: exerciseLibrary
+      dbExercises
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2811,6 +2811,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     }
     setDrawerOpen(false);
   };
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (drawerType === 'editProgram' && drawerOpen) {
+        const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
+        const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
+        if (isModified) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [drawerType, drawerOpen, trainingProgram, editorWeek, editorDay, editorExercises]);
 
   return (
     <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
@@ -6896,8 +6911,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               }
                             } else {
                               const manualCompDate = (document.getElementById('editStudentCompetitionDate') as HTMLInputElement).value;
-                              targetEvtDate = manualCompDate || undefined;
-                              targetEvtName = undefined;
+                              targetEvtDate = manualCompDate || null;
+                              targetEvtName = null;
                             }
 
                             const oldPrs = s.prs || { squat: null, bench: null, deadlift: null };

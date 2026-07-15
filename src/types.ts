@@ -81,7 +81,7 @@ export interface ChatMessage {
 export interface StudentProfile {
   name: string;
   plan: 'Mensal' | 'Trimestral' | 'Semestral' | 'Anual';
-  status: 'Pago' | 'Pendente' | 'Atrasado';
+  status: 'Ativo' | 'Pendente' | 'Atrasado';
   prs: {
     squat: number | null;
     bench: number | null;
