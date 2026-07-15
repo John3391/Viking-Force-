@@ -3,6 +3,9 @@ import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc, 
   setDoc, 
   getDoc, 
@@ -24,7 +27,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, "ai-studio-remixvikingforce-975519ec-fc30-48ed-bba6-b972bb76ae87");
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+}, "ai-studio-remixvikingforce-975519ec-fc30-48ed-bba6-b972bb76ae87");
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 

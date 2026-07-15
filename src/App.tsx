@@ -1590,6 +1590,28 @@ export default function App() {
     showToast('Sessão encerrada com sucesso. Retorne em breve ao templo!', 'info');
   };
 
+  const handleBackupData = () => {
+    const backup = {
+      timestamp: new Date().toISOString(),
+      user: currentUser,
+      studentsData,
+      trainingProgram,
+      vikingPlans,
+      calendarEvents,
+      library: exerciseLibrary
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `viking_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Backup gerado com sucesso!', 'success');
+  };
+
   // --- GMAIL INTEGRATION LOGIC ---
   const handleGoogleSignIn = async () => {
     try {
@@ -5232,7 +5254,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               })()}
 
               {/* Quick actions for Trainer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
                 <button 
                   onClick={() => { setDrawerType('whatsapp'); setDrawerTitle('Painel de Cobranças'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -5256,6 +5278,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Mail className="w-4 h-4 shrink-0 text-viking-gold" /> Central de Gmail (Correio)
+                </button>
+                <button 
+                  onClick={handleBackupData}
+                  className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4 shrink-0 text-viking-gold" /> Fazer Backup (JSON)
                 </button>
               </div>
 
@@ -6420,7 +6448,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             bench: b !== oldPrs.bench ? oldPrs.bench : (activeStudentProfile.prevPrs?.bench ?? null),
                             deadlift: d !== oldPrs.deadlift ? oldPrs.deadlift : (activeStudentProfile.prevPrs?.deadlift ?? null),
                           };
-
                           const improvedLifts: string[] = [];
                           if (s !== null && s > 0 && (oldPrs.squat === null || s > oldPrs.squat)) {
                             const diff = oldPrs.squat ? s - oldPrs.squat : 0;
@@ -6434,7 +6461,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const diff = oldPrs.deadlift ? d - oldPrs.deadlift : 0;
                             improvedLifts.push(`Levantamento Terra: ${d}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
                           }
-
                           const updatedProfile = {
                             ...activeStudentProfile,
                             prs: { squat: s, bench: b, deadlift: d },
@@ -6460,6 +6486,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         className="w-full py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 mt-4 cursor-pointer"
                       >
                         Salvar e Recalcular Pesos
+                      </button>
+                      <button 
+                        onClick={handleBackupData}
+                        className="w-full py-3 mt-2 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-viking-gold font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Save className="w-4 h-4 shrink-0" /> Fazer Backup de Dados (JSON)
                       </button>
                     </div>
                   </div>
