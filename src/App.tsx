@@ -1612,7 +1612,36 @@ export default function App() {
     showToast('Backup gerado com sucesso!', 'success');
   };
 
-  // --- GMAIL INTEGRATION LOGIC ---
+  // --- DUE DATE HELPERS ---
+  const gerarLinkCobranca = (nome: string, telefone: string, dataVencimento: string): string => {
+    const hoje = new Date();
+    const vencimento = new Date(dataVencimento);
+    hoje.setHours(0,0,0,0);
+    vencimento.setHours(0,0,0,0);
+    const dataFormatada = vencimento.toLocaleDateString('pt-BR');
+    let mensagem = '';
+    if (vencimento < hoje) {
+      mensagem = `Olá ${nome}! Tudo bem? Passando para lembrar que seu plano de consultoria venceu em ${dataFormatada}. Quando puder, me envia o comprovante por aqui para eu liberar seus novos treinos e dar sequência ao planejamento. Tmj!`;
+    } else if (vencimento.getTime() === hoje.getTime()) {
+      mensagem = `Fala ${nome}! Tudo certo? Passando para avisar que seu plano da consultoria vence hoje (${dataFormatada}). Seguimos firmes nos treinos? Me avisa por aqui para eu organizar seu próximo bloco de preparação!`;
+    } else {
+      mensagem = `Fala ${nome}! Passando para te lembrar que a renovação do seu plano está próxima, vence dia ${dataFormatada}. Vamos manter o foco total! Me avisa assim que conseguir renovar para eu já deixar seu próximo microciclo estruturado.`;
+    }
+    return `https://api.whatsapp.com/send?phone=${telefone.replace(/\D/g, '')}&text=${encodeURIComponent(mensagem)}`;
+  };
+
+  const obterStatusVencimento = (dataVencimento: string) => {
+    const hoje = new Date();
+    const vencimento = new Date(dataVencimento);
+    hoje.setHours(0,0,0,0);
+    vencimento.setHours(0,0,0,0);
+    const diffTempo = vencimento.getTime() - hoje.getTime();
+    const diffDias = Math.ceil(diffTempo / (1000 * 60 * 60 * 24));
+    if (diffDias < 0) return { cor: 'bg-red-100 text-red-700 border-red-300', texto: 'Atrasado' };
+    if (diffDias <= 3) return { cor: 'bg-amber-100 text-amber-700 border-amber-300', texto: `Vence em ${diffDias}d` };
+    return { cor: 'bg-green-100 text-green-700 border-green-300', texto: 'Ativo' };
+  };
+
   const handleGoogleSignIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
@@ -5213,11 +5242,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                           <div className="grid grid-cols-3 gap-2 mt-2">
                             <div className="bg-[#1a1210] p-2 rounded-xl border border-viking-gold/10">
-                              <p className="text-[9px] text-viking-silver/60 uppercase font-bold tracking-wider mb-1">Status</p>
-                              <span className={`inline-block text-[11px] font-black uppercase ${
-                                s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'
-                              }`}>
-                                {s.status}
+                              <p className="text-[9px] text-viking-silver/60 uppercase font-bold tracking-wider mb-1">Status Plano</p>
+                              <span className={`inline-block text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${obterStatusVencimento(s.dueDate || new Date().toISOString()).cor}`}>
+                                {obterStatusVencimento(s.dueDate || new Date().toISOString()).texto}
                               </span>
                             </div>
                             <div className="bg-[#1a1210] p-2 rounded-xl border border-viking-gold/10">
