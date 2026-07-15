@@ -1774,6 +1774,24 @@ export default function App() {
     setChatImageFile(null);
   };
 
+  const handleExportFinancialSummary = () => {
+    const csvContent = [
+      ["Nome", "Email", "Plano", "Status", "Vencimento"],
+      ...Object.keys(studentsData).map(email => {
+        const s = studentsData[email];
+        return [s.name, email, s.plan, s.status, s.dueDate || 'N/A'];
+      })
+    ].map(row => row.join(';')).join('\n');
+
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `resumo_financeiro_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '_')}.csv`;
+    link.click();
+    showToast('Resumo financeiro exportado!', 'success');
+  };
+
   // --- STUDENT LEVEL LOGIC ---
   const activeStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
 
@@ -7079,6 +7097,16 @@ Equipe Viking Force`);
                 {drawerType === 'payments' && (
                   <div className="space-y-4">
                     <p className="text-xs text-viking-silver/80">Controle de fluxo de caixa referente à prestação de serviços de treinamento esportivo.</p>
+                     
+                     <div className="flex gap-2">
+                       <button 
+                         onClick={handleExportFinancialSummary}
+                         className="flex-1 px-3 py-2 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                       >
+                         <FileDown className="w-3.5 h-3.5" />
+                         Exportar Resumo (CSV)
+                       </button>
+                     </div>
                     
                     {/* Search Bar */}
                     <div className="relative">
