@@ -2410,6 +2410,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const preferredTime = (e.currentTarget as any).newStudentPreferredTime?.value || '18:00';
     const dueDate = (e.currentTarget as any).newStudentDueDate?.value || '';
     const accessBlocked = (e.currentTarget as any).newStudentAccess?.value === 'blocked';
+    const autoMonthlySummary = (e.currentTarget as any).newStudentAutoMonthlySummary?.checked || false;
+    const monthlySummaryCustomMessage = (e.currentTarget as any).newStudentMonthlySummaryMessage?.value || '';
     const phone = (e.currentTarget as any).newStudentPhone?.value.trim() || '';
 
     if (!name || !email) {
@@ -2434,6 +2436,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       gender,
       dueDate,
       accessBlocked,
+                               autoMonthlySummary,
+                               monthlySummaryCustomMessage,
       phone
     };
 
@@ -6381,6 +6385,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <p className="text-[10px] text-viking-silver/50 mt-1">O aluno receberá notificações automáticas caso não registre o treino até este horário.</p>
                     </div>
 
+                    <div className="p-4 rounded-xl border border-viking-gold/15 bg-[#0d0908]/60 space-y-3">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          name="newStudentAutoMonthlySummary"
+                          className="w-4 h-4 rounded border-viking-gold/20 text-viking-gold focus:ring-viking-gold"
+                        />
+                        <span className="text-xs font-bold text-white uppercase">Geração Automática de Resumo Mensal</span>
+                      </label>
+                      <textarea
+                        name="newStudentMonthlySummaryMessage"
+                        placeholder="Ex: Bom trabalho neste mês, continue focado!"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-bold h-24"
+                      />
+                    </div>
+
                     <button 
                       type="submit" 
                       className="w-full py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 mt-4 cursor-pointer"
@@ -6587,6 +6607,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </div>
                         </div>
 
+                         <div className="mt-3 mb-2">
+                           <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20">
+                             <input 
+                               type="checkbox" 
+                               id="editStudentAutoMonthlySummary"
+                               defaultChecked={s.autoMonthlySummary || false}
+                               className="w-4 h-4 rounded border-viking-gold/20 text-viking-gold focus:ring-viking-gold"
+                             />
+                             <span className="text-xs font-bold text-white uppercase">Geração Automática de Resumo Mensal</span>
+                           </label>
+                           <div className="mt-3">
+                             <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Mensagem Personalizada no PDF</label>
+                             <textarea
+                               id="editStudentMonthlySummaryMessage"
+                               defaultValue={s.monthlySummaryCustomMessage || ''}
+                               placeholder="Ex: Bom trabalho neste mês, continue focado!"
+                               className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-bold h-24"
+                             />
+                           </div>
+                        </div>
+
                         <button 
                           onClick={() => {
                             const name = (document.getElementById('editStudentName') as HTMLInputElement).value || s.name;
@@ -6602,6 +6643,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const status = (document.getElementById('editStudentStatus') as HTMLSelectElement).value as any;
                             const dueDate = (document.getElementById('editStudentDueDate') as HTMLInputElement).value;
                             const accessBlocked = (document.getElementById('editStudentAccess') as HTMLSelectElement).value === 'blocked';
+                             const autoMonthlySummary = (document.getElementById('editStudentAutoMonthlySummary') as HTMLInputElement).checked;
+                             const monthlySummaryCustomMessage = (document.getElementById('editStudentMonthlySummaryMessage') as HTMLTextAreaElement).value;
 
                             const eventId = (document.getElementById('editStudentTargetEvent') as HTMLSelectElement).value;
                             let targetEvtDate = s.competitionDate;
@@ -6652,6 +6695,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               status,
                               dueDate,
                               accessBlocked,
+                               autoMonthlySummary,
+                               monthlySummaryCustomMessage,
                               targetEventId: eventId,
                               competitionDate: targetEvtDate,
                               targetEventName: targetEvtName

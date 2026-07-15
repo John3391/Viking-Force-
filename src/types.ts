@@ -104,6 +104,8 @@ export interface StudentProfile {
   dueDate?: string;
   accessBlocked?: boolean;
   phone?: string;
+  autoMonthlySummary?: boolean;
+  monthlySummaryCustomMessage?: string;
 }
 
 export interface VikingPlan {
