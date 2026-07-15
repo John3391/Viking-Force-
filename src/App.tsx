@@ -1527,6 +1527,7 @@ export default function App() {
         // 2. Create or merge the athlete profile (preventing overwrites of trainer-created data)
         const existingStudent = studentsData[email];
         const newStudent: StudentProfile = {
+          ...(existingStudent || {}),
           name: existingStudent?.name || regName.trim(),
           plan: existingStudent?.plan || regPlan,
           status: existingStudent?.status || 'Pendente',
@@ -1539,10 +1540,7 @@ export default function App() {
           sessions: existingStudent?.sessions || [],
           age: existingStudent?.age ?? (parseInt(regAge) || 25),
           bodyWeight: existingStudent?.bodyWeight ?? (parseFloat(regBodyWeight) || 80),
-          gender: existingStudent?.gender || regGender,
-          prevPrs: existingStudent?.prevPrs,
-          chatHistory: existingStudent?.chatHistory,
-          publicNote: existingStudent?.publicNote
+          gender: existingStudent?.gender || regGender
         };
 
         const updated = { ...studentsData, [email]: newStudent };
@@ -1642,6 +1640,39 @@ export default function App() {
       console.error('Failed to fetch Gmail messages:', err);
     } finally {
       setLoadingGmail(false);
+    }
+  };
+
+  const handleSendRenewalEmail = async (email: string) => {
+    const s = studentsData[email];
+    if (!s) return;
+
+    if (!googleAccessToken) {
+      showToast('Para enviar lembretes, conecte seu Gmail na Central de Correio!', 'error');
+      return;
+    }
+
+    const priceFormatted = `R$ ${getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const dueDateStr = s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A';
+    
+    const subject = "🛡️ Viking Force - Renovação de Plano";
+    const emailHTML = `
+      <div style="background-color:#0d0908;color:#e0d3a8;padding:25px;border-radius:15px;border:2px solid #d4af37;font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:#d4af37;text-align:center;text-transform:uppercase;margin-top:0;">🛡️ Viking Force - Renovação</h2>
+        <p style="font-size:15px;line-height:1.6;color:#ffffff;">Saudações, Guerreiro(a) <strong>${s.name}</strong>!</p>
+        <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">Gostaríamos de lembrar que o seu plano atual (<strong>${s.plan}</strong>) venceu ou está prestes a vencer no dia <strong>${dueDateStr}</strong>.</p>
+        <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">O valor da sua renovação é de <strong>${priceFormatted}</strong>.</p>
+        <p style="font-size:14px;line-height:1.6;color:#e0d3a8;">Por favor, realize o pagamento para continuar seu treinamento sem interrupções. Os deuses do ferro aguardam sua força!</p>
+        <div style="margin-top:25px;border-top:1px solid #3c2a21;padding-top:15px;font-size:11px;color:#a89a78;text-align:center;">
+          Viking Force Powerlifting
+        </div>
+      </div>
+    `;
+
+    showToast(`Enviando cobrança para ${s.name}...`, 'info');
+    const success = await sendGmail(email, subject, emailHTML);
+    if (success) {
+      showToast(`Cobrança enviada com sucesso para ${s.name}!`, 'success');
     }
   };
 
@@ -2737,6 +2768,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     if (!searchLower) return true;
     return s.name.toLowerCase().includes(searchLower) || email.toLowerCase().includes(searchLower);
   });
+
+  const handleCloseDrawer = () => {
+    if (drawerType === 'editProgram') {
+      const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
+      const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
+      if (isModified) {
+        triggerConfirm(
+          'Aviso de Alterações Não Salvas',
+          'Você tem modificações não salvas no treino. Deseja realmente fechar o editor e perder essas alterações?',
+          () => {
+            setDrawerOpen(false);
+          },
+          true,
+          'Fechar sem salvar',
+          'Cancelar'
+        );
+        return;
+      }
+    }
+    setDrawerOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
@@ -5222,7 +5274,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => handleCloseDrawer()}
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
             />
 
@@ -5252,7 +5304,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   {drawerTitle}
                 </h3>
                 <button 
-                  onClick={() => setDrawerOpen(false)}
+                  onClick={() => handleCloseDrawer()}
                   className="p-1.5 rounded-xl bg-viking-gold/5 border border-viking-gold/20 text-viking-silver hover:text-viking-gold cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -7284,6 +7336,13 @@ Equipe Viking Force`);
                                   <FileDown className="w-3.5 h-3.5" />
                                   Gerar Recibo
                                 </button>
+                                <button 
+                                  onClick={() => handleSendRenewalEmail(email)}
+                                  className="px-3 py-1.5 rounded-lg bg-[#0d0908]/90 hover:bg-[#1f1612] text-[#e0d3a8] border border-viking-gold/20 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <Mail className="w-3.5 h-3.5 text-viking-gold" />
+                                  Cobrar
+                                </button>
                               </div>
                             </div>
                           );
@@ -7861,7 +7920,7 @@ Equipe Viking Force`);
                           <Save className="w-4 h-4 shrink-0" /> Salvar Prescrição
                         </button>
                         <button 
-                          onClick={() => setDrawerOpen(false)}
+                          onClick={() => handleCloseDrawer()}
                           className="px-5 py-3 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
                         >
                           Fechar
