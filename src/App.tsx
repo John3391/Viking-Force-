@@ -61,7 +61,9 @@ import {
   Columns,
   Lock,
   Calendar,
-  Users
+  Users,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -82,8 +84,10 @@ import {
   saveCalendarEventToFirebase,
   deleteCalendarEventFromFirebase,
   auth,
-  subscribeStudents
+  subscribeStudents,
+  storage
 } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -173,6 +177,8 @@ export default function App() {
   
   const hasCheckedDueDatesRef = useRef<boolean>(false);
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
+  const [chatImageFile, setChatImageFile] = useState<File | null>(null);
+  const [isUploadingChatImage, setIsUploadingChatImage] = useState<boolean>(false);
   const [chatFilterStartDate, setChatFilterStartDate] = useState<string>('');
   const [chatFilterEndDate, setChatFilterEndDate] = useState<string>('');
   const [activeNoteStudentEmail, setActiveNoteStudentEmail] = useState<string>('');
@@ -1690,8 +1696,8 @@ export default function App() {
   };
 
   // --- CHAT / FEEDBACK LOGIC ---
-  const handleSendMessage = (studentEmail: string, text: string) => {
-    if (!text.trim()) return;
+  const handleSendMessage = (studentEmail: string, text: string, imageUrl?: string) => {
+    if (!text.trim() && !imageUrl) return;
     const student = studentsData[studentEmail.toLowerCase()];
     if (!student) return;
 
@@ -1701,6 +1707,10 @@ export default function App() {
       text: text.trim(),
       timestamp: new Date().toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
     };
+    
+    if (imageUrl) {
+      newMessage.imageUrl = imageUrl;
+    }
 
     const updatedHistory = [...(student.chatHistory || []), newMessage];
     const updatedProfile = {
@@ -1737,14 +1747,31 @@ export default function App() {
     setDrawerOpen(false);
   };
 
-  const handleSendActiveChatMessage = (e: React.FormEvent) => {
+  const handleSendActiveChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatMessageInput.trim()) return;
+    if (!chatMessageInput.trim() && !chatImageFile) return;
 
     const targetEmail = currentUser?.role === 'trainer' ? activeChatStudentEmail : currentUser?.email;
     if (!targetEmail) return;
 
-    handleSendMessage(targetEmail.toLowerCase(), chatMessageInput);
+    let imageUrl = '';
+    if (chatImageFile) {
+      setIsUploadingChatImage(true);
+      try {
+        const fileRef = ref(storage, `chat-images/${Date.now()}_${chatImageFile.name}`);
+        await uploadBytes(fileRef, chatImageFile);
+        imageUrl = await getDownloadURL(fileRef);
+      } catch (err) {
+        console.error("Erro ao enviar imagem", err);
+        showToast('Erro ao enviar imagem', 'error');
+        setIsUploadingChatImage(false);
+        return;
+      }
+      setIsUploadingChatImage(false);
+    }
+
+    handleSendMessage(targetEmail.toLowerCase(), chatMessageInput, imageUrl);
+    setChatImageFile(null);
   };
 
   // --- STUDENT LEVEL LOGIC ---
@@ -3237,6 +3264,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span className="text-xs uppercase tracking-wider font-viking-medieval text-viking-gold">Ciclo de Força Ativo</span>
                 </div>
+                {activeStudentProfile.dueDate && (
+                  <div className="flex items-center gap-2 bg-[#1a1210] border border-viking-gold/20 px-3 py-1.5 rounded-xl">
+                    <Calendar className="w-3.5 h-3.5 text-viking-gold" />
+                    <span className="text-[10px] font-bold text-viking-silver uppercase">Vencimento: <span className="text-[#e0d3a8]">{activeStudentProfile.dueDate.split('-').reverse().join('/')}</span></span>
+                  </div>
+                )}
                 {activeStudentProfile.competitionDate ? (
                   <div className="flex flex-col items-center gap-2">
                     <div className="bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl text-center">
@@ -4984,7 +5017,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             )}
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 mt-2">
+                          <div className="grid grid-cols-3 gap-2 mt-2">
                             <div className="bg-[#1a1210] p-2 rounded-xl border border-viking-gold/10">
                               <p className="text-[9px] text-viking-silver/60 uppercase font-bold tracking-wider mb-1">Status</p>
                               <span className={`inline-block text-[11px] font-black uppercase ${
@@ -5004,6 +5037,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               ) : (
                                 <span className="text-viking-silver/50 text-[11px] italic">N/A</span>
                               )}
+                            </div>
+                            <div className="bg-[#1a1210] p-2 rounded-xl border border-viking-gold/10 flex flex-col justify-center">
+                              <p className="text-[9px] text-viking-silver/60 uppercase font-bold tracking-wider mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Vencimento</p>
+                              <span className="text-[11px] font-black text-[#e0d3a8]">
+                                {s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}
+                              </span>
                             </div>
                           </div>
 
@@ -6416,7 +6455,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   if (!s) return <p className="text-sm text-viking-silver">Selecione um atleta válido para editar.</p>;
 
                   return (
-                    <div className="space-y-4 text-left">
+                    <div key={editingStudentEmail} className="space-y-4 text-left">
                       <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-1">
                         <p className="text-[10px] text-viking-silver/60 uppercase font-black tracking-wider">Guerreiro em Edição</p>
                         <p className="text-base font-black text-white">{s.name}</p>
@@ -7796,6 +7835,13 @@ Equipe Viking Force`);
                                     ? 'bg-gradient-to-br from-viking-gold-dark to-viking-gold text-viking-dark rounded-tr-none' 
                                     : 'bg-[#0d0908]/90 border border-viking-gold/15 text-white rounded-tl-none'
                                 }`}>
+                                  {msg.imageUrl && (
+                                    <div className="mb-2 rounded-lg overflow-hidden border border-black/10">
+                                      <a href={msg.imageUrl} target="_blank" rel="noreferrer">
+                                        <img src={msg.imageUrl} alt="Imagem do chat" className="max-w-full h-auto max-h-48 object-cover hover:scale-105 transition-transform" />
+                                      </a>
+                                    </div>
+                                  )}
                                   {msg.text}
                                 </div>
                               </div>
@@ -7805,22 +7851,52 @@ Equipe Viking Force`);
                       </div>
 
                       {/* Form Input */}
-                      <form onSubmit={handleSendActiveChatMessage} className="border-t border-viking-gold/15 pt-3 flex gap-2 shrink-0">
-                        <input 
-                          type="text"
-                          value={chatMessageInput}
-                          onChange={e => setChatMessageInput(e.target.value)}
-                          placeholder="Digite um conselho de ferro ou feedback..."
-                          className="flex-1 px-4 py-2.5 rounded-xl bg-black/60 border border-viking-gold/25 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
-                          required
-                        />
-                        <button 
-                          type="submit"
-                          className="p-3 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-viking-gold/10"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      </form>
+                      <div className="border-t border-viking-gold/15 pt-3 flex flex-col gap-2 shrink-0">
+                        {chatImageFile && (
+                          <div className="flex items-center justify-between bg-viking-gold/10 border border-viking-gold/20 p-2 rounded-lg">
+                            <div className="flex items-center gap-2 text-viking-gold text-xs font-bold">
+                              <ImageIcon className="w-4 h-4" />
+                              <span className="truncate max-w-[200px]">{chatImageFile.name}</span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => setChatImageFile(null)}
+                              className="text-viking-silver hover:text-red-400"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                        <form onSubmit={handleSendActiveChatMessage} className="flex gap-2">
+                          <label className="p-3 rounded-xl bg-black/60 border border-viking-gold/25 hover:border-viking-gold/50 text-viking-silver hover:text-viking-gold transition-all flex items-center justify-center shrink-0 cursor-pointer">
+                            <input 
+                              type="file" 
+                              accept="image/*"
+                              className="hidden" 
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  setChatImageFile(e.target.files[0]);
+                                }
+                              }}
+                            />
+                            <Camera className="w-4 h-4" />
+                          </label>
+                          <input 
+                            type="text"
+                            value={chatMessageInput}
+                            onChange={e => setChatMessageInput(e.target.value)}
+                            placeholder="Digite um conselho de ferro ou feedback..."
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-black/60 border border-viking-gold/25 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
+                          />
+                          <button 
+                            type="submit"
+                            disabled={isUploadingChatImage || (!chatMessageInput.trim() && !chatImageFile)}
+                            className="p-3 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 disabled:opacity-50 text-viking-dark font-black transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-viking-gold/10"
+                          >
+                            {isUploadingChatImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          </button>
+                        </form>
+                      </div>
                     </div>
                   );
                 })()}

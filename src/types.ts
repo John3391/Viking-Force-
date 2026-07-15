@@ -75,6 +75,7 @@ export interface ChatMessage {
   sender: 'trainer' | 'student';
   text: string;
   timestamp: string;
+  imageUrl?: string;
 }
 
 export interface StudentProfile {
