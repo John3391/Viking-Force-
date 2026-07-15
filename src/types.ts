@@ -103,6 +103,7 @@ export interface StudentProfile {
   publicNote?: string;
   dueDate?: string;
   accessBlocked?: boolean;
+  phone?: string;
 }
 
 export interface VikingPlan {

@@ -2262,6 +2262,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const preferredTime = (e.currentTarget as any).newStudentPreferredTime?.value || '18:00';
     const dueDate = (e.currentTarget as any).newStudentDueDate?.value || '';
     const accessBlocked = (e.currentTarget as any).newStudentAccess?.value === 'blocked';
+    const phone = (e.currentTarget as any).newStudentPhone?.value.trim() || '';
 
     if (!name || !email) {
       showToast('Por favor, digite o nome e email do novo guerreiro!', 'error');
@@ -2284,7 +2285,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       bodyWeight,
       gender,
       dueDate,
-      accessBlocked
+      accessBlocked,
+      phone
     };
 
     saveStudentsToDB({ ...studentsData, [email]: newStudent });
@@ -6238,6 +6240,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     </div>
 
                     <div>
+                      <label className="block text-xs font-bold text-viking-silver uppercase mb-1">WhatsApp</label>
+                      <input 
+                        name="newStudentPhone" 
+                        type="text" 
+                        placeholder="(11) 99999-9999"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                      />
+                    </div>
+
+                    <div>
                       <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Plano Assinado</label>
                       <select name="newStudentPlan" className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-medium focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold">
                         <option value="Mensal" className="bg-[#140e0c] text-[#e0d3a8]">Mensal (R$ 200)</option>
@@ -6349,6 +6361,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             required 
                             defaultValue={s.name}
                             placeholder="Ex: Lagertha Ironside"
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-viking-silver uppercase mb-1">WhatsApp</label>
+                          <input 
+                            id="editStudentPhone"
+                            type="text" 
+                            defaultValue={s.phone || ''}
+                            placeholder="(11) 99999-9999"
                             className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-bold"
                           />
                         </div>
@@ -6517,6 +6540,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <button 
                           onClick={() => {
                             const name = (document.getElementById('editStudentName') as HTMLInputElement).value || s.name;
+                            const phone = (document.getElementById('editStudentPhone') as HTMLInputElement).value.trim() || '';
                             const sq = parseFloat((document.getElementById('editStudentSquat') as HTMLInputElement).value) || null;
                             const be = parseFloat((document.getElementById('editStudentBench') as HTMLInputElement).value) || null;
                             const de = parseFloat((document.getElementById('editStudentDeadlift') as HTMLInputElement).value) || null;
@@ -6567,6 +6591,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             const updatedProfile: StudentProfile = {
                               ...s,
                               name,
+                              phone,
                               prs: { squat: sq, bench: be, deadlift: de },
                               prevPrs,
                               age,
@@ -6724,14 +6749,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                          return filtered.map(({ email, s }) => {
                            const customText = `Saudações, guerreiro ${s.name}! Passando para lembrar sobre a renovação da sua assinatura de acompanhamento na Viking Force. Vamos continuar os treinos e quebrar recordes? 💪⚔️`;
+                           const phoneClean = (s.phone || '5511999999999').replace(/\D/g, ''); // default if missing
                            return (
                              <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
                                <div>
                                  <p className="text-sm font-bold text-white">{s.name}</p>
                                  <p className="text-[10px] text-viking-gold uppercase mt-0.5 font-viking-medieval font-bold">Mensalidade em {s.status}</p>
+                                 {s.phone && <p className="text-xs text-viking-silver mt-1">{s.phone}</p>}
                                </div>
                                <a 
-                                 href={`https://wa.me/5511999990000?text=${encodeURIComponent(customText)}`}
+                                 href={`https://wa.me/${phoneClean}?text=${encodeURIComponent(customText)}`}
                                  target="_blank"
                                  rel="noreferrer"
                                  className="px-3.5 py-2 rounded-xl bg-[#1ea453] hover:bg-[#167d3e] text-white font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
