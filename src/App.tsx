@@ -342,6 +342,47 @@ export default function App() {
     return price; // Mensal
   };
 
+  const handleRegisterPayment = (studentEmail: string) => {
+    const s = studentsData[studentEmail];
+    if (!s) return;
+    
+    let nextDueDate = s.dueDate;
+    if (s.dueDate) {
+      const [year, month, day] = s.dueDate.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      if (s.plan === 'Mensal') date.setMonth(date.getMonth() + 1);
+      else if (s.plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
+      else if (s.plan === 'Semestral') date.setMonth(date.getMonth() + 6);
+      else if (s.plan === 'Anual') date.setFullYear(date.getFullYear() + 1);
+      nextDueDate = date.toISOString().split('T')[0];
+    } else {
+      const date = new Date();
+      if (s.plan === 'Mensal') date.setMonth(date.getMonth() + 1);
+      else if (s.plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
+      else if (s.plan === 'Semestral') date.setMonth(date.getMonth() + 6);
+      else if (s.plan === 'Anual') date.setFullYear(date.getFullYear() + 1);
+      nextDueDate = date.toISOString().split('T')[0];
+    }
+
+    const newPayment = {
+      id: 'pay_' + Date.now().toString(),
+      amount: getPlanPrice(s.plan),
+      datePaid: new Date().toISOString().split('T')[0],
+      plan: s.plan,
+      dueDate: s.dueDate || 'N/A'
+    };
+
+    const updatedProfile: StudentProfile = {
+      ...s,
+      status: 'Pago',
+      dueDate: nextDueDate,
+      paymentHistory: [newPayment, ...(s.paymentHistory || [])]
+    };
+    
+    saveStudentsToDB({ ...studentsData, [studentEmail]: updatedProfile });
+    showToast(`Pagamento de ${s.name} registrado e vencimento atualizado para ${nextDueDate.split('-').reverse().join('/')}!`, 'success');
+  };
+
   const generateReceiptPDF = (email: string, student: StudentProfile) => {
     try {
       const doc = new jsPDF();
@@ -6593,23 +6634,34 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none [color-scheme:dark]"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Evento Alvo / Teste de Força</label>
-                          <select 
-                            id="editStudentTargetEvent"
-                            defaultValue={s.targetEventId || ''}
-                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold"
-                          >
-                            <option value="" className="bg-[#140e0c] text-[#e0d3a8]">Sem evento alvo</option>
-                            {calendarEvents.map(ev => (
-                              <option key={ev.id} value={ev.id} className="bg-[#140e0c] text-[#e0d3a8]">
-                                {ev.title} ({(() => {
-                                  const parts = ev.date.split('-');
-                                  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ev.date;
-                                })()})
-                              </option>
-                            ))}
-                          </select>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Evento Alvo / Teste de Força</label>
+                            <select 
+                              id="editStudentTargetEvent"
+                              defaultValue={s.targetEventId || ''}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold"
+                            >
+                              <option value="" className="bg-[#140e0c] text-[#e0d3a8]">Sem evento alvo</option>
+                              {calendarEvents.map(ev => (
+                                <option key={ev.id} value={ev.id} className="bg-[#140e0c] text-[#e0d3a8]">
+                                  {ev.title} ({(() => {
+                                    const parts = ev.date.split('-');
+                                    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ev.date;
+                                  })()})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Data Compet. (Manual)</label>
+                            <input 
+                              type="date" 
+                              id="editStudentCompetitionDate"
+                              defaultValue={s.competitionDate || ''}
+                              className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold [color-scheme:dark]"
+                            />
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -6713,7 +6765,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 targetEvtName = found.title;
                               }
                             } else {
-                              targetEvtDate = undefined;
+                              const manualCompDate = (document.getElementById('editStudentCompetitionDate') as HTMLInputElement).value;
+                              targetEvtDate = manualCompDate || undefined;
                               targetEvtName = undefined;
                             }
 
@@ -7164,6 +7217,13 @@ Equipe Viking Force`);
                                 </div>
                               </div>
                               <div className="flex justify-end gap-2 border-t border-viking-gold/10 pt-3">
+                                <button 
+                                  onClick={() => handleRegisterPayment(email)}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Registrar Pagamento
+                                </button>
                                 <button 
                                   onClick={() => generateReceiptPDF(email, s)}
                                   className="px-3 py-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"

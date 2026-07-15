@@ -107,6 +107,13 @@ export interface StudentProfile {
   phone?: string;
   autoMonthlySummary?: boolean;
   monthlySummaryCustomMessage?: string;
+  paymentHistory?: {
+    id: string;
+    amount: number;
+    datePaid: string; // ISO string
+    plan: string;
+    dueDate: string; // The due date this payment covers
+  }[];
 }
 
 export interface VikingPlan {

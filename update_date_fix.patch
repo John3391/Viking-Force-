@@ -1,0 +1,39 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -6593,7 +6593,7 @@
+                             className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none [color-scheme:dark]"
+                           />
+                         </div>
+-                        <div>
++                        <div className="grid grid-cols-2 gap-3">
++                         <div>
+                           <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Evento Alvo / Teste de Força</label>
+                           <select 
+                             id="editStudentTargetEvent"
+@@ -6607,6 +6607,15 @@
+                               </option>
+                             ))}
+                           </select>
++                         </div>
++                         <div>
++                           <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Data Compet. (Manual)</label>
++                           <input 
++                             type="date" 
++                             id="editStudentCompetitionDate"
++                             defaultValue={s.competitionDate || ''}
++                             className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold [color-scheme:dark]"
++                           />
++                         </div>
+                         </div>
+ 
+                         <div className="grid grid-cols-2 gap-3">
+@@ -6712,7 +6721,8 @@
+                                 targetEvtName = found.title;
+                               }
+                             } else {
+-                              targetEvtDate = undefined;
++                              const manualCompDate = (document.getElementById('editStudentCompetitionDate') as HTMLInputElement).value;
++                              targetEvtDate = manualCompDate || undefined;
+                               targetEvtName = undefined;
+                             }
+ 
