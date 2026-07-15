@@ -93,6 +93,7 @@ import {
 } from 'firebase/auth';
 import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
+import TotalSBDChart from './components/TotalSBDChart';
 import WilksScatterChart from './components/WilksScatterChart';
 import FailureSentinel from './components/FailureSentinel';
 import PatentTimeline from './components/PatentTimeline';
@@ -168,7 +169,11 @@ export default function App() {
   const [drawerType, setDrawerType] = useState<string>(''); // 'history' | 'ranking' | 'plans' | 'settings' | 'addStudent' | 'whatsapp' | 'payments' | 'rpeFeedback' | 'editProgram'
   const [editingStudentEmail, setEditingStudentEmail] = useState<string>('');
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
+  
+  const hasCheckedDueDatesRef = useRef<boolean>(false);
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
+  const [chatFilterStartDate, setChatFilterStartDate] = useState<string>('');
+  const [chatFilterEndDate, setChatFilterEndDate] = useState<string>('');
   const [activeNoteStudentEmail, setActiveNoteStudentEmail] = useState<string>('');
   const [publicNoteInput, setPublicNoteInput] = useState<string>('');
 
@@ -326,6 +331,58 @@ export default function App() {
     if (planName === 'Trimestral') return price / 3;
     if (planName === 'Anual') return price / 12;
     return price; // Mensal
+  };
+
+  const generateReceiptPDF = (email: string, student: StudentProfile) => {
+    try {
+      const doc = new jsPDF();
+      const planPrice = getPlanPrice(student.plan);
+      const date = new Date().toLocaleDateString('pt-BR');
+
+      doc.setFillColor(26, 18, 16);
+      doc.rect(0, 0, 210, 297, 'F'); // A4 dimensions: 210x297
+
+      doc.setTextColor(212, 175, 55); // Viking Gold
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("RECIBO DE PAGAMENTO", 105, 30, { align: "center" });
+
+      doc.setTextColor(190, 190, 190);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.text("Viking Force Powerlifting", 105, 40, { align: "center" });
+
+      doc.setDrawColor(212, 175, 55);
+      doc.line(20, 50, 190, 50);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.text(`Guerreiro(a): ${student.name}`, 20, 70);
+      doc.text(`Email: ${email}`, 20, 80);
+      
+      doc.text(`Plano Associado: ${student.plan}`, 20, 100);
+      doc.text(`Valor: R$ ${planPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 20, 110);
+      doc.text(`Data de Emissão: ${date}`, 20, 120);
+
+      doc.setTextColor(52, 211, 153); // Emerald
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(`STATUS: ${student.status.toUpperCase()}`, 105, 140, { align: "center" });
+
+      doc.setDrawColor(212, 175, 55);
+      doc.line(20, 160, 190, 160);
+
+      doc.setTextColor(150, 150, 150);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "italic");
+      doc.text("Que os deuses do ferro abençoem seus ganhos.", 105, 180, { align: "center" });
+
+      doc.save(`recibo_${student.name.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+      showToast(`Recibo de ${student.name} gerado!`, 'success');
+    } catch (error) {
+      console.error(error);
+      showToast('Erro ao gerar recibo PDF.', 'error');
+    }
   };
 
   useEffect(() => {
@@ -560,6 +617,7 @@ export default function App() {
       } else {
         // Not signed in to Firebase Auth
         setIsOnline(false);
+        hasCheckedDueDatesRef.current = false;
         if (unsubscribeStudents) {
           unsubscribeStudents();
           unsubscribeStudents = null;
@@ -574,6 +632,36 @@ export default function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.role === 'trainer' && !hasCheckedDueDatesRef.current && Object.keys(studentsData).length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const threeDaysFromNow = new Date(today);
+      threeDaysFromNow.setDate(today.getDate() + 3);
+
+      const expiringStudents = Object.values(studentsData).filter(student => {
+        if (!student.dueDate) return false;
+        const [year, month, day] = student.dueDate.split('-');
+        if (!year || !month || !day) return false;
+        
+        const dueDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        
+        // Check if the due date is within the next 3 days (or already past)
+        return dueDate <= threeDaysFromNow;
+      });
+
+      if (expiringStudents.length > 0) {
+        const names = expiringStudents.map(s => s.name).join(', ');
+        setTimeout(() => {
+          showToast(`Aviso: ${expiringStudents.length} aluno(s) com vencimento a menos de 3 dias ou atrasado(s): ${names}`, 'error');
+        }, 1500);
+      }
+
+      hasCheckedDueDatesRef.current = true;
+    }
+  }, [isLoggedIn, currentUser, studentsData]);
 
   const handleManualSync = async () => {
     showToast('Iniciando sincronização com o Templo...', 'info');
@@ -1251,6 +1339,7 @@ export default function App() {
 
   const handleLogout = () => {
     signOut(auth).catch(err => console.warn("Firebase signout warning:", err));
+    hasCheckedDueDatesRef.current = false;
     setIsLoggedIn(false);
     setCurrentUser(null);
     setActiveTab('home');
@@ -3301,6 +3390,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             {/* 1RM Progress Chart */}
             <OneRepMaxChart profile={activeStudentProfile} />
+
+            {/* Total SBD Line Chart */}
+            <TotalSBDChart profile={activeStudentProfile} />
 
             {/* Quick Actions Panel */}
             <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md">
@@ -6701,16 +6793,27 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         return filtered.map(email => {
                           const s = studentsData[email];
                           return (
-                            <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex justify-between items-center">
-                              <div>
-                                <p className="text-sm font-bold text-white">{s.name}</p>
-                                <p className="text-xs text-viking-silver">{email}</p>
+                            <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex flex-col gap-3">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <p className="text-sm font-bold text-white">{s.name}</p>
+                                  <p className="text-xs text-viking-silver">{email}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-black text-white">R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                  <span className={`text-[9px] font-black uppercase ${s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'}`}>
+                                    {s.status}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm font-black text-white">R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                <span className={`text-[9px] font-black uppercase ${s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'}`}>
-                                  {s.status}
-                                </span>
+                              <div className="flex justify-end gap-2 border-t border-viking-gold/10 pt-3">
+                                <button 
+                                  onClick={() => generateReceiptPDF(email, s)}
+                                  className="px-3 py-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <FileDown className="w-3.5 h-3.5" />
+                                  Gerar Recibo
+                                </button>
                               </div>
                             </div>
                           );
@@ -7306,25 +7409,84 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   if (!student) return <p className="text-center text-viking-silver py-6">Carregando guerreiro...</p>;
 
                   const chatHistory = student.chatHistory || [];
+                  const filteredChatHistory = chatHistory.filter(msg => {
+                    if (!chatFilterStartDate && !chatFilterEndDate) return true;
+                    
+                    const dateStr = msg.timestamp.substring(0, 10);
+                    const [day, month, year] = dateStr.split('/');
+                    if (!year || !month || !day) return true;
+                    const msgDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    
+                    if (chatFilterStartDate) {
+                      const [sY, sM, sD] = chatFilterStartDate.split('-');
+                      const startDate = new Date(parseInt(sY), parseInt(sM) - 1, parseInt(sD));
+                      if (msgDate < startDate) return false;
+                    }
+                    
+                    if (chatFilterEndDate) {
+                      const [eY, eM, eD] = chatFilterEndDate.split('-');
+                      const endDate = new Date(parseInt(eY), parseInt(eM) - 1, parseInt(eD));
+                      if (msgDate > endDate) return false;
+                    }
+                    
+                    return true;
+                  });
 
                   return (
                     <div className="flex flex-col h-[62vh] max-h-[62vh] justify-between">
                       {/* Description / Instructions */}
-                      <div className="px-1 pb-3 border-b border-viking-gold/10 text-xs text-viking-silver/80 flex items-center gap-1.5 shrink-0">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span>Canal de feedback direto. Envie conselhos de ferro, correções ou dúvidas instantâneas.</span>
+                      <div className="px-1 pb-3 border-b border-viking-gold/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                        <div className="text-xs text-viking-silver/80 flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                          <span>Canal de feedback direto. Envie conselhos de ferro, correções ou dúvidas instantâneas.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <Calendar className="w-3.5 h-3.5 text-viking-gold absolute left-2 top-1/2 transform -translate-y-1/2" />
+                            <input 
+                              type="date"
+                              value={chatFilterStartDate}
+                              onChange={(e) => setChatFilterStartDate(e.target.value)}
+                              className="pl-7 pr-2 py-1.5 rounded-lg bg-[#0d0908] border border-viking-gold/20 text-viking-silver text-[10px] uppercase font-bold tracking-wider outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold/30 transition-all [color-scheme:dark]"
+                              title="Data inicial"
+                            />
+                          </div>
+                          <span className="text-viking-silver/50 text-xs">até</span>
+                          <div className="relative">
+                            <Calendar className="w-3.5 h-3.5 text-viking-gold absolute left-2 top-1/2 transform -translate-y-1/2" />
+                            <input 
+                              type="date"
+                              value={chatFilterEndDate}
+                              onChange={(e) => setChatFilterEndDate(e.target.value)}
+                              className="pl-7 pr-2 py-1.5 rounded-lg bg-[#0d0908] border border-viking-gold/20 text-viking-silver text-[10px] uppercase font-bold tracking-wider outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold/30 transition-all [color-scheme:dark]"
+                              title="Data final"
+                            />
+                          </div>
+                          {(chatFilterStartDate || chatFilterEndDate) && (
+                            <button 
+                              onClick={() => {
+                                setChatFilterStartDate('');
+                                setChatFilterEndDate('');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-viking-gold/10 text-viking-silver hover:text-viking-gold transition-colors"
+                              title="Limpar filtros"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Message List */}
                       <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto space-y-3.5 my-4 pr-1 scrollbar-thin scrollbar-thumb-viking-gold/20">
-                        {chatHistory.length === 0 ? (
+                        {filteredChatHistory.length === 0 ? (
                           <div className="text-center py-12 text-viking-silver/50 space-y-2">
                             <MessageSquare className="w-10 h-10 mx-auto text-viking-gold/20" />
-                            <p className="text-xs font-bold">Nenhuma mensagem trocada ainda.</p>
-                            <p className="text-[11px]">Escreva abaixo para iniciar as orientações e motivar o clã!</p>
+                            <p className="text-xs font-bold">Nenhuma mensagem encontrada.</p>
+                            {chatHistory.length > 0 && <p className="text-[11px]">Tente ajustar o filtro de datas.</p>}
                           </div>
                         ) : (
-                          chatHistory.map(msg => {
+                          filteredChatHistory.map(msg => {
                             const isMe = (currentUser?.role === 'trainer' && msg.sender === 'trainer') ||
                                          (currentUser?.role === 'student' && msg.sender === 'student');
 
