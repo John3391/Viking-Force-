@@ -48,6 +48,7 @@ export interface Exercise {
   techniqueTips?: string;
   trainerNote?: string;
   videoUrl?: string;
+  videoBase64?: string;
   mobilityReminders?: string;
   mobility?: MobilityStep[];
   methodology?: 'standard' | 'backoff' | 'myoreps' | 'clusters' | 'dropset';

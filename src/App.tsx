@@ -52,6 +52,7 @@ import {
   Inbox,
   Loader2,
   BookOpen,
+  Library,
   Upload,
   Zap,
   Square,
@@ -318,6 +319,7 @@ export default function App() {
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
+  const [isExercisePickerOpen, setIsExercisePickerOpen] = useState<boolean>(false);
   const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
 
   // Viking Plans configuration
@@ -395,7 +397,7 @@ export default function App() {
     }
 
     const newPayment = {
-      id: 'pay_' + Date.now().toString(),
+      id: 'pay_' + Date.now().toString() + '_' + Math.random().toString(36).substring(7),
       amount: getPlanPrice(s.plan),
       datePaid: new Date(new Date().setHours(12, 0, 0, 0)).toISOString().split('T')[0],
       plan: s.plan,
@@ -981,7 +983,7 @@ export default function App() {
 
   // --- TOAST TRIGGER ---
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
-    const id = Date.now().toString();
+    const id = Date.now().toString() + '_' + Math.random().toString(36).substring(7);
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -1971,7 +1973,7 @@ export default function App() {
     if (!student) return;
 
     const newMessage: ChatMessage = {
-      id: String(Date.now()),
+      id: String(Date.now()) + '_' + Math.random().toString(36).substring(7),
       sender: currentUser?.role === 'trainer' ? 'trainer' : 'student',
       text: text.trim(),
       timestamp: new Date().toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -2474,7 +2476,7 @@ export default function App() {
     }
 
     const newSession: LoggedSession = {
-      id: 'session_' + Date.now().toString(),
+      id: 'session_' + Date.now().toString() + '_' + Math.random().toString(36).substring(7),
       date: formattedDate,
       sessionName: `Semana ${selectedWeek} - Treino ${selectedDay}`,
       exercises: exercisesLog,
@@ -2993,9 +2995,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     showToast(`Treino ${sourceDay} da Semana ${sourceWeek} clonado com sucesso para este treino!`, 'success');
   };
 
-  const handleEditorAddExercise = () => {
+  const handleEditorCreateBlankExercise = () => {
     const newEx: Exercise = {
-      id: 'ex_' + Date.now().toString(),
+      id: 'ex_' + Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
       name: 'Novo Exercício',
       sets: 4,
       reps: 8,
@@ -3011,6 +3013,31 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       ]
     };
     setEditorExercises(prev => [...prev, newEx]);
+  };
+
+  const handleEditorAddExerciseFromDb = (dbEx: DbExercise) => {
+    const newEx: Exercise = {
+      id: 'ex_' + Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
+      name: dbEx.name,
+      sets: 4,
+      reps: 8,
+      intensity: 0.75,
+      targetRPE: 8,
+      main: false,
+      methodology: 'standard',
+      methodologyDetails: '',
+      techniqueTips: dbEx.techniqueTips,
+      videoUrl: dbEx.videoUrl,
+      videoBase64: dbEx.videoBase64,
+      warmup: [
+        { percent: 0.40, reps: 5 },
+        { percent: 0.55, reps: 4 },
+        { percent: 0.65, reps: 3 }
+      ]
+    };
+    setEditorExercises(prev => [...prev, newEx]);
+    setIsExercisePickerOpen(false);
+    showToast(`${dbEx.name} adicionado ao treino!`, 'success');
   };
 
   const handleEditorRemoveExercise = (idx: number) => {
@@ -3044,7 +3071,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     // Add notification to all students
     const updatedStudents = { ...studentsData };
     const notification = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
       message: `Novo treino disponível! Semana ${editorWeek} - Treino ${editorDay}`,
       date: new Date().toISOString(),
       read: false,
@@ -3574,13 +3601,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
 
                 {currentUser?.role === 'student' && (
-                  <button 
-                    onClick={() => { setDrawerType('settings'); setDrawerTitle('Configurações de Força'); setDrawerOpen(true); }}
-                    className="p-2.5 rounded-xl bg-viking-dark hover:bg-viking-gold/10 text-viking-silver hover:text-viking-gold transition-all border border-viking-gold/20 hover:border-viking-gold/40"
-                    title="Configurar Força (1RM)"
-                  >
-                    <Settings className="w-5 h-5" />
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => { setDrawerType('notifications'); setDrawerTitle('Avisos do Salão'); setDrawerOpen(true); }}
+                      className="p-2.5 rounded-xl bg-viking-dark hover:bg-viking-gold/10 text-viking-silver hover:text-viking-gold transition-all border border-viking-gold/20 hover:border-viking-gold/40 relative cursor-pointer"
+                      title="Avisos e Notificações"
+                    >
+                      <Bell className="w-5 h-5" />
+                      {activeStudentProfile?.notifications?.some(n => !n.read) && (
+                        <span className="absolute top-0 right-0 -mt-1 -mr-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[#0a0706]"></span>
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => { setDrawerType('settings'); setDrawerTitle('Configurações de Força'); setDrawerOpen(true); }}
+                      className="p-2.5 rounded-xl bg-viking-dark hover:bg-viking-gold/10 text-viking-silver hover:text-viking-gold transition-all border border-viking-gold/20 hover:border-viking-gold/40 cursor-pointer"
+                      title="Configurar Força (1RM)"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                  </div>
                 )}
 
                 <button 
@@ -4467,7 +4506,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
               <div className="space-y-3">
                 {(trainingProgram.weeks[1]?.A || []).map((ex, idx) => (
-                  <div key={ex.id || idx} className="p-4 rounded-xl bg-black/30 border border-viking-gold/10 flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-viking-gold/40 transition-all">
+                  <div key={(ex.id || 'ex') + '_' + idx} className="p-4 rounded-xl bg-black/30 border border-viking-gold/10 flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-viking-gold/40 transition-all">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ex.main ? 'bg-viking-gold/15 text-viking-gold' : 'bg-white/[0.02] text-viking-silver border border-white/5'}`}>
                         {ex.main ? <Flame className="w-5 h-5" /> : <Dumbbell className="w-5 h-5" />}
@@ -6543,7 +6582,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 return;
                               }
                               const newEvent: CalendarEvent = {
-                                id: Date.now().toString(),
+                                id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
                                 title,
                                 date,
                                 type,
@@ -8881,12 +8920,20 @@ Equipe Viking Force`);
                     <div className="space-y-4 pt-2">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-black uppercase text-viking-gold tracking-wider">Exercícios Prescritos ({editorExercises.length})</span>
-                        <button 
-                          onClick={handleEditorAddExercise}
-                          className="px-2.5 py-1 text-xs bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black uppercase rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-viking-gold/10"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Adicionar
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleEditorCreateBlankExercise}
+                            className="px-2.5 py-1 text-xs bg-[#140e0c] border border-viking-gold/20 hover:border-viking-gold/50 text-viking-silver font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Vazio
+                          </button>
+                          <button 
+                            onClick={() => setIsExercisePickerOpen(true)}
+                            className="px-2.5 py-1 text-xs bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black uppercase rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-viking-gold/10"
+                          >
+                            <Library className="w-3.5 h-3.5" /> Biblioteca
+                          </button>
+                        </div>
                       </div>
 
                       {/* Search Bar inside Program Editor */}
@@ -8937,7 +8984,7 @@ Equipe Viking Force`);
                         return filtered.map(({ ex, originalIdx }) => {
                           const isExpanded = expandedExerciseIdx === originalIdx;
                           return (
-                            <div key={ex.id || originalIdx} className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${isExpanded ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-viking-gold/15'}`}>
+                            <div key={(ex.id || 'ex') + '_' + originalIdx} className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${isExpanded ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-viking-gold/15'}`}>
                               
                               <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
                                 <div className="flex items-center gap-2">
@@ -8956,8 +9003,43 @@ Equipe Viking Force`);
                                     <div className="col-span-2 relative">
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Nome do Exercício</label>
                                       <div className="relative">
-                                        <input value={ex.name} onChange={e => { handleEditorUpdateField(originalIdx, 'name', e.target.value); setOpenDropdownIdx(originalIdx); }} onFocus={() => setOpenDropdownIdx(originalIdx)} className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" placeholder="Escreva ou selecione..." />
-                                        <button type="button" onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer" title="Abrir Banco de Exercícios"><ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} /></button>
+                                        <input value={ex.name} onChange={e => { handleEditorUpdateField(originalIdx, 'name', e.target.value); setOpenDropdownIdx(originalIdx); }} onFocus={() => setOpenDropdownIdx(originalIdx)} className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold relative z-10" placeholder="Escreva ou selecione..." />
+                                        <button type="button" onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer z-10" title="Abrir Banco de Exercícios"><ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} /></button>
+                                        
+                                        <AnimatePresence>
+                                          {openDropdownIdx === originalIdx && (
+                                            <motion.div
+                                              initial={{ opacity: 0, y: -5 }}
+                                              animate={{ opacity: 1, y: 0 }}
+                                              exit={{ opacity: 0, y: -5 }}
+                                              className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#140e0c] border border-viking-gold/30 rounded-lg shadow-xl z-[100] custom-scrollbar"
+                                            >
+                                              {dbExercises
+                                                .filter(dbEx => ex.name.trim() === '' || ex.name.toLowerCase() === 'novo exercício' || dbEx.name.toLowerCase().includes(ex.name.toLowerCase()))
+                                                .map(dbEx => (
+                                                <button
+                                                  key={dbEx.id}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleEditorUpdateField(originalIdx, 'name', dbEx.name);
+                                                    if (dbEx.techniqueTips) handleEditorUpdateField(originalIdx, 'techniqueTips', dbEx.techniqueTips);
+                                                    if (dbEx.videoUrl) handleEditorUpdateField(originalIdx, 'videoUrl', dbEx.videoUrl);
+                                                    setOpenDropdownIdx(null);
+                                                  }}
+                                                  className="w-full text-left px-3 py-2 text-xs text-viking-silver hover:bg-viking-gold/15 hover:text-viking-gold transition-colors flex justify-between items-center group border-b border-white/5 last:border-b-0 cursor-pointer"
+                                                >
+                                                  <span>{dbEx.name}</span>
+                                                  {dbEx.videoUrl && <Youtube className="w-3.5 h-3.5 text-viking-silver/30 group-hover:text-red-500" />}
+                                                </button>
+                                              ))}
+                                              {dbExercises.filter(dbEx => ex.name.trim() === '' || ex.name.toLowerCase() === 'novo exercício' || dbEx.name.toLowerCase().includes(ex.name.toLowerCase())).length === 0 && (
+                                                <div className="p-3 text-xs text-viking-silver/50 text-center italic">
+                                                  Nenhum exercício encontrado. Continuar digitando para criar um novo.
+                                                </div>
+                                              )}
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
                                       </div>
                                     </div>
                                     <div>
@@ -9167,6 +9249,61 @@ Equipe Viking Force`);
                         </button>
                       </div>
                   </div>
+                  
+                    {/* Exercise Picker Modal */}
+                    <AnimatePresence>
+                      {isExercisePickerOpen && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="w-full max-w-md bg-[#0a0706] border border-viking-gold/30 rounded-2xl shadow-[0_10px_40px_rgba(212,175,55,0.15)] flex flex-col max-h-[85vh] overflow-hidden"
+                          >
+                            <div className="p-4 border-b border-viking-gold/15 flex justify-between items-center bg-[#140e0c]">
+                              <h3 className="font-viking-runes text-viking-gold font-bold text-lg flex items-center gap-2"><Library className="w-5 h-5" /> Biblioteca de Exercícios</h3>
+                              <button onClick={() => setIsExercisePickerOpen(false)} className="text-viking-silver hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+                            </div>
+                            
+                            <div className="p-4 border-b border-viking-gold/15 bg-[#0a0706]">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-viking-gold/60" />
+                                <input
+                                  type="text"
+                                  placeholder="Buscar exercícios..."
+                                  value={dbExerciseSearch}
+                                  onChange={(e) => setDbExerciseSearch(e.target.value)}
+                                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-sm focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-[#0d0908]">
+                              {dbExercises
+                                .filter(ex => dbExerciseSearch.trim() === '' || ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase()))
+                                .map(ex => (
+                                  <button
+                                    key={ex.id}
+                                    onClick={() => { handleEditorAddExerciseFromDb(ex); setDbExerciseSearch(''); }}
+                                    className="w-full text-left p-3 rounded-xl bg-[#140e0c]/80 border border-viking-gold/10 hover:border-viking-gold/40 transition-colors flex justify-between items-center group cursor-pointer"
+                                  >
+                                    <div>
+                                      <div className="text-[#e0d3a8] font-bold text-sm group-hover:text-viking-gold transition-colors">{ex.name}</div>
+                                      {ex.techniqueTips && <div className="text-[10px] text-viking-silver/60 line-clamp-1 mt-1">{ex.techniqueTips}</div>}
+                                    </div>
+                                    {ex.videoUrl && <Youtube className="w-4 h-4 text-viking-silver/40 group-hover:text-red-500 transition-colors shrink-0" />}
+                                  </button>
+                                ))}
+                              {dbExercises.filter(ex => dbExerciseSearch.trim() === '' || ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase())).length === 0 && (
+                                <div className="text-center p-6 text-viking-silver/50 italic text-sm">
+                                  Nenhum exercício encontrado na biblioteca.
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        </div>
+                      )}
+                    </AnimatePresence>                  
                   </div>
                 )}
 
@@ -9255,13 +9392,13 @@ Equipe Viking Force`);
                             {chatHistory.length > 0 && <p className="text-[11px]">Tente ajustar o filtro de datas.</p>}
                           </div>
                         ) : (
-                          filteredChatHistory.map(msg => {
+                          filteredChatHistory.map((msg, mIdx) => {
                             const isMe = (currentUser?.role === 'trainer' && msg.sender === 'trainer') ||
                                          (currentUser?.role === 'student' && msg.sender === 'student');
 
                             return (
                               <div 
-                                key={msg.id} 
+                                key={msg.id + '_' + mIdx} 
                                 className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}
                               >
                                 {/* Sender Tag */}
@@ -9598,6 +9735,67 @@ Equipe Viking Force`);
                   </div>
                 )}
 
+                {/* 13. Notifications Drawer */}
+                {drawerType === 'notifications' && activeStudentProfile && (
+                  <div className="space-y-4">
+                    {activeStudentProfile.notifications && activeStudentProfile.notifications.length > 0 ? (
+                      <div className="space-y-3">
+                        {activeStudentProfile.notifications.map((notification, index) => (
+                          <div 
+                            key={(notification.id || 'notif') + '_' + index}
+                            className={`p-4 rounded-xl border flex gap-3 items-start transition-all ${
+                              !notification.read 
+                                ? 'bg-viking-gold/5 border-viking-gold/30' 
+                                : 'bg-black/40 border-viking-gold/10 opacity-70'
+                            }`}
+                          >
+                            <div className="mt-0.5">
+                              {notification.type === 'info' && <Bell className="w-5 h-5 text-viking-gold" />}
+                              {notification.type === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
+                              {notification.type === 'warning' && <Info className="w-5 h-5 text-amber-500" />}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-viking-silver">{notification.message}</p>
+                              <p className="text-[10px] text-viking-silver/50 mt-1 uppercase font-mono tracking-wider">
+                                {new Date(notification.date).toLocaleDateString()} {new Date(notification.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </p>
+                            </div>
+                            {!notification.read && (
+                              <button 
+                                onClick={() => {
+                                  const updatedNotifications = [...activeStudentProfile.notifications!];
+                                  updatedNotifications[index] = { ...updatedNotifications[index], read: true };
+                                  
+                                  const updatedStudent = {
+                                    ...activeStudentProfile,
+                                    notifications: updatedNotifications
+                                  };
+                                  
+                                  setStudentsData(prev => ({
+                                    ...prev,
+                                    [currentUser!.email]: updatedStudent
+                                  }));
+                                  
+                                  saveStudentToFirebase(currentUser!.email, updatedStudent);
+                                }}
+                                className="p-1.5 hover:bg-viking-gold/20 rounded-lg transition-colors cursor-pointer"
+                                title="Marcar como lida"
+                              >
+                                <CheckCircle className="w-4 h-4 text-viking-gold" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Bell className="w-12 h-12 text-viking-silver/20 mx-auto mb-4" />
+                        <p className="text-viking-silver/60 text-sm">Nenhum aviso no momento.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 12. Biblioteca de Exercícios Drawer */}
                 {drawerType === 'exerciseLibrary' && (
                   <div className="space-y-4">
@@ -9826,14 +10024,14 @@ Equipe Viking Force`);
                           );
                         }
 
-                        return filtered.map((ex) => {
+                        return filtered.map((ex, eIdx) => {
                           const hasYoutube = !!ex.videoUrl;
                           const hasBase64 = !!ex.videoBase64;
                           const ytEmbedUrl = getYouTubeEmbedUrl(ex.videoUrl);
 
                           return (
                             <div 
-                              key={ex.id} 
+                              key={ex.id + '_' + eIdx} 
                               className="p-4 rounded-2xl bg-[#0d0908]/55 border border-viking-gold/10 hover:border-viking-gold/25 transition-all space-y-3"
                             >
                               <div className="flex justify-between items-start gap-2">
@@ -10207,7 +10405,6 @@ Equipe Viking Force`);
                         <RotateCcw className="w-4 h-4" />
                       </button>
                     </div>
-
                     {/* Adjust Presets */}
                     <div className="flex gap-1 bg-black/30 p-1 rounded-lg border border-viking-gold/5 text-[9px] font-bold">
                       {[60, 90, 120, 180].map(sec => {
@@ -10254,38 +10451,37 @@ Equipe Viking Force`);
                         : [list[currentExerciseIndex]].filter(Boolean);
 
                       return (
-                        <div className="space-y-4">
-                          <AnimatePresence mode="wait">
+                        <div className="space-y-4 relative w-full flex flex-col" style={{ perspective: '1200px' }}>
+                          <AnimatePresence mode="popLayout">
                             {filteredList.map((ex) => {
                               const actualIdx = list.findIndex(item => item.id === ex.id);
                               const idx = actualIdx !== -1 ? actualIdx : 0;
                               
                               // Determine proper 1RM based on exercise identifier
-                      let currentPr: number | null = null;
-                      if (ex.baseWeight) {
-                        currentPr = ex.baseWeight;
-                      } else {
-                        const exNameLower = ex.name.toLowerCase();
-                        if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-                          currentPr = activeStudentProfile.prs.squat;
-                        } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-                          currentPr = activeStudentProfile.prs.bench;
-                        } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-                          currentPr = activeStudentProfile.prs.deadlift;
-                        }
-                      }
-
-                      const intensityStr = typeof ex.intensity === 'number' ? `${Math.round(ex.intensity * 100)}% 1RM` : ex.intensity;
-                      const warmupArray = ex.main ? getWarmupSteps(currentPr, ex.intensity, ex.warmup) : null;
-
-                      return (
-                        <motion.div 
-                          key={ex.id || idx}
-                          initial={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? 50 : -50 } : { opacity: 1, x: 0 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? -50 : 50 } : undefined}
-                          transition={{ duration: 0.28, ease: 'easeInOut' }}
-                          className={`p-5 rounded-2xl border relative ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/60 to-[#120b09]/60 border-viking-gold/30 shadow-[0_4px_20px_rgba(212,175,55,0.05)]' : 'bg-[#0d0908]/40 border-viking-gold/10'} select-none`}
+                              let currentPr: number | null = null;
+                              if (ex.baseWeight) {
+                                currentPr = ex.baseWeight;
+                              } else {
+                                const exNameLower = ex.name.toLowerCase();
+                                if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                                  currentPr = activeStudentProfile.prs.squat;
+                                } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                                  currentPr = activeStudentProfile.prs.bench;
+                                } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                                  currentPr = activeStudentProfile.prs.deadlift;
+                                }
+                              }
+                              const intensityStr = typeof ex.intensity === 'number' ? `${Math.round(ex.intensity * 100)}% 1RM` : ex.intensity;
+                              const warmupArray = ex.main ? getWarmupSteps(currentPr, ex.intensity, ex.warmup) : null;
+                              return (
+                                <motion.div 
+                                  key={(ex.id || 'ex') + '_' + idx}
+                                  layout
+                                  initial={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? '100%' : '-100%', scale: 0.85, rotateY: slideDirection === 'forward' ? 20 : -20, filter: 'blur(8px)' } : { opacity: 0, y: 30, scale: 0.95 }}
+                                  animate={{ opacity: 1, x: 0, y: 0, scale: 1, rotateY: 0, filter: 'blur(0px)' }}
+                                  exit={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? '-100%' : '100%', scale: 0.85, rotateY: slideDirection === 'forward' ? -20 : 20, filter: 'blur(8px)' } : { opacity: 0, scale: 0.9 }}
+                                  transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 1, delay: workoutViewMode === 'list' ? idx * 0.05 : 0 }}
+                          className={`p-5 rounded-2xl border w-full ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/95 to-[#120b09]/95 border-viking-gold/40 shadow-[0_8px_30px_rgba(212,175,55,0.12)]' : 'bg-[#0d0908]/80 border-viking-gold/15 shadow-xl'} ${workoutViewMode === 'list' ? (ex.main ? 'border-l-[4px] border-l-viking-gold' : 'border-l-[3px] border-l-viking-silver/30') : ''} select-none`}
                           onTouchStart={(e) => {
                             if (workoutViewMode !== 'slide') return;
                             const tagName = (e.target as HTMLElement).tagName.toLowerCase();
@@ -10897,7 +11093,16 @@ Equipe Viking Force`);
 
                   {/* Slide View Navigation Panel */}
                   {workoutViewMode === 'slide' && list.length > 0 && (
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border border-viking-gold/25 shadow-xl relative overflow-hidden">
+                    <AnimatePresence mode="wait">
+                      <motion.div 
+                        layout
+                        key={currentExerciseIndex}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                        className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border border-viking-gold/25 shadow-xl relative overflow-hidden animate-fade-in"
+                      >
                       <div className="absolute inset-0 bg-viking-gold/[0.02] pointer-events-none" />
                       
                       <button
@@ -10953,7 +11158,8 @@ Equipe Viking Force`);
                           Próximo <ArrowRight className="w-4 h-4" />
                         </button>
                       )}
-                    </div>
+                    </motion.div>
+                    </AnimatePresence>
                   )}
                 </div>
               );
