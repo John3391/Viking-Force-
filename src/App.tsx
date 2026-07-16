@@ -111,7 +111,7 @@ const TRAINER_PASSWORD = '3636';
 interface Toast {
   id: string;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
 }
 
 function getYouTubeEmbedUrl(url: string | undefined): string | null {
@@ -229,6 +229,7 @@ export default function App() {
   const [whatsappSearch, setWhatsappSearch] = useState<string>('');
   const [billingFilterDelay, setBillingFilterDelay] = useState<number>(0);
   const [paymentsSearch, setPaymentsSearch] = useState<string>('');
+  const [selectedPaymentStudent, setSelectedPaymentStudent] = useState<string | null>(null);
   const [rpeSearch, setRpeSearch] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
@@ -894,7 +895,7 @@ export default function App() {
     });
   };
 
-  const handleBatchUpdateStatus = (newStatus: 'Ativo' | 'Pendente' | 'Atrasado') => {
+  const handleBatchUpdateStatus = (newStatus: 'Ativo' | 'Pendente' | 'Atrasado' | 'Pago') => {
     if (selectedStudentEmails.length === 0) {
       showToast('Nenhum guerreiro selecionado!', 'info');
       return;
@@ -939,7 +940,7 @@ export default function App() {
   };
 
   // --- TOAST TRIGGER ---
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
     const id = Date.now().toString();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -1011,9 +1012,9 @@ export default function App() {
       doc.setFontSize(13);
       doc.setTextColor(30, 30, 30);
       
-      const squatVal = profile.prs.squat ? `${profile.prs.squat} kg` : 'Não registrado';
-      const benchVal = profile.prs.bench ? `${profile.prs.bench} kg` : 'Não registrado';
-      const deadliftVal = profile.prs.deadlift ? `${profile.prs.deadlift} kg` : 'Não registrado';
+      const squatVal = profile.prs?.squat ? `${profile.prs?.squat} kg` : 'Não registrado';
+      const benchVal = profile.prs?.bench ? `${profile.prs?.bench} kg` : 'Não registrado';
+      const deadliftVal = profile.prs?.deadlift ? `${profile.prs?.deadlift} kg` : 'Não registrado';
       
       doc.text(squatVal, 25, 91);
       doc.text(benchVal, 80, 91);
@@ -1031,7 +1032,7 @@ export default function App() {
       let y = 122;
       const pageHeight = doc.internal.pageSize.height;
       
-      if (profile.sessions.length === 0) {
+      if (!profile.sessions || profile.sessions.length === 0) {
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(10);
         doc.setTextColor(120, 120, 120);
@@ -1070,7 +1071,7 @@ export default function App() {
           doc.text(`Realizado em: ${sess.date}`, 25, y + 9);
           
           doc.setFont('helvetica', 'bold');
-          doc.text(`RPE Médio: ${sess.avgRPE.toFixed(1)}`, 140, y + 4);
+          doc.text(`RPE Médio: ${(sess.avgRPE || 0).toFixed(1)}`, 140, y + 4);
           
           // Header
           let subY = y + 16;
@@ -1154,7 +1155,7 @@ export default function App() {
         maxDeadlift: number;
       }> = {};
 
-      profile.sessions.forEach(sess => {
+      (profile.sessions || []).forEach(sess => {
         const parts = sess.date.split('/');
         if (parts.length >= 3) {
           const mm = parts[1].padStart(2, '0');
@@ -1866,9 +1867,9 @@ export default function App() {
         const prsHTML = `
           <h3 style="color: #d4af37; font-family: sans-serif; border-bottom: 1px solid #d4af37; padding-bottom: 5px; margin-top: 25px;">Seus Recordes Pessoais (PRs)</h3>
           <ul style="font-family: sans-serif; font-size: 14px; color: #ffffff; list-style-type: none; padding-left: 0;">
-            <li style="margin-bottom: 6px;">🏋️ <strong>Agachamento:</strong> ${s.prs.squat ? `${s.prs.squat} kg` : 'Não registrado'}</li>
-            <li style="margin-bottom: 6px;">🏋️ <strong>Supino:</strong> ${s.prs.bench ? `${s.prs.bench} kg` : 'Não registrado'}</li>
-            <li style="margin-bottom: 6px;">🏋️ <strong>Levantamento Terra:</strong> ${s.prs.deadlift ? `${s.prs.deadlift} kg` : 'Não registrado'}</li>
+            <li style="margin-bottom: 6px;">🏋️ <strong>Agachamento:</strong> ${s.prs?.squat ? `${s.prs?.squat} kg` : 'Não registrado'}</li>
+            <li style="margin-bottom: 6px;">🏋️ <strong>Supino:</strong> ${s.prs?.bench ? `${s.prs?.bench} kg` : 'Não registrado'}</li>
+            <li style="margin-bottom: 6px;">🏋️ <strong>Levantamento Terra:</strong> ${s.prs?.deadlift ? `${s.prs?.deadlift} kg` : 'Não registrado'}</li>
           </ul>
         `;
 
@@ -1995,7 +1996,12 @@ export default function App() {
   };
 
   // --- STUDENT LEVEL LOGIC ---
-  const activeStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
+  const rawStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
+  const activeStudentProfile = rawStudentProfile ? { 
+    ...rawStudentProfile, 
+    sessions: rawStudentProfile.sessions || [],
+    prs: rawStudentProfile.prs || { squat: null, bench: null, deadlift: null }
+  } : null;
 
   // Calculate volume: Sets * Reps * 1RM * intensity ratio for each logged exercise
   const calculateTotalVolume = () => {
@@ -2356,7 +2362,7 @@ export default function App() {
 
     const updatedProfile: StudentProfile = {
       ...activeStudentProfile,
-      sessions: [newSession, ...activeStudentProfile.sessions]
+      sessions: [newSession, ...(activeStudentProfile.sessions || [])]
     };
 
     const updatedStudents = {
@@ -2463,9 +2469,9 @@ export default function App() {
     // Collect everyone (default + active student) and calculate dynamic rank
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
       const profile = studentsData[email];
-      const squat = profile.prs.squat || 0;
-      const bench = profile.prs.bench || 0;
-      const deadlift = profile.prs.deadlift || 0;
+      const squat = profile.prs?.squat || 0;
+      const bench = profile.prs?.bench || 0;
+      const deadlift = profile.prs?.deadlift || 0;
       const total = squat + bench + deadlift;
       const age = profile.age || 25;
       const bw = profile.bodyWeight || 80.0;
@@ -2524,9 +2530,9 @@ export default function App() {
   const getAbsoluteLeader = (): GymLeaderboardEntry | null => {
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
       const profile = studentsData[email];
-      const squat = profile.prs.squat || 0;
-      const bench = profile.prs.bench || 0;
-      const deadlift = profile.prs.deadlift || 0;
+      const squat = profile.prs?.squat || 0;
+      const bench = profile.prs?.bench || 0;
+      const deadlift = profile.prs?.deadlift || 0;
       const total = squat + bench + deadlift;
       const age = profile.age || 25;
       const bw = profile.bodyWeight || 80.0;
@@ -4863,7 +4869,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             {/* --- RECENT WORKOUTS (LIVE LIST) --- */}
             {(() => {
               const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
-              Object.entries(studentsData).forEach(([email, student]) => {
+              Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
                 if (student.sessions && student.sessions.length > 0) {
                   student.sessions.forEach(sess => {
                     allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
@@ -4925,7 +4931,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <span className={`bg-opacity-10 border text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval ${
                                 sess.avgRPE >= 9 ? 'bg-red-500 text-red-400 border-red-500/25' : sess.avgRPE >= 7.5 ? 'bg-amber-500 text-amber-400 border-amber-500/25' : 'bg-emerald-500 text-emerald-400 border-emerald-500/25'
                               }`}>
-                                RPE {sess.avgRPE.toFixed(1)}
+                                RPE {(sess.avgRPE || 0).toFixed(1)}
                               </span>
                             </div>
                             
@@ -5332,7 +5338,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredStudentEmails.map(email => {
                       const s = studentsData[email];
-                      const lastSess = s.sessions[0];
+                      const lastSess = (s.sessions || [])[0];
                       const todayString = new Date().toLocaleDateString('pt-BR');
                       const hasTrainedToday = s.sessions?.some(sess => sess.date === todayString);
                       const preferredTime = s.preferredTime || '18:00';
@@ -5401,7 +5407,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
                                   lastSess.avgRPE >= 9 ? 'text-red-400' : lastSess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
                                 }`}>
-                                  <Activity className="w-3 h-3" /> {lastSess.avgRPE.toFixed(1)}
+                                  <Activity className="w-3 h-3" /> {(lastSess.avgRPE || 0).toFixed(1)}
                                 </span>
                               ) : (
                                 <span className="text-viking-silver/50 text-[11px] italic">N/A</span>
@@ -5583,16 +5589,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                        let clanSessionsCount = 0;
                        
                        Object.values(studentsData).forEach((student: any) => {
-                         student.sessions.forEach(sess => {
-                           if (sess.avgRPE && sess.avgRPE > 0) {
-                             clanTotalRpe += sess.avgRPE;
-                             clanRpeCount++;
-                           }
-                           if (sess.totalAchievedVolume) {
-                             clanTotalVolume += sess.totalAchievedVolume;
-                             clanSessionsCount++;
-                           }
-                         });
+                         if (student.sessions) {
+                           student.sessions.forEach((sess: any) => {
+                             if (sess.avgRPE && sess.avgRPE > 0) {
+                               clanTotalRpe += sess.avgRPE;
+                               clanRpeCount++;
+                             }
+                             if (sess.totalAchievedVolume) {
+                               clanTotalVolume += sess.totalAchievedVolume;
+                               clanSessionsCount++;
+                             }
+                           });
+                         }
                        });
 
                        const clanAvgRpe = clanRpeCount > 0 ? (clanTotalRpe / clanRpeCount).toFixed(1) : 'N/A';
@@ -5694,7 +5702,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
                                 : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
                             }`}>
-                              RPE Médio: {sess.avgRPE.toFixed(1)}
+                              RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
                             </span>
                           </div>
                           <div>
@@ -6875,7 +6883,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <input 
                                 type="number" 
                                 id="editStudentSquat"
-                                defaultValue={s.prs.squat || ''}
+                                defaultValue={s.prs?.squat || ''}
                                 placeholder="Ex: 150"
                                 className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                               />
@@ -6886,7 +6894,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <input 
                                 type="number" 
                                 id="editStudentBench"
-                                defaultValue={s.prs.bench || ''}
+                                defaultValue={s.prs?.bench || ''}
                                 placeholder="Ex: 110"
                                 className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                               />
@@ -6897,7 +6905,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <input 
                                 type="number" 
                                 id="editStudentDeadlift"
-                                defaultValue={s.prs.deadlift || ''}
+                                defaultValue={s.prs?.deadlift || ''}
                                 placeholder="Ex: 190"
                                 className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                               />
@@ -7510,7 +7518,7 @@ Equipe Viking Force`);
                       )}
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {(() => {
                         const filtered = Object.keys(studentsData).filter(email => {
                           const s = studentsData[email];
@@ -7527,50 +7535,176 @@ Equipe Viking Force`);
                           );
                         }
 
-                        return filtered.map(email => {
-                          const s = studentsData[email];
-                          return (
-                            <div key={email} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 flex flex-col gap-3">
-                              <div className="flex justify-between items-center">
-                                <div>
-                                  <p className="text-sm font-bold text-white">{s.name}</p>
-                                  <p className="text-xs text-viking-silver">{email}</p>
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {filtered.map(email => {
+                              const s = studentsData[email];
+                              return (
+                                <div 
+                                  key={email} 
+                                  onClick={() => setSelectedPaymentStudent(email)}
+                                  className="p-3.5 rounded-2xl bg-[#0d0908]/65 hover:bg-[#1a1210]/95 border border-viking-gold/15 hover:border-viking-gold/40 transition-all duration-300 cursor-pointer flex flex-col justify-between gap-2.5 group relative shadow-md"
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-extrabold text-white group-hover:text-viking-gold transition-colors truncate">
+                                        {s.name}
+                                      </p>
+                                      <p className="text-[10px] text-viking-silver/50 truncate mt-0.5">{email}</p>
+                                    </div>
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${
+                                      s.status === 'Pago' 
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                        : s.status === 'Pendente' 
+                                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                    }`}>
+                                      {s.status}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center text-[10px] bg-[#0d0908]/40 p-2 rounded-lg border border-viking-gold/5">
+                                    <span className="text-viking-silver/70 font-semibold truncate mr-2">{s.plan}</span>
+                                    <span className="font-extrabold text-white text-xs shrink-0">
+                                      R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="text-[9px] text-viking-gold/70 font-medium uppercase tracking-wider flex items-center justify-between border-t border-viking-gold/5 pt-2">
+                                    <span>Vencimento: {s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}</span>
+                                    <span className="text-viking-silver/40 group-hover:text-viking-gold transition-all flex items-center gap-1 font-black">
+                                      Ações <Settings className="w-3 h-3 text-viking-gold animate-spin-slow shrink-0" />
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-black text-white">R$ {getPlanPrice(s.plan).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                  <span className={`text-[9px] font-black uppercase ${s.status === 'Pago' ? 'text-emerald-400' : s.status === 'Pendente' ? 'text-amber-400' : 'text-red-400'}`}>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* JANELA DE GERENCIAMENTO DE PAGAMENTO (SUB-MODAL) */}
+                    <AnimatePresence>
+                      {selectedPaymentStudent && (() => {
+                        const s = studentsData[selectedPaymentStudent];
+                        if (!s) return null;
+                        const price = getPlanPrice(s.plan);
+                        return (
+                          <>
+                            {/* Sub-backdrop */}
+                            <motion.div 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              onClick={() => setSelectedPaymentStudent(null)}
+                              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[70]"
+                            />
+                            
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, x: '-50%', y: '-48%' }}
+                              animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+                              exit={{ opacity: 0, scale: 0.95, x: '-50%', y: '-48%' }}
+                              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                              className="fixed top-1/2 left-1/2 w-[calc(100%-2.5rem)] max-w-sm bg-[#140e0c]/98 border-2 border-viking-gold/40 rounded-3xl p-5 shadow-[0_0_60px_rgba(212,175,55,0.35)] z-[75] text-[#e0d3a8] flex flex-col gap-4 overflow-hidden"
+                            >
+                              {/* Header */}
+                              <div className="flex justify-between items-start border-b border-viking-gold/15 pb-3">
+                                <div>
+                                  <span className="text-[9px] text-viking-gold uppercase tracking-widest font-viking-medieval font-black">Cobranças & Recibos</span>
+                                  <h4 className="text-base font-black text-white font-viking-display tracking-wider mt-0.5">Gladiador Finanças</h4>
+                                  <p className="text-[10px] text-viking-silver/65 truncate max-w-[220px] mt-0.5">{selectedPaymentStudent}</p>
+                                </div>
+                                <button 
+                                  onClick={() => setSelectedPaymentStudent(null)}
+                                  className="p-1 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-silver hover:text-viking-gold cursor-pointer transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              
+                              {/* Info Box */}
+                              <div className="bg-[#0d0908]/90 border border-viking-gold/15 rounded-2xl p-3.5 flex flex-col gap-2.5">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-viking-silver/80 font-bold">Guerreiro:</span>
+                                  <span className="font-extrabold text-white text-right truncate max-w-[160px]">{s.name}</span>
+                                </div>
+                                
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-viking-silver/80 font-bold">Plano:</span>
+                                  <span className="bg-viking-gold/10 border border-viking-gold/25 px-2 py-0.5 rounded text-viking-gold font-black uppercase text-[10px]">{s.plan}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-viking-silver/80 font-bold">Tributo:</span>
+                                  <span className="font-black text-white">R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-viking-silver/80 font-bold">Vencimento:</span>
+                                  <span className="text-white font-black">{s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center pt-2.5 border-t border-viking-gold/10 text-xs">
+                                  <span className="text-viking-silver/80 font-bold">Status:</span>
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                                    s.status === 'Pago' 
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' 
+                                      : s.status === 'Pendente' 
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/25' 
+                                      : 'bg-red-500/10 text-red-400 border-red-500/25'
+                                  }`}>
                                     {s.status}
                                   </span>
                                 </div>
                               </div>
-                              <div className="flex justify-end gap-2 border-t border-viking-gold/10 pt-3">
-                                <button 
-                                  onClick={() => handleRegisterPayment(email)}
-                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+
+                              {/* Action Buttons */}
+                              <div className="flex flex-col gap-2 mt-1">
+                                <button
+                                  onClick={() => {
+                                    handleRegisterPayment(selectedPaymentStudent);
+                                    setSelectedPaymentStudent(null);
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                                 >
-                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <CheckCircle className="w-4 h-4 shrink-0" />
                                   Registrar Pagamento
                                 </button>
-                                <button 
-                                  onClick={() => generateReceiptPDF(email, s)}
-                                  className="px-3 py-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+
+                                <button
+                                  onClick={() => {
+                                    generateReceiptPDF(selectedPaymentStudent, s);
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-viking-gold/15 hover:bg-viking-gold/25 text-viking-gold border border-viking-gold/30 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                                 >
-                                  <FileDown className="w-3.5 h-3.5" />
-                                  Gerar Recibo
+                                  <FileDown className="w-4 h-4 shrink-0" />
+                                  Gerar Recibo (PDF)
                                 </button>
-                                <button 
-                                  onClick={() => handleSendRenewalEmail(email)}
-                                  className="px-3 py-1.5 rounded-lg bg-[#0d0908]/90 hover:bg-[#1f1612] text-[#e0d3a8] border border-viking-gold/20 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+
+                                <button
+                                  onClick={() => {
+                                    handleSendRenewalEmail(selectedPaymentStudent);
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-viking-dark hover:bg-viking-darker text-[#e0d3a8] border border-viking-gold/20 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                                 >
-                                  <Mail className="w-3.5 h-3.5 text-viking-gold" />
-                                  Cobrar
+                                  <Mail className="w-4 h-4 text-viking-gold shrink-0" />
+                                  Cobrar via E-mail
                                 </button>
                               </div>
-                            </div>
-                          );
-                        });
+
+                              {/* Close Button */}
+                              <button
+                                onClick={() => setSelectedPaymentStudent(null)}
+                                className="w-full py-2 bg-transparent hover:bg-white/5 border border-transparent hover:border-viking-gold/15 text-viking-silver hover:text-white text-[10px] font-bold tracking-wider uppercase transition-all rounded-xl cursor-pointer"
+                              >
+                                Voltar à Lista
+                              </button>
+                            </motion.div>
+                          </>
+                        );
                       })()}
-                    </div>
+                    </AnimatePresence>
                   </div>
                 )}
 
@@ -7582,7 +7716,7 @@ Equipe Viking Force`);
                     <div className="space-y-4 mt-4">
                       {(() => {
                         const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
-                        Object.entries(studentsData).forEach(([email, student]) => {
+                        Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
                           if (student.sessions && student.sessions.length > 0) {
                             student.sessions.forEach(sess => {
                               allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
@@ -7614,7 +7748,7 @@ Equipe Viking Force`);
                                 <span className={`inline-flex items-center gap-1 font-bold text-[11px] mt-1 ${
                                   sess.avgRPE >= 9 ? 'text-red-400' : sess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
                                 }`}>
-                                  <Activity className="w-3 h-3" /> RPE {sess.avgRPE.toFixed(1)}
+                                  <Activity className="w-3 h-3" /> RPE {(sess.avgRPE || 0).toFixed(1)}
                                 </span>
                               </div>
                             </div>
@@ -7672,11 +7806,11 @@ Equipe Viking Force`);
                           if (!term) return true;
                           return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
                         });
-                        const hasSessions = filteredEmails.some(email => studentsData[email].sessions.length > 0);
+                        const hasSessions = filteredEmails.some(email => (studentsData[email].sessions?.length || 0) > 0);
                         
                         return hasSessions ? (
                           filteredEmails.map(email => studentsData[email]).map(student => 
-                            student.sessions.map((sess, sIdx) => (
+                            (student.sessions || []).map((sess, sIdx) => (
                             <div key={`${student.name}-${sIdx}`} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-sm font-black text-white">{student.name}</span>
@@ -7691,7 +7825,7 @@ Equipe Viking Force`);
                                     ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
                                     : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
                                 }`}>
-                                  RPE Médio: {sess.avgRPE.toFixed(1)}
+                                  RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
                                 </span>
                               </div>
 
