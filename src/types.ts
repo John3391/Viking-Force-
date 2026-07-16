@@ -95,6 +95,7 @@ export interface LoggedSession {
     bench: number | null;
     deadlift: number | null;
   };
+  completedMobility?: string[];
 }
 
 export interface ChatMessage {
@@ -183,5 +184,11 @@ export interface DbExercise {
   videoUrl?: string;       // YouTube link
   videoBase64?: string;    // Base64 string for mobile uploads
   videoFileType?: string;  // e.g. "video/mp4" or "video/quicktime"
+}
+
+export interface DbMobilityExercise {
+  id: string;
+  name: string;
+  videoUrl?: string;
 }
 

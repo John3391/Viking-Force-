@@ -71,7 +71,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, CalendarEvent } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import { 
   fetchStudentsFromFirebase, 
@@ -84,6 +84,9 @@ import {
   fetchDbExercisesFromFirebase,
   saveDbExerciseToFirebase,
   deleteDbExerciseFromFirebase,
+  fetchDbMobilityExercisesFromFirebase,
+  saveDbMobilityExerciseToFirebase,
+  deleteDbMobilityExerciseFromFirebase,
   fetchCalendarEventsFromFirebase,
   saveCalendarEventToFirebase,
   deleteCalendarEventFromFirebase,
@@ -111,6 +114,12 @@ import { VikingLogo } from './components/VikingLogo';
 
 const TRAINER_EMAIL = 'john.vasquesrodrigues@gmail.com';
 const TRAINER_PASSWORD = '3636';
+
+const POWERLIFTING_TIPS: Record<string, string> = {
+  Squat: "Mantenha o peito alto, joelhos para fora e busque a profundidade ideal, mantendo os calcanhares no chão.",
+  Bench: "Retraia as escápulas, mantenha os pés firmes no chão e controle a descida da barra até o peito.",
+  Deadlift: "Mantenha a barra próxima às canelas, costas retas, ative o core e empurre o chão ao subir."
+};
 
 interface Toast {
   id: string;
@@ -199,6 +208,8 @@ export default function App() {
 
   // Active workout modal state (Student)
   const [workoutModalOpen, setWorkoutModalOpen] = useState<boolean>(false);
+  const [confirmSessionModalOpen, setConfirmSessionModalOpen] = useState<boolean>(false);
+  const [pendingSession, setPendingSession] = useState<LoggedSession | null>(null);
   const [workoutLayout, setWorkoutLayout] = useState<'modal' | 'sidebar'>('sidebar');
   const [workoutViewMode, setWorkoutViewMode] = useState<'list' | 'slide'>('slide');
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
@@ -297,6 +308,7 @@ export default function App() {
 
   // Exercises Database state
   const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
+  const [dbMobilityExercises, setDbMobilityExercises] = useState<DbMobilityExercise[]>([]);
   const [dbExercisesLoading, setDbExercisesLoading] = useState<boolean>(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [editingEvent, setEditingEvent] = useState<Partial<CalendarEvent> | null>(null);
@@ -661,6 +673,21 @@ export default function App() {
           const cached = localStorage.getItem('viking_db_exercises');
           if (cached) {
             setDbExercises(JSON.parse(cached));
+          }
+          syncSuccess = false;
+        }
+
+        try {
+          const remoteMobility = await fetchDbMobilityExercisesFromFirebase();
+          if (remoteMobility && remoteMobility.length > 0) {
+            setDbMobilityExercises(remoteMobility);
+            localStorage.setItem('viking_db_mobility_exercises', JSON.stringify(remoteMobility));
+          }
+        } catch (e) {
+          console.warn("Using offline storage for mobility:", e);
+          const cached = localStorage.getItem('viking_db_mobility_exercises');
+          if (cached) {
+            setDbMobilityExercises(JSON.parse(cached));
           }
           syncSuccess = false;
         }
@@ -2296,6 +2323,37 @@ export default function App() {
           </div>
         )}
         </div>
+        {confirmSessionModalOpen && pendingSession && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-[#140e0c] p-6 rounded-2xl border border-viking-gold/20 shadow-2xl max-w-sm w-full"
+            >
+              <h2 className="text-xl font-bold text-viking-gold mb-4">Confirmar Treino</h2>
+              <div className="space-y-2 text-sm text-[#e0d3a8] mb-6">
+                <p>Deseja finalizar e salvar esta sessão?</p>
+                <p>Volume Total: <span className="font-bold text-white">{pendingSession.totalAchievedVolume}</span></p>
+                <p>RPE Médio: <span className="font-bold text-white">{pendingSession.avgRPE.toFixed(1)}</span></p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setConfirmSessionModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8]"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => finalizeSession(pendingSession)}
+                  className="flex-1 py-2 rounded-lg bg-viking-gold text-[#140e0c] font-bold"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
       </div>
     );
   };
@@ -2327,6 +2385,61 @@ export default function App() {
     } as any);
 
     return warmup;
+  };
+
+  const finalizeSession = (session: LoggedSession) => {
+    if (!currentUser || !activeStudentProfile) return;
+
+    const updatedProfile: StudentProfile = {
+      ...activeStudentProfile,
+      sessions: [session, ...(activeStudentProfile.sessions || [])]
+    };
+
+    const updatedStudents = {
+      ...studentsData,
+      [currentUser.email]: updatedProfile
+    };
+
+    saveStudentsToDB(updatedStudents);
+
+    // Check for Wilks goal achievement
+    const oldTotal = (activeStudentProfile.prs.squat || 0) + (activeStudentProfile.prs.bench || 0) + (activeStudentProfile.prs.deadlift || 0);
+    const oldWilks = calculateWilks(activeStudentProfile.gender || 'male', activeStudentProfile.bodyWeight || 0, oldTotal);
+    
+    const getTierIdx = (w: number) => {
+      let idx = 0;
+      for (let i = WILKS_LEVELS.length - 1; i >= 0; i--) {
+        if (w >= WILKS_LEVELS[i].minWilks) {
+          idx = i;
+          break;
+        }
+      }
+      return idx;
+    };
+    
+    const oldTierIdx = getTierIdx(oldWilks);
+    const newTotal = (updatedProfile.prs.squat || 0) + (updatedProfile.prs.bench || 0) + (updatedProfile.prs.deadlift || 0);
+    const newWilks = calculateWilks(updatedProfile.gender || 'male', updatedProfile.bodyWeight || 0, newTotal);
+    const newTierIdx = getTierIdx(newWilks);
+
+    if (newTierIdx > oldTierIdx) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#e0d3a8', '#ffffff']
+      });
+      showToast(`🏆 Parabéns! Você atingiu a meta Wilks: ${WILKS_LEVELS[newTierIdx].name}!`, 'success');
+    }
+
+    setWorkoutModalOpen(false);
+    setConfirmSessionModalOpen(false);
+    setPendingSession(null);
+    setSessionRpeState({});
+    setExerciseFailureState({});
+    setExerciseSetsState({});
+    setSessionNote('');
+    showToast('Sessão registrada com sucesso!', 'success');
   };
 
   const handleWorkoutSubmit = () => {
@@ -2410,12 +2523,8 @@ export default function App() {
       sessions: [newSession, ...(activeStudentProfile.sessions || [])]
     };
 
-    const updatedStudents = {
-      ...studentsData,
-      [currentUser.email]: updatedProfile
-    };
-
-    saveStudentsToDB(updatedStudents);
+    setPendingSession(newSession);
+    setConfirmSessionModalOpen(true);
 
     // Check for Wilks goal achievement
     const oldTotal = (activeStudentProfile.prs.squat || 0) + (activeStudentProfile.prs.bench || 0) + (activeStudentProfile.prs.deadlift || 0);
@@ -3966,6 +4075,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 <p className="text-viking-silver/80 text-sm mt-1">
                   ⚔️ Saudações, <span className="text-viking-gold font-bold">{activeStudentProfile.name}</span>! O ferro espera sua soberania.
                 </p>
+                <div className="mt-4 bg-[#140e0c] p-3 rounded-xl border border-viking-gold/20 flex items-center gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-viking-gold">
+                      {activeStudentProfile.sessions.filter(s => (s.completedMobility?.length || 0) > 0).length}
+                    </div>
+                    <div className="text-[9px] text-viking-silver uppercase">Sessões com Mobilidade</div>
+                  </div>
+                  <div className="h-8 w-px bg-viking-gold/20"></div>
+                  <div className="text-[10px] text-viking-silver">
+                    Adesão aos protocolos de mobilidade para prevenção de lesões e performance.
+                  </div>
+                </div>
               </div>
               <div className="flex flex-col items-center gap-2">
                 <div className="flex items-center gap-2 bg-viking-gold/10 border border-viking-gold/30 px-3 py-1.5 rounded-xl">
@@ -4408,6 +4529,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <span className="leading-tight">Obs: {ex.trainerNote}</span>
                           </p>
                         )}
+                        {(() => {
+                          const tip = Object.entries(POWERLIFTING_TIPS).find(([key]) => ex.name.toLowerCase().includes(key.toLowerCase()))?.[1];
+                          if (!tip) return null;
+                          return (
+                            <div className="mt-2 bg-viking-gold/10 p-2 rounded border border-viking-gold/20 flex gap-2 items-start">
+                              <Info className="w-4 h-4 text-viking-gold shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-viking-gold/90 font-medium">
+                                <strong className="text-viking-gold">Dica Powerlifting:</strong> {tip}
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-xs font-semibold sm:text-right">
@@ -10362,6 +10495,32 @@ Equipe Viking Force`);
                                   {ex.name}
                                 </h4>
                                 {ex.main && <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Foco Principal</span>}
+                                {workoutViewMode === 'slide' && (
+                                  <div className="flex gap-1.5 ml-auto">
+                                    <button
+                                      type="button"
+                                      disabled={currentExerciseIndex === 0}
+                                      onClick={() => {
+                                        setSlideDirection('backward');
+                                        setCurrentExerciseIndex(prev => Math.max(0, prev - 1));
+                                      }}
+                                      className="p-1.5 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-30 cursor-pointer"
+                                    >
+                                      <ArrowLeft className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={currentExerciseIndex === list.length - 1}
+                                      onClick={() => {
+                                        setSlideDirection('forward');
+                                        setCurrentExerciseIndex(prev => Math.min(list.length - 1, prev + 1));
+                                      }}
+                                      className="p-1.5 rounded-lg bg-viking-gold/10 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-30 cursor-pointer"
+                                    >
+                                      <ArrowRight className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
                                 {(() => {
                                   const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
                                   const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;

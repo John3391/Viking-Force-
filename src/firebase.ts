@@ -14,7 +14,7 @@ import {
   deleteDoc,
   onSnapshot
 } from 'firebase/firestore';
-import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, CalendarEvent } from './types';
+import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, DbMobilityExercise, CalendarEvent } from './types';
 import { DEFAULT_STUDENTS, DEFAULT_PROGRAM } from './data';
 
 const firebaseConfig = {
@@ -662,6 +662,61 @@ export async function deleteDbExerciseFromFirebase(id: string): Promise<void> {
     await deleteDoc(doc(db, 'exercises', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `exercises/${id}`);
+  }
+}
+
+/**
+  * Fetch all mobility exercises from Firestore.
+  */
+export async function fetchDbMobilityExercisesFromFirebase(): Promise<DbMobilityExercise[]> {
+  try {
+    const colRef = collection(db, 'mobility_exercises');
+    const snapshot = await getDocs(colRef);
+    
+    const exercises: DbMobilityExercise[] = [];
+    snapshot.forEach(docSnap => {
+      exercises.push(docSnap.data() as DbMobilityExercise);
+    });
+
+    if (exercises.length === 0) {
+      const defaults: DbMobilityExercise[] = [
+        { id: 'cat_cow', name: 'Cat Cow', videoUrl: '' },
+        { id: 'bird_dog', name: 'Bird Dog', videoUrl: '' },
+        { id: 'world_greatest', name: 'World Greatest Stretch', videoUrl: '' }
+      ];
+      await Promise.all(defaults.map(ex => setDoc(doc(db, 'mobility_exercises', ex.id), ex)));
+      return defaults;
+    }
+
+    return exercises;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'mobility_exercises');
+  }
+}
+
+/**
+  * Save/update a single mobility exercise document in Firestore.
+  */
+export async function saveDbMobilityExerciseToFirebase(exercise: DbMobilityExercise): Promise<void> {
+  try {
+    if (!exercise.id) {
+      const newDocRef = doc(collection(db, 'mobility_exercises'));
+      exercise.id = newDocRef.id;
+    }
+    await setDoc(doc(db, 'mobility_exercises', exercise.id), exercise);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `mobility_exercises/${exercise.id}`);
+  }
+}
+
+/**
+  * Delete a mobility exercise document from Firestore.
+  */
+export async function deleteDbMobilityExerciseFromFirebase(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'mobility_exercises', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `mobility_exercises/${id}`);
   }
 }
 
