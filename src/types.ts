@@ -58,11 +58,11 @@ export interface LoggedSession {
   sessionName: string; // e.g. "Semana 1 - Treino A"
   exercises: LoggedExercise[];
   avgRPE: number;
-  note?: string;
+  note?: string | null;
   totalPlannedVolume?: number;
   totalAchievedVolume?: number;
   volumeDeficit?: number;
-  compensationSuggestion?: string;
+  compensationSuggestion?: string | null;
   prsAtSession?: {
     squat: number | null;
     bench: number | null;
@@ -99,10 +99,10 @@ export interface StudentProfile {
   age?: number;
   bodyWeight?: number;
   competitionDate?: string;
-  targetEventId?: string;
-  targetEventName?: string;
-  publicNote?: string;
-  dueDate?: string;
+  targetEventId?: string | null;
+  targetEventName?: string | null;
+  publicNote?: string | null;
+  dueDate?: string | null;
   accessBlocked?: boolean;
   phone?: string;
   autoMonthlySummary?: boolean;

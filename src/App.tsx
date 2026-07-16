@@ -1903,7 +1903,7 @@ export default function App() {
 
     const updatedProfile: StudentProfile = {
       ...student,
-      publicNote: noteText.trim() || undefined
+      publicNote: noteText.trim() || null
     };
 
     const updatedStudents = {
@@ -2278,7 +2278,7 @@ export default function App() {
         plannedVolume: plannedVol,
         achievedVolume: achievedVol,
         failed: isFailed,
-        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight, done: s.done })) : undefined
+        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight, done: s.done })) : []
       };
     });
 
@@ -2309,11 +2309,11 @@ export default function App() {
       sessionName: `Semana ${selectedWeek} - Treino ${selectedDay}`,
       exercises: exercisesLog,
       avgRPE,
-      note: sessionNote.trim() || undefined,
+      note: sessionNote.trim() || null,
       totalPlannedVolume,
       totalAchievedVolume,
       volumeDeficit,
-      compensationSuggestion: compensationSuggestion || undefined,
+      compensationSuggestion: compensationSuggestion || null,
       prsAtSession: {
         squat: activeStudentProfile.prs.squat,
         bench: activeStudentProfile.prs.bench,
