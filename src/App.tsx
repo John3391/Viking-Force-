@@ -8687,8 +8687,9 @@ Equipe Viking Force`);
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
                                 <input 
                                   type="number"
-                                  value={ex.sets}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', parseInt(e.target.value) || 0)}
+                                  value={ex.sets || ''}
+                                  onFocus={e => e.target.select()}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -8697,8 +8698,9 @@ Equipe Viking Force`);
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
                                 <input 
                                   type="number"
-                                  value={ex.reps}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', parseInt(e.target.value) || 0)}
+                                  value={ex.reps || ''}
+                                  onFocus={e => e.target.select()}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
