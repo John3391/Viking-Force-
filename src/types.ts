@@ -69,6 +69,7 @@ export interface LoggedSet {
   reps: number;
   weight: number;
   done?: boolean;
+  note?: string;
 }
 
 export interface LoggedExercise {

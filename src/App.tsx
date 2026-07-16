@@ -38,7 +38,6 @@ import {
   RotateCcw,
   MessageSquare, MessageCircle,
   AlertTriangle,
-  Info,
   Search,
   FileDown,
   ArrowLeft,
@@ -2326,36 +2325,7 @@ export default function App() {
           </div>
         )}
         </div>
-        {confirmSessionModalOpen && pendingSession && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-[#140e0c] p-6 rounded-2xl border border-viking-gold/20 shadow-2xl max-w-sm w-full"
-            >
-              <h2 className="text-xl font-bold text-viking-gold mb-4">Confirmar Treino</h2>
-              <div className="space-y-2 text-sm text-[#e0d3a8] mb-6">
-                <p>Deseja finalizar e salvar esta sessão?</p>
-                <p>Volume Total: <span className="font-bold text-white">{pendingSession.totalAchievedVolume}</span></p>
-                <p>RPE Médio: <span className="font-bold text-white">{pendingSession.avgRPE.toFixed(1)}</span></p>
-              </div>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setConfirmSessionModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8]"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={() => finalizeSession(pendingSession)}
-                  className="flex-1 py-2 rounded-lg bg-viking-gold text-[#140e0c] font-bold"
-                >
-                  Confirmar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+
 
       </div>
     );
@@ -2478,7 +2448,7 @@ export default function App() {
         plannedVolume: plannedVol,
         achievedVolume: achievedVol,
         failed: isFailed,
-        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight, done: s.done })) : []
+        sets: setsLogged.length > 0 ? setsLogged.map(s => ({ reps: s.reps, weight: s.weight, done: s.done, note: s.note })) : []
       };
     });
 
@@ -6472,8 +6442,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 {ex.sets && ex.sets.length > 0 && (
                                   <div className="pl-2.5 flex flex-wrap gap-1 text-[9px]">
                                     {ex.sets.map((s, sidx) => (
-                                      <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono">
-                                        S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong>
+                                      <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono inline-flex items-center gap-1" title={s.note || ''}>
+                                        <span>S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong></span>
+                                        {s.note && <span className="text-[8px] text-viking-gold/60 truncate max-w-[100px] border-l border-viking-gold/20 pl-1 ml-1 leading-none" title={s.note}>{s.note}</span>}
                                       </span>
                                     ))}
                                   </div>
@@ -8717,8 +8688,9 @@ Equipe Viking Force`);
                                     {e.sets && e.sets.length > 0 && (
                                       <div className="pl-2 flex flex-wrap gap-1 text-[9px]">
                                         {e.sets.map((s, sidx) => (
-                                          <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver/80 font-mono">
-                                            S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong>
+                                          <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver/80 font-mono inline-flex items-center gap-1" title={s.note || ''}>
+                                            <span>S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong></span>
+                                            {s.note && <span className="text-[8px] text-viking-gold/60 truncate max-w-[100px] border-l border-viking-gold/20 pl-1 ml-1 leading-none" title={s.note}>{s.note}</span>}
                                           </span>
                                         ))}
                                       </div>
@@ -9036,9 +9008,6 @@ Equipe Viking Force`);
                                   </div>
                                 </div>
                               )}
-                            </div>
-                          );
-                        
                             {/* Warmup editor nested inside exercise */}
                             {ex.main && (
                               <>
@@ -9160,10 +9129,10 @@ Equipe Viking Force`);
                             )}
 
                           </div>
-                        ));
-                      
-
-                      <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
+                          )
+                        })
+                      })()}
+                        <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
                         <button 
                           onClick={handleEditorSaveProgram}
                           className="flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
@@ -9177,10 +9146,10 @@ Equipe Viking Force`);
                           Fechar
                         </button>
                       </div>
-
-                    </div>
+                  </div>
                   </div>
                 )}
+
 
                 {/* 10. Direct Chat / Feedback Drawer */}
                 {drawerType === 'chat' && (() => {
@@ -9958,10 +9927,45 @@ Equipe Viking Force`);
                     </div>
                   </div>
                 )}
-
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+
+      {/* Confirm Session Modal (Moved to root level) */}
+      <AnimatePresence>
+        {confirmSessionModalOpen && pendingSession && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-[#140e0c] p-6 rounded-2xl border border-viking-gold/20 shadow-2xl max-w-sm w-full"
+            >
+              <h2 className="text-xl font-bold text-viking-gold mb-4">Confirmar Treino</h2>
+              <div className="space-y-2 text-sm text-[#e0d3a8] mb-6">
+                <p>Deseja finalizar e salvar esta sessão?</p>
+                <p>Volume Total: <span className="font-bold text-white">{pendingSession.totalAchievedVolume}</span></p>
+                <p>RPE Médio: <span className="font-bold text-white">{pendingSession.avgRPE.toFixed(1)}</span></p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setConfirmSessionModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/60 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => finalizeSession(pendingSession)}
+                  className="flex-1 py-2 rounded-lg bg-viking-gold text-[#140e0c] font-bold hover:brightness-110 transition-colors cursor-pointer"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -10469,12 +10473,13 @@ Equipe Viking Force`);
                               {(exerciseSetsState[ex.id] || []).map((set, setIdx) => (
                                 <div 
                                   key={setIdx} 
-                                  className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 p-2 rounded-lg transition-all border ${
+                                  className={`flex flex-col gap-2 p-2 rounded-lg transition-all border ${
                                     set.done 
                                       ? 'bg-green-950/20 border-green-500/30' 
                                       : 'bg-black/40 border-viking-gold/5 hover:border-viking-gold/10'
                                   }`}
                                 >
+                                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 w-full">
                                   {/* Checkoff / Done Button */}
                                   <button
                                     type="button"
@@ -10626,6 +10631,25 @@ Equipe Viking Force`);
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
+                                  </div>
+                                  <div className="w-full">
+                                    <input
+                                      type="text"
+                                      value={set.note || ''}
+                                      disabled={set.done}
+                                      onChange={(e) => {
+                                        setExerciseSetsState(prev => {
+                                          const sets = [...(prev[ex.id] || [])];
+                                          if (sets[setIdx]) {
+                                            sets[setIdx] = { ...sets[setIdx], note: e.target.value };
+                                          }
+                                          return { ...prev, [ex.id]: sets };
+                                        });
+                                      }}
+                                      placeholder="Nota da série (ex: leve, dor no ombro, RPE 8)..."
+                                      className="w-full bg-black/50 border border-viking-gold/20 rounded px-2 py-1.5 text-[11px] text-viking-silver focus:outline-none focus:border-viking-gold/50 disabled:opacity-50"
+                                    />
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -11640,7 +11664,7 @@ Equipe Viking Force`);
         )}
       </AnimatePresence>
 
-    </div>
+      </div>
   );
 
   // Quick helper to close drawers safely
@@ -11648,3 +11672,4 @@ Equipe Viking Force`);
     setDrawerOpen(false);
   }
 }
+

@@ -1,0 +1,426 @@
+                    </div>
+                  </div>
+                )}
+
+                {/* 9. Edit Program (Trainer) */}
+                {drawerType === 'editProgram' && (
+                  <div className="space-y-4">
+                    {/* Controls to load specific Week and Day */}
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">🗓️ Carregar Período</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Semana</label>
+                          <div className="flex gap-1.5">
+                            <select 
+                              value={editorWeek}
+                              onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                                <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                                  Semana {wk}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleEditorDeleteWeek(editorWeek)}
+                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              title="Excluir esta semana"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
+                          <div className="flex gap-1.5">
+                            <select 
+                              value={editorDay}
+                              onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              {Object.keys(trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                                <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                                  Treino {day}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleEditorDeleteDay(editorWeek, editorDay)}
+                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              title="Excluir este treino"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-viking-gold/10">
+                        <button
+                          type="button"
+                          onClick={handleEditorAddWeek}
+                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Semanas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleEditorAddWorkoutDay}
+                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Treino A, B, C
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Copy Workout Block */}
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <p className="text-xs text-viking-gold font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <Copy className="w-3.5 h-3.5 text-viking-gold" /> Copiar Treino de Outro Período
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Origem: Semana</label>
+                          <select 
+                            value={copySourceWeek}
+                            onChange={e => {
+                              const wk = parseInt(e.target.value);
+                              setCopySourceWeek(wk);
+                              const availableDays = Object.keys(trainingProgram.weeks[wk] || {}).sort();
+                              if (availableDays.length > 0 && !availableDays.includes(copySourceDay)) {
+                                setCopySourceDay(availableDays[0]);
+                              }
+                            }}
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
+                          >
+                            {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                              <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Semana {wk}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Origem: Treino</label>
+                          <select 
+                            value={copySourceDay}
+                            onChange={e => setCopySourceDay(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
+                          >
+                            {Object.keys(trainingProgram.weeks[copySourceWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                              <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Treino {day}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleEditorCopyWorkout(copySourceWeek, copySourceDay)}
+                        className="w-full py-2 bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 hover:border-viking-gold font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Copy className="w-4 h-4 text-viking-gold" /> Clonar Exercícios para Este Treino
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 pt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black uppercase text-viking-gold tracking-wider">Exercícios Prescritos ({editorExercises.length})</span>
+                        <button 
+                          onClick={handleEditorAddExercise}
+                          className="px-2.5 py-1 text-xs bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black uppercase rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-viking-gold/10"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Adicionar
+                        </button>
+                      </div>
+
+                      {/* Search Bar inside Program Editor */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-viking-gold/65">
+                          <Search className="w-4 h-4" />
+                        </div>
+                        <input
+                          type="text"
+                          value={editorSearchQuery}
+                          onChange={(e) => setEditorSearchQuery(e.target.value)}
+                          placeholder="Buscar exercício pelo nome..."
+                          className="w-full pl-9 pr-8 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/40 font-medium"
+                        />
+                        {editorSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setEditorSearchQuery('')}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver/60 hover:text-viking-gold cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {(() => {
+                        const indexedExercises = editorExercises.map((ex, originalIdx) => ({ ex, originalIdx }));
+                        const query = editorSearchQuery.trim().toLowerCase();
+                        const filtered = query === '' 
+                          ? indexedExercises 
+                          : indexedExercises.filter(({ ex }) => ex.name.toLowerCase().includes(query));
+
+                        if (editorExercises.length === 0) {
+                          return (
+                            <p className="text-center py-6 text-xs text-viking-silver/60 border border-viking-gold/10 rounded-xl">Treino limpo ou sem exercícios.</p>
+                          );
+                        }
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-xs text-viking-silver/50 border border-dashed border-viking-gold/15 rounded-xl space-y-1">
+                              <p className="font-bold">Nenhum exercício corresponde à sua busca.</p>
+                              <p className="text-[11px] text-viking-silver/40">Tente buscar por termos diferentes ou limpe a busca.</p>
+                            </div>
+                          );
+                        }
+
+                        return filtered.map(({ ex, originalIdx }) => {
+                          const isExpanded = expandedExerciseIdx === originalIdx;
+                          return (
+                            <div key={ex.id || originalIdx} className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${isExpanded ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-viking-gold/15'}`}>
+                              
+                              <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} {ex.name || 'Novo Exercício'}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold" /> : <ChevronDown className="w-3 h-3 text-viking-gold" />}
+                                </div>
+                                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => handleEditorDuplicateExercise(originalIdx)} className="p-1 rounded hover:bg-viking-gold/10 text-viking-gold cursor-pointer" title="Duplicar Exercício"><Copy className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => handleEditorRemoveExercise(originalIdx)} className="p-1 rounded hover:bg-red-950/40 text-red-400 cursor-pointer" title="Remover Exercício"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                              </div>
+
+                              {isExpanded && (
+                                <div className="space-y-3 mt-3 pt-3 border-t border-viking-gold/15">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="col-span-2 relative">
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Nome do Exercício</label>
+                                      <div className="relative">
+                                        <input value={ex.name} onChange={e => { handleEditorUpdateField(originalIdx, 'name', e.target.value); setOpenDropdownIdx(originalIdx); }} onFocus={() => setOpenDropdownIdx(originalIdx)} className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" placeholder="Escreva ou selecione..." />
+                                        <button type="button" onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer" title="Abrir Banco de Exercícios"><ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} /></button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
+                                      <input type="number" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
+                                      <input type="number" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Intensidade (%) ou Livre</label>
+                                      <input value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} onChange={e => { const val = e.target.value; const parsedNum = parseFloat(val); if (!isNaN(parsedNum) && parsedNum <= 100) { handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); } else { handleEditorUpdateField(originalIdx, 'intensity', val); } }} placeholder="Ex: 80 ou Carga Livre" className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">RPE Alvo</label>
+                                      <input type="number" step="0.5" value={ex.targetRPE} onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                  </div>
+                                  <div className="pt-3 border-t border-viking-gold/15 space-y-3">
+                                    <div className="relative">
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">{ex.main ? <><Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)</> : <><Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)</>}</label>
+                                      <input type="number" value={ex.baseWeight || ''} onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)} placeholder={ex.main ? "Ex: 150" : "Ex: 24"} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    {ex.main && typeof ex.intensity === 'number' && (
+                                      <div className="text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver">
+                                        <span className="font-semibold flex items-center gap-1">⚔️ Peso Estimado Calculado:</span>
+                                        <strong className="text-viking-gold text-xs font-black font-mono">{ex.baseWeight ? `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)` : `(Depende do PR cadastrado do aluno x ${Math.round(ex.intensity * 100)}%)`}</strong>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <input type="checkbox" id={`chk-main-${originalIdx}`} checked={ex.main} onChange={e => handleEditorUpdateField(originalIdx, 'main', e.target.checked)} className="rounded border-viking-gold/30 text-viking-gold focus:ring-viking-gold bg-black/40 cursor-pointer" />
+                                      <label htmlFor={`chk-main-${originalIdx}`} className="text-[10px] font-bold text-viking-silver uppercase tracking-wider cursor-pointer select-none">Habilitar Aquecimento Inteligente</label>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Dicas de Técnica / Orientações</label>
+                                      <textarea value={ex.techniqueTips || ''} onChange={e => handleEditorUpdateField(originalIdx, 'techniqueTips', e.target.value)} placeholder="Ex: Controlar a descida..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">Observações do Treinador</label>
+                                      <textarea value={ex.trainerNote || ''} onChange={e => handleEditorUpdateField(originalIdx, 'trainerNote', e.target.value)} placeholder="Ex: Fazer com band..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Lembretes de Mobilidade</label>
+                                      <textarea value={ex.mobilityReminders || ''} onChange={e => handleEditorUpdateField(originalIdx, 'mobilityReminders', e.target.value)} placeholder="Ex: Focar em liberar glúteo..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1 flex items-center gap-1"><Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Link do YouTube</label>
+                                      <input value={ex.videoUrl || ''} onChange={e => handleEditorUpdateField(originalIdx, 'videoUrl', e.target.value)} placeholder="Ex: https://www..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                    </div>
+                                    <div className="pt-2 border-t border-viking-gold/10 mt-1">
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 tracking-wider">⚡ Metodologia de Treino</label>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div>
+                                          <select value={ex.methodology || 'standard'} onChange={e => handleEditorUpdateField(originalIdx, 'methodology', e.target.value)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold">
+                                            <option value="standard" className="bg-[#140e0c] text-[#e0d3a8]">Padrão (Séries Lineares)</option>
+                                            <option value="backoff" className="bg-[#140e0c] text-[#e0d3a8]">Back-off Sets (Top Set + Recuo)</option>
+                                            <option value="myoreps" className="bg-[#140e0c] text-[#e0d3a8]">Myo-Reps (Mini-Séries de Estimulação)</option>
+                                            <option value="clusters" className="bg-[#140e0c] text-[#e0d3a8]">Cluster Sets (Repetições Agrupadas)</option>
+                                            <option value="dropset" className="bg-[#140e0c] text-[#e0d3a8]">Drop Sets (Redução Pós-Falha)</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <input type="text" value={ex.methodologyDetails || ''} onChange={e => handleEditorUpdateField(originalIdx, 'methodologyDetails', e.target.value)} placeholder="Opcional: Detalhes da metodologia..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            {/* Warmup editor nested inside exercise */}
+                            {ex.main && (
+                              <>
+                                <div className="mt-3 pt-3 border-t border-viking-gold/15 space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-viking-gold uppercase tracking-widest flex items-center gap-1">
+                                      <Flame className="w-3.5 h-3.5" /> Passos de Aquecimento (%)
+                                    </span>
+                                    <button 
+                                      onClick={() => handleEditorAddWarmupStep(originalIdx)}
+                                      className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
+                                    >
+                                      + Adicionar
+                                    </button>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    {(ex.warmup || []).map((step, sIdx) => (
+                                      <div key={sIdx} className="bg-[#0d0908]/80 px-2.5 py-1.5 rounded-lg border border-viking-gold/20 flex items-center gap-1.5 text-[10px]">
+                                        <input 
+                                          type="number"
+                                          value={Math.round(step.percent * 100)}
+                                          onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
+                                          className="w-8 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                        />
+                                        <span className="text-viking-silver/80">% ×</span>
+                                        <input 
+                                          type="number"
+                                          value={step.reps || ''}
+                                          onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                          className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                        />
+                                        <span className="text-viking-silver/80">reps</span>
+                                        <button 
+                                          onClick={() => handleEditorRemoveWarmupStep(originalIdx, sIdx)}
+                                          className="text-viking-red hover:brightness-125 ml-1 cursor-pointer"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Passos de Mobilidade */}
+                                <div className="space-y-2 pt-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-viking-gold uppercase tracking-widest flex items-center gap-1">
+                                      <Zap className="w-3.5 h-3.5" /> Mobilidade
+                                    </span>
+                                    <button 
+                                      onClick={() => handleEditorAddMobilityStep(originalIdx)}
+                                      className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
+                                    >
+                                      + Adicionar
+                                    </button>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <AnimatePresence>
+                                      {(ex.mobility || []).map((step, sIdx) => (
+                                        <motion.div 
+                                          key={sIdx}
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          exit={{ opacity: 0, x: -10 }}
+                                          className="bg-[#0d0908]/80 p-2 rounded-lg border border-viking-gold/20 text-[10px] space-y-1"
+                                        >
+                                          <input 
+                                            type="text"
+                                            value={step.name}
+                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'name', e.target.value)}
+                                            placeholder="Nome da mobilidade"
+                                            className="w-full bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded font-bold"
+                                          />
+                                          <div className="flex gap-2 items-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => setActiveVideoModal({ name: step.name, videoUrl: step.videoUrl, tips: step.tips })}
+                                              className="p-1 text-viking-gold hover:text-white cursor-pointer"
+                                            >
+                                              <Info className="w-4 h-4" />
+                                            </button>
+                                            <input 
+                                              type="number"
+                                              value={step.sets || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                              placeholder="Séries"
+                                              className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                            />
+                                            <span className="text-viking-silver/80">x</span>
+                                            <input 
+                                              type="number"
+                                              value={step.reps || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                              placeholder="Reps/Tempo"
+                                              className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                            />
+                                            <input 
+                                              type="text"
+                                              value={step.videoUrl || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'videoUrl', e.target.value)}
+                                              placeholder="URL Vídeo"
+                                              className="flex-1 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded"
+                                            />
+                                            <button 
+                                              onClick={() => handleEditorRemoveMobilityStep(originalIdx, sIdx)}
+                                              className="text-viking-red hover:brightness-125 cursor-pointer"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </motion.div>
+                                      ))}
+                                    </AnimatePresence>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                          </div>
+                          )
+                        })
+                      })()}
+                        <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
+                        <button 
+                          onClick={handleEditorSaveProgram}
+                          className="flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Save className="w-4 h-4 shrink-0" /> Salvar Prescrição
+                        </button>
+                        <button 
+                          onClick={() => handleCloseDrawer()}
+                          className="px-5 py-3 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                  </div>
+                  </div>
+                )}
+
+
+                {/* 10. Direct Chat / Feedback Drawer */}
+                {drawerType === 'chat' && (() => {
+                  const targetEmail = currentUser?.role === 'trainer' ? activeChatStudentEmail : currentUser?.email;
