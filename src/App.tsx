@@ -2465,7 +2465,7 @@ export default function App() {
     }
   };
 
-  const getLeaderboard = (): GymLeaderboardEntry[] => {
+  const leaderboard = React.useMemo((): GymLeaderboardEntry[] => {
     // Collect everyone (default + active student) and calculate dynamic rank
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
       const profile = studentsData[email];
@@ -2507,10 +2507,10 @@ export default function App() {
     });
 
     return entries.map((entry, idx) => ({ ...entry, position: idx + 1 }));
-  };
+  }, [studentsData, leaderboardSortCol, leaderboardSortDesc]);
 
-  const getFilteredLeaderboard = (): GymLeaderboardEntry[] => {
-    let entries = getLeaderboard();
+  const filteredLeaderboard = React.useMemo((): GymLeaderboardEntry[] => {
+    let entries = [...leaderboard];
 
     if (leaderboardGenderFilter !== 'all') {
       entries = entries.filter(w => w.gender === leaderboardGenderFilter);
@@ -2525,9 +2525,9 @@ export default function App() {
     }
 
     return entries.map((entry, idx) => ({ ...entry, position: idx + 1 }));
-  };
+  }, [leaderboard, leaderboardGenderFilter, leaderboardAgeFilter, leaderboardWeightFilter]);
 
-  const getAbsoluteLeader = (): GymLeaderboardEntry | null => {
+  const absoluteLeader = React.useMemo((): GymLeaderboardEntry | null => {
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
       const profile = studentsData[email];
       const squat = profile.prs?.squat || 0;
@@ -2559,7 +2559,7 @@ export default function App() {
     if (entries.length === 0) return null;
     entries.sort((a, b) => b.wilks - a.wilks);
     return { ...entries[0], position: 1 };
-  };
+  }, [studentsData]);
 
   const renderRankBadge = (pos: number, warrior?: GymLeaderboardEntry) => {
     const tooltipText = warrior 
@@ -4972,7 +4972,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             })()}
 
             {/* Wilks Efficiency Scatter Chart */}
-            <WilksScatterChart entries={getLeaderboard()} />
+            <WilksScatterChart entries={leaderboard} />
 
             {/* Payment Highlight Card */}
             {(() => {
@@ -5928,8 +5928,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     </p>
 
                     {/* Absolute Leader Highlight Card */}
-                    {getAbsoluteLeader() && (() => {
-                      const leader = getAbsoluteLeader()!;
+                    {absoluteLeader && (() => {
+                      const leader = absoluteLeader;
                       return (
                         <div className="relative overflow-hidden p-4 rounded-xl bg-gradient-to-br from-[#1a1210] via-[#0d0908]/90 to-black border-2 border-viking-gold shadow-[0_0_20px_rgba(212,175,55,0.25)] flex items-center justify-between">
                           {/* Background Glow */}
@@ -6129,15 +6129,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {/* 2.1 General Absoluto Leaderboard */}
                       {leaderboardTab === 'all' && (
                         <div className="space-y-2">
-                          {getFilteredLeaderboard().length === 0 ? (
+                          {filteredLeaderboard.length === 0 ? (
                             <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
                               <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
                               Nenhum guerreiro atende aos filtros selecionados.
                             </div>
                           ) : (
-                            getFilteredLeaderboard().map((warrior, idx) => {
+                            filteredLeaderboard.map((warrior, idx) => {
                             const isSelf = currentUser && currentUser.email === warrior.email;
-                            const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                            const isAbsoluteLeader = absoluteLeader?.email === warrior.email;
                             return (
                               <div 
                                 key={warrior.email} 
@@ -6201,14 +6201,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {/* 2.2 Leaderboard Grouped by Age Division */}
                       {leaderboardTab === 'age' && (
                         <div className="space-y-6">
-                          {getFilteredLeaderboard().length === 0 ? (
+                          {filteredLeaderboard.length === 0 ? (
                             <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
                               <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
                               Nenhum guerreiro atende aos filtros selecionados.
                             </div>
                           ) : (
                             ['Sub-Júnior (≤18)', 'Júnior (19-23)', 'Open (24-39)', 'Master (40+)'].map(division => {
-                            const competitors = getFilteredLeaderboard()
+                            const competitors = filteredLeaderboard
                               .filter(w => w.ageDivision === division)
                               .sort((a, b) => b.wilks - a.wilks);
 
@@ -6223,7 +6223,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   {competitors.map((warrior, idx) => {
                                     const isSelf = currentUser && currentUser.email === warrior.email;
                                     const isCategoryLeader = idx === 0;
-                                    const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                                    const isAbsoluteLeader = absoluteLeader?.email === warrior.email;
                                     return (
                                       <div 
                                         key={warrior.email} 
@@ -6279,14 +6279,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       {/* 2.3 Leaderboard Grouped by Weight Class */}
                       {leaderboardTab === 'weight' && (
                         <div className="space-y-6">
-                          {getFilteredLeaderboard().length === 0 ? (
+                          {filteredLeaderboard.length === 0 ? (
                             <div className="p-8 text-center rounded-xl bg-[#0d0908]/40 border border-viking-gold/10 text-viking-silver text-xs">
                               <Info className="w-5 h-5 text-viking-gold mx-auto mb-2 animate-pulse" />
                               Nenhum guerreiro atende aos filtros selecionados.
                             </div>
                           ) : (
                             (() => {
-                              const filtered = getFilteredLeaderboard();
+                              const filtered = filteredLeaderboard;
                               const categoriesMap = new Map<string, { gender: string, weightClass: string }>();
                               filtered.forEach(w => {
                                 const key = `${w.gender}-${w.weightClass}`;
@@ -6318,7 +6318,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   {competitors.map((warrior, idx) => {
                                     const isSelf = currentUser && currentUser.email === warrior.email;
                                     const isCategoryLeader = idx === 0;
-                                    const isAbsoluteLeader = getAbsoluteLeader()?.email === warrior.email;
+                                    const isAbsoluteLeader = absoluteLeader?.email === warrior.email;
                                     return (
                                       <div 
                                         key={warrior.email} 
