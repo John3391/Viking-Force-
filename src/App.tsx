@@ -63,7 +63,8 @@ import {
   Calendar,
   Users,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Bell
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
