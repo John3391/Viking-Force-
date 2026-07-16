@@ -9,6 +9,7 @@ export interface MobilityStep {
   sets: number;
   reps: number;
   videoUrl?: string;
+  tips?: string;
 }
 
 export interface WilksTier {
@@ -190,5 +191,6 @@ export interface DbMobilityExercise {
   id: string;
   name: string;
   videoUrl?: string;
+  tips?: string;
 }
 

@@ -24,6 +24,7 @@ import {
   Activity, 
   ChevronRight, 
   ChevronDown, 
+  ChevronUp,
   Scale, 
   Shield, 
   Coins, 
@@ -67,7 +68,8 @@ import {
   Image as ImageIcon,
   Bell,
   Grid,
-  List
+  List,
+  Info
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -316,7 +318,8 @@ export default function App() {
   const [dbExerciseSearch, setDbExerciseSearch] = useState<string>('');
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
-  const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string } | null>(null);
+  const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
 
   // Viking Plans configuration
   const [vikingPlans, setVikingPlans] = useState<VikingPlan[]>(() => {
@@ -3068,6 +3071,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
     saveProgramToDB({ weeks: updatedWeeks });
     showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para todos os guerreiros!`, 'success');
+    showToast(`Treino postado com sucesso para o aluno!`, 'success');
     
     // Close drawer, reset view to home panel, and smooth scroll to top of screen
     setDrawerOpen(false);
@@ -8938,287 +8942,103 @@ Equipe Viking Force`);
                           );
                         }
 
-                        return filtered.map(({ ex, originalIdx }) => (
-                          <div key={ex.id || originalIdx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3 relative transition-all duration-300 hover:scale-[1.02] hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.25)]">
-                            
-                            {/* Header row */}
-                            <div className="flex justify-between items-center pb-2 border-b border-viking-gold/15">
-                              <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} Exercício</span>
-                              <div className="flex items-center gap-1">
-                                <button 
-                                  onClick={() => handleEditorDuplicateExercise(originalIdx)}
-                                  className="p-1 rounded hover:bg-viking-gold/10 text-viking-gold cursor-pointer"
-                                  title="Duplicar Exercício"
-                                >
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={() => handleEditorRemoveExercise(originalIdx)}
-                                  className="p-1 rounded hover:bg-red-950/40 text-red-400 cursor-pointer"
-                                  title="Remover Exercício"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Standard fields */}
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="col-span-2 relative">
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Nome do Exercício</label>
-                                <div className="relative">
-                                  <input 
-                                    value={ex.name}
-                                    onChange={e => {
-                                      handleEditorUpdateField(originalIdx, 'name', e.target.value);
-                                      setOpenDropdownIdx(originalIdx);
-                                    }}
-                                    onFocus={() => setOpenDropdownIdx(originalIdx)}
-                                    className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                    placeholder="Escreva ou selecione..."
-                                  />
-                                  <button 
-                                    type="button"
-                                    onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer"
-                                    title="Abrir Banco de Exercícios"
-                                  >
-                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} />
-                                  </button>
+                        return filtered.map(({ ex, originalIdx }) => {
+                          const isExpanded = expandedExerciseIdx === originalIdx;
+                          return (
+                            <div key={ex.id || originalIdx} className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${isExpanded ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-viking-gold/15'}`}>
+                              
+                              <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} {ex.name || 'Novo Exercício'}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold" /> : <ChevronDown className="w-3 h-3 text-viking-gold" />}
                                 </div>
+                                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => handleEditorDuplicateExercise(originalIdx)} className="p-1 rounded hover:bg-viking-gold/10 text-viking-gold cursor-pointer" title="Duplicar Exercício"><Copy className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => handleEditorRemoveExercise(originalIdx)} className="p-1 rounded hover:bg-red-950/40 text-red-400 cursor-pointer" title="Remover Exercício"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                              </div>
 
-                                {openDropdownIdx === originalIdx && (
-                                  <>
-                                    <div 
-                                      className="fixed inset-0 z-40" 
-                                      onClick={() => setOpenDropdownIdx(null)} 
-                                    />
-                                    <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#140e0c] border-2 border-viking-gold/30 rounded-xl shadow-[0_4px_25px_rgba(0,0,0,0.9)] z-55 p-1 flex flex-col gap-0.5 divide-y divide-viking-gold/10">
-                                      {(() => {
-                                        const query = ex.name.toLowerCase();
-                                        const matches = dbExercises.filter(dbEx => 
-                                          dbEx.name.toLowerCase().includes(query)
-                                        );
-                                        const listToShow = query === '' ? dbExercises : matches;
-
-                                        if (listToShow.length === 0) {
-                                          return (
-                                            <div className="p-2 text-center text-[10px] text-viking-silver/50">
-                                              Nenhum exercício encontrado.
-                                            </div>
-                                          );
-                                        }
-
-                                        return listToShow.map((dbEx) => (
-                                          <button
-                                            key={dbEx.id}
-                                            type="button"
-                                            onClick={() => {
-                                              setEditorExercises(prev => prev.map((item, i) => {
-                                                if (i === originalIdx) {
-                                                  return {
-                                                    ...item,
-                                                    name: dbEx.name,
-                                                    techniqueTips: dbEx.techniqueTips || '',
-                                                    videoUrl: dbEx.videoUrl || ''
-                                                  };
-                                                }
-                                                return item;
-                                              }));
-                                              setOpenDropdownIdx(null);
-                                              showToast(`Exercício "${dbEx.name}" selecionado!`, 'success');
-                                            }}
-                                            className="w-full text-left p-2 hover:bg-viking-gold/15 rounded-lg text-xs font-semibold text-viking-silver hover:text-viking-gold flex flex-col gap-0.5 transition-all cursor-pointer"
-                                          >
-                                            <span className="font-bold text-white text-[10px] sm:text-[11px] uppercase tracking-wider">{dbEx.name}</span>
-                                            {dbEx.techniqueTips && (
-                                              <span className="text-[9px] text-viking-silver/60 truncate max-w-[280px] italic">Orientações: {dbEx.techniqueTips}</span>
-                                            )}
-                                          </button>
-                                        ));
-                                      })()}
+                              {isExpanded && (
+                                <div className="space-y-3 mt-3 pt-3 border-t border-viking-gold/15">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="col-span-2 relative">
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Nome do Exercício</label>
+                                      <div className="relative">
+                                        <input value={ex.name} onChange={e => { handleEditorUpdateField(originalIdx, 'name', e.target.value); setOpenDropdownIdx(originalIdx); }} onFocus={() => setOpenDropdownIdx(originalIdx)} className="w-full pl-3 pr-8 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" placeholder="Escreva ou selecione..." />
+                                        <button type="button" onClick={() => setOpenDropdownIdx(openDropdownIdx === originalIdx ? null : originalIdx)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-viking-silver hover:text-viking-gold cursor-pointer" title="Abrir Banco de Exercícios"><ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdownIdx === originalIdx ? 'rotate-90 text-viking-gold' : 'text-viking-silver/50'}`} /></button>
+                                      </div>
                                     </div>
-                                  </>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
-                                <input 
-                                  type="number"
-                                  value={ex.sets === 0 ? '' : ex.sets}
-                                  onFocus={e => e.target.select()}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
-                                <input 
-                                  type="number"
-                                  value={ex.reps === 0 ? '' : ex.reps}
-                                  onFocus={e => e.target.select()}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Intensidade (%) ou Livre</label>
-                                <input 
-                                  value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    const parsedNum = parseFloat(val);
-                                    if (!isNaN(parsedNum) && parsedNum <= 100) {
-                                      handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100);
-                                    } else {
-                                      handleEditorUpdateField(originalIdx, 'intensity', val);
-                                    }
-                                  }}
-                                  placeholder="Ex: 80 ou Carga Livre"
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">RPE Alvo</label>
-                                <input 
-                                  type="number"
-                                  step="0.5"
-                                  value={ex.targetRPE}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">
-                                  {ex.main ? (
-                                    <>
-                                      <Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)
-                                    </>
-                                  )}
-                                </label>
-                                <input 
-                                  type="number"
-                                  value={ex.baseWeight || ''}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)}
-                                  placeholder={ex.main ? "Ex: 150" : "Ex: 24"}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                  title={ex.main ? "Defina a carga de referência para calcular a porcentagem do lift" : "Defina a carga exata sugerida para o aluno neste exercício acessório"}
-                                />
-                              </div>
-
-                              {ex.main && typeof ex.intensity === 'number' && (
-                                <div className="col-span-2 text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver mt-1">
-                                  <span className="font-semibold flex items-center gap-1">⚔️ Peso Estimado Calculado:</span>
-                                  <strong className="text-viking-gold text-xs font-black font-mono">
-                                    {ex.baseWeight 
-                                      ? `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)` 
-                                      : `(Depende do PR cadastrado do aluno x ${Math.round(ex.intensity * 100)}%)`}
-                                  </strong>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
+                                      <input type="number" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
+                                      <input type="number" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Intensidade (%) ou Livre</label>
+                                      <input value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} onChange={e => { const val = e.target.value; const parsedNum = parseFloat(val); if (!isNaN(parsedNum) && parsedNum <= 100) { handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); } else { handleEditorUpdateField(originalIdx, 'intensity', val); } }} placeholder="Ex: 80 ou Carga Livre" className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">RPE Alvo</label>
+                                      <input type="number" step="0.5" value={ex.targetRPE} onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                  </div>
+                                  <div className="pt-3 border-t border-viking-gold/15 space-y-3">
+                                    <div className="relative">
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">{ex.main ? <><Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)</> : <><Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)</>}</label>
+                                      <input type="number" value={ex.baseWeight || ''} onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)} placeholder={ex.main ? "Ex: 150" : "Ex: 24"} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                    </div>
+                                    {ex.main && typeof ex.intensity === 'number' && (
+                                      <div className="text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver">
+                                        <span className="font-semibold flex items-center gap-1">⚔️ Peso Estimado Calculado:</span>
+                                        <strong className="text-viking-gold text-xs font-black font-mono">{ex.baseWeight ? `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)` : `(Depende do PR cadastrado do aluno x ${Math.round(ex.intensity * 100)}%)`}</strong>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <input type="checkbox" id={`chk-main-${originalIdx}`} checked={ex.main} onChange={e => handleEditorUpdateField(originalIdx, 'main', e.target.checked)} className="rounded border-viking-gold/30 text-viking-gold focus:ring-viking-gold bg-black/40 cursor-pointer" />
+                                      <label htmlFor={`chk-main-${originalIdx}`} className="text-[10px] font-bold text-viking-silver uppercase tracking-wider cursor-pointer select-none">Habilitar Aquecimento Inteligente</label>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Dicas de Técnica / Orientações</label>
+                                      <textarea value={ex.techniqueTips || ''} onChange={e => handleEditorUpdateField(originalIdx, 'techniqueTips', e.target.value)} placeholder="Ex: Controlar a descida..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">Observações do Treinador</label>
+                                      <textarea value={ex.trainerNote || ''} onChange={e => handleEditorUpdateField(originalIdx, 'trainerNote', e.target.value)} placeholder="Ex: Fazer com band..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Lembretes de Mobilidade</label>
+                                      <textarea value={ex.mobilityReminders || ''} onChange={e => handleEditorUpdateField(originalIdx, 'mobilityReminders', e.target.value)} placeholder="Ex: Focar em liberar glúteo..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1 flex items-center gap-1"><Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Link do YouTube</label>
+                                      <input value={ex.videoUrl || ''} onChange={e => handleEditorUpdateField(originalIdx, 'videoUrl', e.target.value)} placeholder="Ex: https://www..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                    </div>
+                                    <div className="pt-2 border-t border-viking-gold/10 mt-1">
+                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 tracking-wider">⚡ Metodologia de Treino</label>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div>
+                                          <select value={ex.methodology || 'standard'} onChange={e => handleEditorUpdateField(originalIdx, 'methodology', e.target.value)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold">
+                                            <option value="standard" className="bg-[#140e0c] text-[#e0d3a8]">Padrão (Séries Lineares)</option>
+                                            <option value="backoff" className="bg-[#140e0c] text-[#e0d3a8]">Back-off Sets (Top Set + Recuo)</option>
+                                            <option value="myoreps" className="bg-[#140e0c] text-[#e0d3a8]">Myo-Reps (Mini-Séries de Estimulação)</option>
+                                            <option value="clusters" className="bg-[#140e0c] text-[#e0d3a8]">Cluster Sets (Repetições Agrupadas)</option>
+                                            <option value="dropset" className="bg-[#140e0c] text-[#e0d3a8]">Drop Sets (Redução Pós-Falha)</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <input type="text" value={ex.methodologyDetails || ''} onChange={e => handleEditorUpdateField(originalIdx, 'methodologyDetails', e.target.value)} placeholder="Opcional: Detalhes da metodologia..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
-
-                              <div className="col-span-2 flex items-center gap-2 pt-1.5">
-                                <input 
-                                  type="checkbox"
-                                  id={`chk-main-${originalIdx}`}
-                                  checked={ex.main}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'main', e.target.checked)}
-                                  className="rounded border-viking-gold/30 text-viking-gold focus:ring-viking-gold bg-black/40 cursor-pointer"
-                                />
-                                <label htmlFor={`chk-main-${originalIdx}`} className="text-[10px] font-bold text-viking-silver uppercase tracking-wider cursor-pointer select-none">
-                                  Habilitar Aquecimento Inteligente (Para agacho, supino e terra)
-                                </label>
-                              </div>
-
-                              <div className="col-span-2 pt-1">
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Dicas de Técnica / Orientações para o Aluno</label>
-                                <textarea 
-                                  value={ex.techniqueTips || ''}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'techniqueTips', e.target.value)}
-                                  placeholder="Ex: Controlar a descida por 3s, expandir o peito na subida, forçar os joelhos para fora."
-                                  rows={2}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
-                                />
-                              </div>
-
-                              <div className="col-span-2 pt-1">
-                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">Observações do Treinador (Específico p/ o Treino)</label>
-                                <textarea 
-                                  value={ex.trainerNote || ''}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'trainerNote', e.target.value)}
-                                  placeholder="Ex: Fazer com band pra baixo + box squat"
-                                  rows={2}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none"
-                                />
-                              </div>
-
-                              <div className="col-span-2 pt-1">
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Lembretes de Mobilidade</label>
-                                <textarea 
-                                  value={ex.mobilityReminders || ''}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'mobilityReminders', e.target.value)}
-                                  placeholder="Ex: Focar em liberar glúteo antes de começar."
-                                  rows={2}
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
-                                />
-                              </div>
-
-                              <div className="col-span-2 pt-1">
-                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1 flex items-center gap-1">
-                                  <Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Link do YouTube (Vídeo de Execução)
-                                </label>
-                                <input 
-                                  value={ex.videoUrl || ''}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'videoUrl', e.target.value)}
-                                  placeholder="Ex: https://www.youtube.com/watch?v=..."
-                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
-                                />
-                              </div>
-
-                              <div className="col-span-2 pt-2 border-t border-viking-gold/10 mt-1">
-                                <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 tracking-wider">⚡ Metodologia de Treino</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div>
-                                    <select
-                                      value={ex.methodology || 'standard'}
-                                      onChange={e => handleEditorUpdateField(originalIdx, 'methodology', e.target.value)}
-                                      className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                                    >
-                                      <option value="standard" className="bg-[#140e0c] text-[#e0d3a8]">Padrão (Séries Lineares)</option>
-                                      <option value="backoff" className="bg-[#140e0c] text-[#e0d3a8]">Back-off Sets (Top Set + Recuo)</option>
-                                      <option value="myoreps" className="bg-[#140e0c] text-[#e0d3a8]">Myo-Reps (Mini-Séries de Estimulação)</option>
-                                      <option value="clusters" className="bg-[#140e0c] text-[#e0d3a8]">Cluster Sets (Repetições Agrupadas)</option>
-                                      <option value="dropset" className="bg-[#140e0c] text-[#e0d3a8]">Drop Sets (Redução Pós-Falha)</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <input
-                                      type="text"
-                                      value={ex.methodologyDetails || ''}
-                                      onChange={e => handleEditorUpdateField(originalIdx, 'methodologyDetails', e.target.value)}
-                                      placeholder={
-                                        ex.methodology === 'backoff' ? "Ex: 1 Top Set + 3 Sets de Recuo com -10%" :
-                                        ex.methodology === 'myoreps' ? "Ex: Série Ativadora + 4 mini-sets de 3 reps" :
-                                        ex.methodology === 'clusters' ? "Ex: 4x(3+3+3 reps com 15s descanso)" :
-                                        ex.methodology === 'dropset' ? "Ex: Reduzir a carga em 30% após a falha" :
-                                        "Opcional: Detalhes da metodologia..."
-                                      }
-                                      className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
                             </div>
-
+                          );
+                        
                             {/* Warmup editor nested inside exercise */}
                             {ex.main && (
                               <>
@@ -9295,6 +9115,13 @@ Equipe Viking Force`);
                                             className="w-full bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded font-bold"
                                           />
                                           <div className="flex gap-2 items-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => setActiveVideoModal({ name: step.name, videoUrl: step.videoUrl, tips: step.tips })}
+                                              className="p-1 text-viking-gold hover:text-white cursor-pointer"
+                                            >
+                                              <Info className="w-4 h-4" />
+                                            </button>
                                             <input 
                                               type="number"
                                               value={step.sets || ''}
@@ -9334,7 +9161,7 @@ Equipe Viking Force`);
 
                           </div>
                         ));
-                      })()}
+                      
 
                       <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
                         <button 
@@ -10657,6 +10484,29 @@ Equipe Viking Force`);
                                         if (sets[setIdx]) {
                                           const nextDone = !sets[setIdx].done;
                                           sets[setIdx] = { ...sets[setIdx], done: nextDone };
+                                          
+                                          // Check for PR achievement
+                                          if (nextDone && activeStudentProfile) {
+                                              const allDone = sets.every(s => s.done);
+                                              if (allDone) {
+                                                  const maxWeight = Math.max(...sets.map(s => s.weight || 0));
+                                                  let prValue = null;
+                                                  const exNameLower = ex.name.toLowerCase();
+                                                  if (exNameLower.includes('squat') || exNameLower.includes('agachamento')) prValue = activeStudentProfile.prs.squat;
+                                                  else if (exNameLower.includes('bench') || exNameLower.includes('supino')) prValue = activeStudentProfile.prs.bench;
+                                                  else if (exNameLower.includes('deadlift') || exNameLower.includes('levantamento')) prValue = activeStudentProfile.prs.deadlift;
+                                                  
+                                                  if (prValue !== null && prValue > 0 && maxWeight > prValue) {
+                                                      confetti({
+                                                          particleCount: 150,
+                                                          spread: 70,
+                                                          origin: { y: 0.6 },
+                                                          colors: ['#d4af37', '#e0d3a8', '#ffffff']
+                                                      });
+                                                      showToast(`🔥 NOVO PR EM ${ex.name.toUpperCase()}: ${maxWeight}kg!`, 'success');
+                                                  }
+                                              }
+                                          }
                                         }
                                         return { ...prev, [ex.id]: sets };
                                       });
@@ -11744,7 +11594,12 @@ Equipe Viking Force`);
                 </button>
               </div>
 
-              <div className="p-5 bg-black/40">
+              <div className="p-5 bg-black/40 space-y-4">
+                {activeVideoModal.tips && (
+                  <div className="p-3 bg-viking-gold/5 border border-viking-gold/20 rounded-xl text-xs text-[#e0d3a8]">
+                     {activeVideoModal.tips}
+                  </div>
+                )}
                 {activeVideoModal.videoBase64 ? (
                   <video 
                     controls 
