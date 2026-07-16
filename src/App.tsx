@@ -7691,6 +7691,22 @@ Equipe Viking Force`);
                                   <Mail className="w-4 h-4 text-viking-gold shrink-0" />
                                   Cobrar via E-mail
                                 </button>
+
+                                <button
+                                  onClick={() => {
+                                    if (s.phone) {
+                                      const phoneClean = s.phone.replace(/\D/g, '');
+                                      const message = `Saudações, guerreiro ${s.name}! Passando para lembrar que o vencimento da sua mensalidade no Templo Viking está próximo (${s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'em breve'}). Prepare o seu tributo para continuarmos firmes na jornada de força! ⚔️🛡️💪`;
+                                      window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, '_blank');
+                                    } else {
+                                      showToast('Este guerreiro não possui número de WhatsApp cadastrado!', 'warning');
+                                    }
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-[#1ea453]/15 hover:bg-[#1ea453]/25 text-[#1ea453] border border-[#1ea453]/30 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                                >
+                                  <MessageCircle className="w-4 h-4 text-[#1ea453] shrink-0" />
+                                  Cobrar via WhatsApp
+                                </button>
                               </div>
 
                               {/* Close Button */}
