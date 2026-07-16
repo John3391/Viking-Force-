@@ -176,6 +176,7 @@ export default function App() {
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
   
   const hasCheckedDueDatesRef = useRef<boolean>(false);
+  const previousStudentsRef = useRef<Record<string, StudentProfile>>({});
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
   const [chatImageFile, setChatImageFile] = useState<File | null>(null);
   const [isUploadingChatImage, setIsUploadingChatImage] = useState<boolean>(false);
@@ -758,6 +759,37 @@ export default function App() {
       hasCheckedDueDatesRef.current = true;
     }
   }, [isLoggedIn, currentUser, studentsData]);
+
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.role === 'trainer') {
+      const prev = previousStudentsRef.current;
+      const current = studentsData;
+
+      if (Object.keys(prev).length > 0) {
+        Object.keys(current).forEach(email => {
+          const prevStudent = prev[email];
+          const currStudent = current[email];
+
+          if (prevStudent && currStudent) {
+            const prevSessions = prevStudent.sessions || [];
+            const currSessions = currStudent.sessions || [];
+            
+            if (currSessions.length > prevSessions.length) {
+              const newSession = currSessions[0];
+              showToast(`[ALERTA VIKING] O guerreiro ${currStudent.name} acabou de concluir o treino: ${newSession?.sessionName || 'Novo Treino'}!`, 'success');
+              
+              // Optional: Play a subtle notification sound here if desired
+              try {
+                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                audio.play().catch(e => console.log('Audio play failed', e));
+              } catch (e) {}
+            }
+          }
+        });
+      }
+    }
+    previousStudentsRef.current = studentsData;
+  }, [studentsData, isLoggedIn, currentUser]);
 
   const handleManualSync = async () => {
     showToast('Iniciando sincronização com o Templo...', 'info');
