@@ -2978,6 +2978,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 ) : (
                   <>
                     <button 
+                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); }}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                        drawerOpen && drawerType === 'recentWorkouts' 
+                          ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                          : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                      }`}
+                    >
+                      <CheckCircle className={`w-4 h-4 ${drawerOpen && drawerType === 'recentWorkouts' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treinos Concluídos
+                    </button>
+                    <button 
                       onClick={() => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         drawerOpen && drawerType === 'rpeFeedback' 
@@ -4841,6 +4851,111 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Salão do Silêncio</p>
                         <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
                           Nenhum novo recorde de força registrado por seus gladiadores nesta quinzena. Mantenha os guerreiros focados nos treinos pesados para clamar glória!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* --- RECENT WORKOUTS (LIVE LIST) --- */}
+            {(() => {
+              const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
+              Object.entries(studentsData).forEach(([email, student]) => {
+                if (student.sessions && student.sessions.length > 0) {
+                  student.sessions.forEach(sess => {
+                    allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
+                  });
+                }
+              });
+
+              // Sort by date/id
+              allSessions.sort((a, b) => {
+                const aTime = a.id ? parseInt(a.id.split('_')[1] || '0') : 0;
+                const bTime = b.id ? parseInt(b.id.split('_')[1] || '0') : 0;
+                return bTime - aTime;
+              });
+
+              // Take only the 6 most recent ones
+              const recentSessions = allSessions.slice(0, 6);
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Activity className="w-32 h-32" />
+                  </div>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5 relative z-10">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-viking-gold">
+                        <span className="flex h-2.5 w-2.5 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest text-emerald-400">Atividade em Tempo Real</h2>
+                      </div>
+                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-1">Guerreiros que Concluíram Treinos</p>
+                    </div>
+                  </div>
+
+                  {recentSessions.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+                      <AnimatePresence>
+                        {recentSessions.map((sess, idx) => (
+                          <motion.div 
+                            key={`${sess.studentEmail}-${sess.id}`}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
+                                  <Dumbbell className="w-4 h-4" />
+                                </span>
+                                <div>
+                                  <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
+                                    {sess.studentName}
+                                  </h4>
+                                  <p className="text-[10px] text-viking-silver/60 truncate">{sess.sessionName}</p>
+                                </div>
+                              </div>
+                              <span className={`bg-opacity-10 border text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval ${
+                                sess.avgRPE >= 9 ? 'bg-red-500 text-red-400 border-red-500/25' : sess.avgRPE >= 7.5 ? 'bg-amber-500 text-amber-400 border-amber-500/25' : 'bg-emerald-500 text-emerald-400 border-emerald-500/25'
+                              }`}>
+                                RPE {sess.avgRPE.toFixed(1)}
+                              </span>
+                            </div>
+                            
+                            {sess.note && (
+                              <div className="mt-2 p-2.5 bg-black/40 rounded-lg border border-viking-gold/5">
+                                <p className="text-xs text-viking-silver italic line-clamp-2">"{sess.note}"</p>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setDrawerTitle('Treinos Concluídos');
+                                setDrawerType('recentWorkouts');
+                                setDrawerOpen(true);
+                              }}
+                              className="w-full py-2.5 mt-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer bg-viking-gold/10 border-viking-gold/20 hover:bg-viking-gold/20 text-viking-gold"
+                            >
+                              <Search className="w-3.5 h-3.5 shrink-0" />
+                              Ver Todos os Treinos
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl relative z-10">
+                      <span className="text-3xl">💤</span>
+                      <div>
+                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Templo Vazio</p>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
+                          Nenhum guerreiro concluiu treinos recentemente. O ferro aguarda.
                         </p>
                       </div>
                     </div>
@@ -7458,6 +7573,69 @@ Equipe Viking Force`);
                   </div>
                 )}
 
+                {/* 7.5. Treinos Concluídos (Trainer) */}
+                {drawerType === 'recentWorkouts' && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-viking-silver/80">Feed de treinos concluídos por todos os guerreiros, ordenados do mais recente para o mais antigo.</p>
+                    
+                    <div className="space-y-4 mt-4">
+                      {(() => {
+                        const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
+                        Object.entries(studentsData).forEach(([email, student]) => {
+                          if (student.sessions && student.sessions.length > 0) {
+                            student.sessions.forEach(sess => {
+                              allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
+                            });
+                          }
+                        });
+
+                        allSessions.sort((a, b) => {
+                          const aTime = a.id ? parseInt(a.id.split('_')[1] || '0') : 0;
+                          const bTime = b.id ? parseInt(b.id.split('_')[1] || '0') : 0;
+                          return bTime - aTime;
+                        });
+
+                        if (allSessions.length === 0) {
+                          return <p className="text-sm text-viking-silver">Nenhum treino concluído ainda.</p>;
+                        }
+
+                        return allSessions.map(sess => (
+                          <div key={`${sess.studentEmail}-${sess.id}`} className="bg-[#0d0908]/90 p-4 rounded-xl border border-viking-gold/20 shadow-md">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-sm font-bold text-white flex items-center gap-2">
+                                  <User className="w-4 h-4 text-viking-gold" /> {sess.studentName}
+                                </p>
+                                <p className="text-xs text-viking-gold/80">{sess.sessionName}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] text-viking-silver/60 uppercase tracking-wider">{sess.date}</p>
+                                <span className={`inline-flex items-center gap-1 font-bold text-[11px] mt-1 ${
+                                  sess.avgRPE >= 9 ? 'text-red-400' : sess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
+                                }`}>
+                                  <Activity className="w-3 h-3" /> RPE {sess.avgRPE.toFixed(1)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {sess.note && (
+                              <div className="mt-3 p-3 bg-black/40 rounded-lg border border-viking-gold/10">
+                                <p className="text-xs text-viking-silver italic">"{sess.note}"</p>
+                              </div>
+                            )}
+
+                            {sess.volumeDeficit && sess.volumeDeficit > 0 && (
+                              <div className="mt-2 text-[10px] text-amber-500/80 font-semibold">
+                                ⚠️ Déficit de {sess.volumeDeficit} reps neste treino.
+                              </div>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
                 {/* 8. RPE Logs (Trainer) */}
                 {drawerType === 'rpeFeedback' && (
                   <div className="space-y-4">
@@ -9958,6 +10136,19 @@ Equipe Viking Force`);
               >
                 <Activity className="w-5 h-5 shrink-0" />
                 <span className="text-[10px] font-bold">Início</span>
+              </button>
+
+              {/* Tab: Treinos */}
+              <button 
+                onClick={() => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setMobileMenuOpen(false); }}
+                className={`flex flex-col items-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+                  drawerOpen && drawerType === 'recentWorkouts' 
+                    ? 'text-viking-gold bg-viking-gold/5 shadow-sm' 
+                    : 'text-viking-silver/60'
+                }`}
+              >
+                <CheckCircle className="w-5 h-5 shrink-0" />
+                <span className="text-[10px] font-bold">Treinos</span>
               </button>
 
               {/* Tab: Feedbacks */}
