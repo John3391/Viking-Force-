@@ -224,6 +224,8 @@ export default function App() {
   const [editorDay, setEditorDay] = useState<string>('A');
   const [editorExercises, setEditorExercises] = useState<Exercise[]>([]);
   const [editorSearchQuery, setEditorSearchQuery] = useState<string>('');
+  const [copySourceWeek, setCopySourceWeek] = useState<number>(1);
+  const [copySourceDay, setCopySourceDay] = useState<string>('A');
 
   // Toast notification stack
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -2748,6 +2750,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
     setEditorSearchQuery('');
+    setCopySourceWeek(1);
+    setCopySourceDay('A');
     setDrawerType('editProgram');
     setDrawerTitle(`Prescrever Treino`);
     setDrawerOpen(true);
@@ -2773,6 +2777,36 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     showToast(`Semana ${nextWeek} adicionada com sucesso ao cronograma de treinos!`, 'success');
   };
 
+  const handleEditorDeleteWeek = (weekToDelete: number) => {
+    triggerConfirm(
+      'Excluir Semana',
+      `Tem certeza de que deseja excluir permanentemente a Semana ${weekToDelete} e TODOS os treinos dentro dela? Esta ação não pode ser desfeita!`,
+      () => {
+        const updatedWeeks = { ...trainingProgram.weeks };
+        delete updatedWeeks[weekToDelete];
+        
+        const remainingWeeks = Object.keys(updatedWeeks).map(Number).sort((a,b) => a-b);
+        let nextWeek = 1;
+        if (remainingWeeks.length > 0) {
+          nextWeek = remainingWeeks.includes(editorWeek) ? editorWeek : remainingWeeks[0];
+        } else {
+          updatedWeeks[1] = { A: [], B: [], C: [] };
+          nextWeek = 1;
+        }
+
+        saveProgramToDB({ weeks: updatedWeeks });
+        
+        const remainingDays = Object.keys(updatedWeeks[nextWeek] || {}).sort();
+        const nextDay = remainingDays[0] || 'A';
+        handleEditorLoadWeekDay(nextWeek, nextDay);
+        showToast(`Semana ${weekToDelete} excluída com sucesso!`, 'success');
+      },
+      true,
+      'Excluir Semana',
+      'Cancelar'
+    );
+  };
+
   const handleEditorAddWorkoutDay = () => {
     const currentWeekWorkout = trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] };
     const existingDays = Object.keys(currentWeekWorkout).sort();
@@ -2789,6 +2823,61 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     saveProgramToDB({ weeks: updatedWeeks });
     handleEditorLoadWeekDay(editorWeek, nextDay);
     showToast(`Treino ${nextDay} adicionado com sucesso à Semana ${editorWeek}!`, 'success');
+  };
+
+  const handleEditorDeleteDay = (week: number, dayToDelete: string) => {
+    const currentWeekWorkout = trainingProgram.weeks[week] || { A: [], B: [], C: [] };
+    const existingDays = Object.keys(currentWeekWorkout).sort();
+    
+    if (existingDays.length <= 1) {
+      showToast(`Você precisa manter pelo menos um treino na Semana ${week}!`, 'warning');
+      return;
+    }
+
+    triggerConfirm(
+      'Excluir Treino',
+      `Tem certeza de que deseja excluir permanentemente o Treino ${dayToDelete} da Semana ${week}? Esta ação não pode ser desfeita!`,
+      () => {
+        const updatedWeeks = { ...trainingProgram.weeks };
+        if (updatedWeeks[week]) {
+          const newWeekWorkout = { ...updatedWeeks[week] };
+          delete newWeekWorkout[dayToDelete];
+          updatedWeeks[week] = newWeekWorkout;
+        }
+
+        saveProgramToDB({ weeks: updatedWeeks });
+
+        const remainingDays = Object.keys(updatedWeeks[week] || {}).sort();
+        const nextDay = remainingDays.includes(editorDay) ? (editorDay === dayToDelete ? remainingDays[0] : editorDay) : remainingDays[0] || 'A';
+        handleEditorLoadWeekDay(week, nextDay);
+        showToast(`Treino ${dayToDelete} da Semana ${week} excluído com sucesso!`, 'success');
+      },
+      true,
+      'Excluir Treino',
+      'Cancelar'
+    );
+  };
+
+  const handleEditorCopyWorkout = (sourceWeek: number, sourceDay: string) => {
+    const sourceWeekWorkout = trainingProgram.weeks[sourceWeek];
+    if (!sourceWeekWorkout) {
+      showToast(`A Semana ${sourceWeek} não foi encontrada!`, 'error');
+      return;
+    }
+    const sourceExercises = sourceWeekWorkout[sourceDay];
+    if (!sourceExercises || sourceExercises.length === 0) {
+      showToast(`O Treino ${sourceDay} da Semana ${sourceWeek} está vazio ou não existe!`, 'warning');
+      return;
+    }
+
+    // Deep clone and assign brand new unique IDs to avoid any duplicate key issues
+    const clonedExercises = sourceExercises.map(ex => ({
+      ...JSON.parse(JSON.stringify(ex)),
+      id: 'ex_' + Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4) + '_' + Math.floor(Math.random()*1000)
+    }));
+
+    setEditorExercises(clonedExercises);
+    showToast(`Treino ${sourceDay} da Semana ${sourceWeek} clonado com sucesso para este treino!`, 'success');
   };
 
   const handleEditorAddExercise = () => {
@@ -8477,31 +8566,51 @@ Equipe Viking Force`);
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Semana</label>
-                          <select 
-                            value={editorWeek}
-                            onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
-                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                          >
-                            {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
-                              <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
-                                Semana {wk}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1.5">
+                            <select 
+                              value={editorWeek}
+                              onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                                <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                                  Semana {wk}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleEditorDeleteWeek(editorWeek)}
+                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              title="Excluir esta semana"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
-                          <select 
-                            value={editorDay}
-                            onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
-                          >
-                            {Object.keys(trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
-                              <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
-                                Treino {day}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1.5">
+                            <select 
+                              value={editorDay}
+                              onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              {Object.keys(trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                                <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                                  Treino {day}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleEditorDeleteDay(editorWeek, editorDay)}
+                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              title="Excluir este treino"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -8521,6 +8630,57 @@ Equipe Viking Force`);
                           <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Treino A, B, C
                         </button>
                       </div>
+                    </div>
+
+                    {/* Copy Workout Block */}
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <p className="text-xs text-viking-gold font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <Copy className="w-3.5 h-3.5 text-viking-gold" /> Copiar Treino de Outro Período
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Origem: Semana</label>
+                          <select 
+                            value={copySourceWeek}
+                            onChange={e => {
+                              const wk = parseInt(e.target.value);
+                              setCopySourceWeek(wk);
+                              const availableDays = Object.keys(trainingProgram.weeks[wk] || {}).sort();
+                              if (availableDays.length > 0 && !availableDays.includes(copySourceDay)) {
+                                setCopySourceDay(availableDays[0]);
+                              }
+                            }}
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
+                          >
+                            {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                              <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Semana {wk}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Origem: Treino</label>
+                          <select 
+                            value={copySourceDay}
+                            onChange={e => setCopySourceDay(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
+                          >
+                            {Object.keys(trainingProgram.weeks[copySourceWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                              <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
+                                Treino {day}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleEditorCopyWorkout(copySourceWeek, copySourceDay)}
+                        className="w-full py-2 bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 hover:border-viking-gold font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Copy className="w-4 h-4 text-viking-gold" /> Clonar Exercícios para Este Treino
+                      </button>
                     </div>
 
                     <div className="space-y-4 pt-2">
