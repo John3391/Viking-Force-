@@ -240,6 +240,9 @@ export default function App() {
   const [historyTab, setHistoryTab] = useState<'list' | 'comparison'>('list');
   const [navDropdownOpen, setNavDropdownOpen] = useState<boolean>(false);
   const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'list'>('grid');
+  const [customLogo, setCustomLogo] = useState<string>(() => {
+    return localStorage.getItem('viking_custom_logo') || '';
+  });
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
@@ -1616,6 +1619,32 @@ export default function App() {
     }
   };
 
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Escolha uma imagem de até 2MB.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          setCustomLogo(result);
+          localStorage.setItem('viking_custom_logo', result);
+          showToast('Logotipo do templo atualizado!', 'success');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleResetLogo = () => {
+    setCustomLogo('');
+    localStorage.removeItem('viking_custom_logo');
+    showToast('Logotipo original restaurado.', 'info');
+  };
+
   const handleLogout = () => {
     signOut(auth).catch(err => console.warn("Firebase signout warning:", err));
     hasCheckedDueDatesRef.current = false;
@@ -2008,6 +2037,14 @@ export default function App() {
     sessions: rawStudentProfile.sessions || [],
     prs: rawStudentProfile.prs || { squat: null, bench: null, deadlift: null }
   } : null;
+
+  const isStudentPending = activeStudentProfile?.status === 'Pendente';
+  const isStudentBlocked = !!activeStudentProfile?.accessBlocked || (() => {
+    if (!activeStudentProfile?.dueDate) return false;
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    return todayStr > activeStudentProfile.dueDate;
+  })();
 
   // Calculate volume: Sets * Reps * 1RM * intensity ratio for each logged exercise
   const calculateTotalVolume = () => {
@@ -2939,7 +2976,32 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <VikingLogo size={52} className="shrink-0" />
+            {customLogo ? (
+              <div className="relative group/logo">
+                <img
+                  src={customLogo}
+                  alt="Logo"
+                  className="w-13 h-13 object-cover rounded-xl border border-viking-gold/40 shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                />
+                <div className="absolute -bottom-1 -right-1 bg-[#140e0c] border border-viking-gold/30 rounded-full p-1 opacity-0 group-hover/logo:opacity-100 transition-opacity flex gap-1 shadow-lg">
+                  <label className="cursor-pointer text-viking-gold hover:text-white" title="Alterar Foto Logotipo">
+                    <Camera className="w-3 h-3" />
+                    <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                  </label>
+                  <button onClick={handleResetLogo} className="text-viking-red hover:text-red-400 cursor-pointer" title="Remover logotipo personalizado">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="relative group/logo flex items-center">
+                <VikingLogo size={52} className="shrink-0" />
+                <label className="absolute -bottom-1 -right-1 bg-[#140e0c] border border-viking-gold/30 rounded-full p-1 opacity-0 group-hover/logo:opacity-100 transition-opacity cursor-pointer text-viking-gold hover:text-white shadow-lg" title="Inserir Foto Logotipo">
+                  <Camera className="w-3 h-3" />
+                  <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                </label>
+              </div>
+            )}
             <div>
               <span className="font-viking-display text-xl sm:text-2xl font-bold tracking-wider bg-gradient-to-r from-white via-viking-gold to-viking-gold-dark bg-clip-text text-transparent">
                 VIKING FORCE
@@ -2966,7 +3028,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {currentUser?.role === 'student' ? (
                   <>
                     <button 
-                      onClick={() => { setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); }}
+                      onClick={() => { 
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                        setWorkoutModalOpen(true); 
+                        setDrawerOpen(false); 
+                        setNavDropdownOpen(false); 
+                      }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         workoutModalOpen 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -2976,7 +3050,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <Dumbbell className={`w-4 h-4 ${workoutModalOpen ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treino Hoje
                     </button>
                     <button 
-                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); }}
+                      onClick={() => { 
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                        setWorkoutModalOpen(false); 
+                        setDrawerType('history'); 
+                        setDrawerTitle('Seu Histórico & RPE'); 
+                        setDrawerOpen(true); 
+                        setNavDropdownOpen(false); 
+                      }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         drawerOpen && drawerType === 'history' 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -3002,7 +3090,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 )}
 
                 <button 
-                  onClick={() => { setWorkoutModalOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); }}
+                  onClick={() => { 
+                    if (currentUser?.role === 'student') {
+                      if (isStudentPending) {
+                        showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                        return;
+                      }
+                      if (isStudentBlocked) {
+                        showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                        return;
+                      }
+                    }
+                    setWorkoutModalOpen(false); 
+                    setEditingDbExercise(null); 
+                    setDrawerType('exerciseLibrary'); 
+                    setDrawerTitle('Biblioteca de Exercícios'); 
+                    setDrawerOpen(true); 
+                    setNavDropdownOpen(false); 
+                  }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'exerciseLibrary' 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -3013,7 +3118,23 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </button>
 
                 <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); }}
+                  onClick={() => { 
+                    if (currentUser?.role === 'student') {
+                      if (isStudentPending) {
+                        showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                        return;
+                      }
+                      if (isStudentBlocked) {
+                        showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                        return;
+                      }
+                    }
+                    setWorkoutModalOpen(false); 
+                    setDrawerType('ranking'); 
+                    setDrawerTitle('Ranking do Templo'); 
+                    setDrawerOpen(true); 
+                    setNavDropdownOpen(false); 
+                  }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'ranking' 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -3088,6 +3209,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                         <button
                           onClick={() => {
+                            if (currentUser?.role === 'student') {
+                              if (isStudentPending) {
+                                showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                                return;
+                              }
+                              if (isStudentBlocked) {
+                                showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                                return;
+                              }
+                            }
                             setWorkoutModalOpen(false);
                             setDrawerType('calendar');
                             setDrawerTitle('Calendário Competitivo');
@@ -3122,6 +3253,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                         <button
                           onClick={() => {
+                            if (currentUser?.role === 'student') {
+                              if (isStudentPending) {
+                                showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                                return;
+                              }
+                              if (isStudentBlocked) {
+                                showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                                return;
+                              }
+                            }
                             setWorkoutModalOpen(false);
                             setDrawerType('gmail');
                             setDrawerTitle('Correio de Valhalla (Gmail)');
@@ -3269,7 +3410,32 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
 
                 <div className="text-center mb-6">
-                  <VikingLogo size={80} className="mx-auto mb-4" />
+                  {customLogo ? (
+                    <div className="relative group/logo w-24 h-24 mx-auto mb-4">
+                      <img
+                        src={customLogo}
+                        alt="Logo"
+                        className="w-24 h-24 object-cover rounded-2xl border-2 border-viking-gold/40 shadow-[0_0_20px_rgba(212,175,55,0.3)]"
+                      />
+                      <div className="absolute -bottom-1 -right-1 bg-[#140e0c] border border-viking-gold/30 rounded-full p-1.5 opacity-0 group-hover/logo:opacity-100 transition-opacity flex gap-1 shadow-lg z-10">
+                        <label className="cursor-pointer text-viking-gold hover:text-white" title="Alterar Foto Logotipo">
+                          <Camera className="w-3.5 h-3.5" />
+                          <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                        </label>
+                        <button onClick={handleResetLogo} className="text-viking-red hover:text-red-400 cursor-pointer" title="Remover logotipo personalizado">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative group/logo w-24 h-24 mx-auto mb-4 flex items-center justify-center">
+                      <VikingLogo size={80} className="mx-auto" />
+                      <label className="absolute -bottom-1 -right-1 bg-[#140e0c] border border-viking-gold/30 rounded-full p-1.5 opacity-0 group-hover/logo:opacity-100 transition-opacity cursor-pointer text-viking-gold hover:text-white shadow-lg z-10" title="Inserir Foto Logotipo">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                      </label>
+                    </div>
+                  )}
                   <h2 className="font-viking-display text-2xl sm:text-3xl font-bold tracking-wider bg-gradient-to-r from-[#e0d3a8] via-viking-gold to-[#e0d3a8] bg-clip-text text-transparent">
                     {isRegisterMode ? 'FORGE SUA CONTA' : (authTab === 'trainer' ? 'PORTAL DO TREINADOR' : 'TEMPLO VIKING FORCE')}
                   </h2>
@@ -3570,6 +3736,53 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             const today = new Date();
             const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             const isBlocked = activeStudentProfile.accessBlocked || (activeStudentProfile.dueDate && todayStr > activeStudentProfile.dueDate);
+            const isPending = activeStudentProfile.status === 'Pendente';
+
+            if (isPending) {
+              return (
+                <div className="flex flex-col items-center justify-center p-8 sm:p-12 bg-[#1a1210]/95 border border-viking-gold/30 rounded-3xl text-center space-y-5 min-h-[420px] relative overflow-hidden shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-b from-viking-gold/5 via-transparent to-transparent opacity-30 pointer-events-none" />
+                  <VikingLogo size={96} className="mb-2 animate-pulse" />
+                  
+                  <div className="space-y-2">
+                    <h2 className="text-2xl sm:text-3xl font-black text-viking-gold uppercase tracking-wider font-viking-display">Aguardando Autorização</h2>
+                    <span className="inline-block text-[10px] font-extrabold uppercase tracking-widest bg-viking-gold/15 text-viking-gold px-3.5 py-1 rounded-full border border-viking-gold/20">
+                      Plano Escolhido: {activeStudentProfile.plan || 'Mensal'}
+                    </span>
+                  </div>
+
+                  <p className="text-viking-silver text-xs sm:text-sm max-w-md leading-relaxed">
+                    Sua conta está no estado <strong className="text-viking-gold uppercase">Pendente</strong>. O plano escolhido só estará funcional e ativo após a validação e autorização do <strong className="text-white">Treinador John</strong>.
+                  </p>
+                  
+                  <p className="text-viking-silver/60 text-xs max-w-sm leading-relaxed">
+                    Envie o comprovante de pagamento no WhatsApp para que o treinador possa validar seu acesso no salão de treinamento.
+                  </p>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4 w-full max-w-md relative z-10">
+                    <a
+                      href={`https://api.whatsapp.com/send?phone=5551998612067&text=${encodeURIComponent(`Olá Treinador John! Me cadastrei no app Diário do Guerreiro com o email ${activeStudentProfile.email} no plano ${activeStudentProfile.plan || 'Mensal'} e gostaria de solicitar a liberação do meu acesso ao aplicativo.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4" /> Enviar Comprovante
+                    </a>
+                    
+                    <button
+                      onClick={() => {
+                        setDrawerType('plans');
+                        setDrawerTitle('Aliança Viking - Planos');
+                        setDrawerOpen(true);
+                      }}
+                      className="flex-1 py-3 bg-viking-dark hover:bg-viking-gold/10 text-viking-gold border border-viking-gold/20 hover:border-viking-gold/40 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                    >
+                      <CreditCard className="w-4 h-4" /> Ver Planos / Alterar
+                    </button>
+                  </div>
+                </div>
+              );
+            }
 
             if (isBlocked) {
               return (
@@ -6715,15 +6928,123 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <p className="text-xs text-viking-silver leading-relaxed mb-4">
                           Adquira uma aliança perpétua com os pesos. Nossos planos garantem acompanhamento próximo com relatórios de RPE e periodizações semanais personalizadas.
                         </p>
-                        
-                        {vikingPlans.map(plan => (
-                          <div key={plan.id} className="p-5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 hover:border-viking-gold/40 transition-all text-center space-y-2 shadow-[0_4px_30px_rgba(0,0,0,0.2)]">
-                            <span className="text-[9px] font-black uppercase tracking-wider bg-viking-gold/10 text-viking-gold px-2.5 py-1 rounded-full">{plan.badge}</span>
-                            <h4 className="font-viking-display text-base font-bold text-white">{plan.name}</h4>
-                            <p className="text-3xl font-black text-viking-gold">R$ {plan.price.toLocaleString('pt-BR')} <span className="text-xs font-normal text-viking-silver/60">{plan.period}</span></p>
-                            <p className="text-xs text-viking-silver max-w-xs mx-auto">{plan.description}</p>
+
+                        {activeStudentProfile && (
+                          <div className="bg-gradient-to-r from-viking-gold/15 to-amber-950/20 border-2 border-viking-gold/60 p-5 rounded-2xl mb-6 relative overflow-hidden shadow-lg shadow-viking-gold/5 text-left">
+                            <div className="absolute right-3 top-3 text-viking-gold/10">
+                              <Shield className="w-16 h-16 animate-pulse" />
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-viking-gold text-viking-dark px-2.5 py-1 rounded-full">
+                              Sua Aliança Atual
+                            </span>
+                            <h3 className="font-viking-display text-lg font-black text-white mt-2">
+                              {activeStudentProfile.plan || 'Mensal'}
+                            </h3>
+                            <p className="text-xs text-viking-silver/80 mt-1 flex items-center gap-1.5">
+                              <span>Status do Ciclo:</span>
+                              <span className={`font-bold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded-md ${
+                                activeStudentProfile.status === 'Ativo' || activeStudentProfile.status === 'Pago'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              }`}>
+                                {activeStudentProfile.status || 'Ativo'}
+                              </span>
+                            </p>
                           </div>
-                        ))}
+                        )}
+
+                        <div className="space-y-4">
+                          <p className="text-xs text-viking-gold font-black uppercase tracking-wider text-left border-b border-viking-gold/15 pb-2">
+                            Alianças Disponíveis para Forjar
+                          </p>
+
+                          {vikingPlans.map(plan => {
+                            const getMappedPlanName = (pId: string): 'Mensal' | 'Trimestral' | 'Semestral' | 'Anual' => {
+                              const normalized = pId.toLowerCase();
+                              if (normalized === 'mensal') return 'Mensal';
+                              if (normalized === 'trimestral') return 'Trimestral';
+                              if (normalized === 'semestral') return 'Semestral';
+                              if (normalized === 'anual') return 'Anual';
+                              return 'Mensal';
+                            };
+
+                            const mappedPlanName = getMappedPlanName(plan.id);
+                            const isCurrent = activeStudentProfile?.plan === mappedPlanName || 
+                                              (activeStudentProfile?.plan && plan.name.toLowerCase().includes(activeStudentProfile.plan.toLowerCase()));
+
+                            return (
+                              <div 
+                                key={plan.id} 
+                                className={`p-5 rounded-2xl text-center space-y-3 transition-all relative ${
+                                  isCurrent 
+                                    ? 'bg-viking-gold/5 border-2 border-viking-gold shadow-[0_0_20px_rgba(212,175,55,0.15)]' 
+                                    : 'bg-[#0d0908]/60 border border-viking-gold/15 hover:border-viking-gold/40 shadow-[0_4px_30px_rgba(0,0,0,0.2)]'
+                                }`}
+                              >
+                                {isCurrent && (
+                                  <div className="absolute top-3 right-3 flex items-center gap-1 bg-viking-gold text-viking-dark text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider shadow">
+                                    <Check className="w-2.5 h-2.5" /> Ativo
+                                  </div>
+                                )}
+                                
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[9px] font-black uppercase tracking-wider bg-viking-gold/10 text-viking-gold px-2.5 py-1 rounded-full mb-1">
+                                    {plan.badge}
+                                  </span>
+                                  <h4 className="font-viking-display text-base font-bold text-white">
+                                    {plan.name}
+                                  </h4>
+                                </div>
+
+                                <p className="text-3xl font-black text-viking-gold">
+                                  R$ {plan.price.toLocaleString('pt-BR')} <span className="text-xs font-normal text-viking-silver/60">{plan.period}</span>
+                                </p>
+                                
+                                <p className="text-xs text-viking-silver max-w-xs mx-auto">
+                                  {plan.description}
+                                </p>
+
+                                <div className="pt-2">
+                                  {isCurrent ? (
+                                    <div className="w-full py-2.5 bg-viking-gold/10 border border-viking-gold/20 text-viking-gold text-xs font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 select-none">
+                                      <Shield className="w-3.5 h-3.5" /> Aliança Consagrada
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        triggerConfirm(
+                                          '🏆 MUDAR DE ALIANÇA',
+                                          `Tem certeza que deseja mudar para a ${plan.name} (${plan.badge}) pelo valor de R$ ${plan.price.toLocaleString('pt-BR')} ${plan.period}? Seu status será ajustado para Pendente até o envio do comprovante ao treinador.`,
+                                          () => {
+                                            const updatedProfile = {
+                                              ...activeStudentProfile!,
+                                              plan: mappedPlanName,
+                                              status: 'Pendente' as const
+                                            };
+                                            saveStudentsToDB({ ...studentsData, [currentUser!.email.toLowerCase()]: updatedProfile });
+                                            showToast(`Sua Aliança de Força foi alterada para ${plan.name}!`, 'success');
+                                            
+                                            // WhatsApp Redirect Link
+                                            const coachPhone = '51998612067';
+                                            const waMsg = `Olá Treinador John! Alterei minha aliança no app Diário do Guerreiro para o plano ${plan.name} (${plan.badge}). Aguardo as instruções para envio do novo comprovante de pagamento!`;
+                                            const waUrl = `https://api.whatsapp.com/send?phone=${coachPhone}&text=${encodeURIComponent(waMsg)}`;
+                                            
+                                            setTimeout(() => {
+                                              window.open(waUrl, '_blank');
+                                            }, 1000);
+                                          }
+                                        );
+                                      }}
+                                      className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shadow-viking-gold/10 cursor-pointer"
+                                    >
+                                      Forjar esta Aliança
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </>
                     )}
                   </div>
@@ -10352,13 +10673,37 @@ Equipe Viking Force`);
                   {currentUser?.role === 'student' ? (
                     <>
                       <button 
-                        onClick={() => { setMobileMenuOpen(false); setWorkoutModalOpen(true); }}
+                        onClick={() => { 
+                          if (isStudentPending) {
+                            showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                            return;
+                          }
+                          if (isStudentBlocked) {
+                            showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                            return;
+                          }
+                          setMobileMenuOpen(false); 
+                          setWorkoutModalOpen(true); 
+                        }}
                         className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                       >
                         <Dumbbell className="w-4 h-4" /> Treino de Hoje
                       </button>
                       <button 
-                        onClick={() => { setMobileMenuOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); }}
+                        onClick={() => { 
+                          if (isStudentPending) {
+                            showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                            return;
+                          }
+                          if (isStudentBlocked) {
+                            showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                            return;
+                          }
+                          setMobileMenuOpen(false); 
+                          setDrawerType('history'); 
+                          setDrawerTitle('Seu Histórico & RPE'); 
+                          setDrawerOpen(true); 
+                        }}
                         className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                       >
                         <History className="w-4 h-4" /> Histórico de Sessões
@@ -10382,21 +10727,67 @@ Equipe Viking Force`);
                   )}
 
                   <button 
-                    onClick={() => { setMobileMenuOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                    onClick={() => { 
+                      if (currentUser?.role === 'student') {
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                      }
+                      setMobileMenuOpen(false); 
+                      setEditingDbExercise(null); 
+                      setDrawerType('exerciseLibrary'); 
+                      setDrawerTitle('Biblioteca de Exercícios'); 
+                      setDrawerOpen(true); 
+                    }}
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <BookOpen className="w-4 h-4 text-viking-gold" /> Biblioteca de Exercícios
                   </button>
 
                   <button 
-                    onClick={() => { setMobileMenuOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); }}
+                    onClick={() => { 
+                      if (currentUser?.role === 'student') {
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                      }
+                      setMobileMenuOpen(false); 
+                      setDrawerType('ranking'); 
+                      setDrawerTitle('Ranking do Templo'); 
+                      setDrawerOpen(true); 
+                    }}
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Trophy className="w-4 h-4" /> Classificação Geral
                   </button>
 
                   <button 
-                    onClick={() => { setMobileMenuOpen(false); setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
+                    onClick={() => { 
+                      if (currentUser?.role === 'student') {
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                      }
+                      setMobileMenuOpen(false); 
+                      setDrawerType('calendar'); 
+                      setDrawerTitle('Calendário Competitivo'); 
+                      setDrawerOpen(true); 
+                    }}
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Calendar className="w-4 h-4" /> Calendário Competitivo
@@ -10410,7 +10801,22 @@ Equipe Viking Force`);
                   </button>
 
                   <button 
-                    onClick={() => { setMobileMenuOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
+                    onClick={() => { 
+                      if (currentUser?.role === 'student') {
+                        if (isStudentPending) {
+                          showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                          return;
+                        }
+                        if (isStudentBlocked) {
+                          showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                          return;
+                        }
+                      }
+                      setMobileMenuOpen(false); 
+                      setDrawerType('gmail'); 
+                      setDrawerTitle('Correio de Valhalla (Gmail)'); 
+                      setDrawerOpen(true); 
+                    }}
                     className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Mail className="w-4 h-4 text-viking-gold" /> Correio Gmail
@@ -10451,7 +10857,19 @@ Equipe Viking Force`);
 
               {/* Tab: Treinar */}
               <button 
-                onClick={() => { setWorkoutModalOpen(true); setDrawerOpen(false); setMobileMenuOpen(false); }}
+                onClick={() => { 
+                  if (isStudentPending) {
+                    showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                    return;
+                  }
+                  if (isStudentBlocked) {
+                    showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                    return;
+                  }
+                  setWorkoutModalOpen(true); 
+                  setDrawerOpen(false); 
+                  setMobileMenuOpen(false); 
+                }}
                 className={`flex flex-col items-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
                   workoutModalOpen 
                     ? 'text-viking-gold bg-viking-gold/5 shadow-sm' 
@@ -10464,7 +10882,21 @@ Equipe Viking Force`);
 
               {/* Tab: Histórico */}
               <button 
-                onClick={() => { setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setMobileMenuOpen(false); }}
+                onClick={() => { 
+                  if (isStudentPending) {
+                    showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                    return;
+                  }
+                  if (isStudentBlocked) {
+                    showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                    return;
+                  }
+                  setWorkoutModalOpen(false); 
+                  setDrawerType('history'); 
+                  setDrawerTitle('Seu Histórico & RPE'); 
+                  setDrawerOpen(true); 
+                  setMobileMenuOpen(false); 
+                }}
                 className={`flex flex-col items-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
                   drawerOpen && drawerType === 'history' 
                     ? 'text-viking-gold bg-viking-gold/5 shadow-sm' 
@@ -10477,7 +10909,21 @@ Equipe Viking Force`);
 
               {/* Tab: Ranking */}
               <button 
-                onClick={() => { setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setMobileMenuOpen(false); }}
+                onClick={() => { 
+                  if (isStudentPending) {
+                    showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
+                    return;
+                  }
+                  if (isStudentBlocked) {
+                    showToast('Seu acesso está suspenso por pendência financeira.', 'error');
+                    return;
+                  }
+                  setWorkoutModalOpen(false); 
+                  setDrawerType('ranking'); 
+                  setDrawerTitle('Ranking do Templo'); 
+                  setDrawerOpen(true); 
+                  setMobileMenuOpen(false); 
+                }}
                 className={`flex flex-col items-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
                   drawerOpen && drawerType === 'ranking' 
                     ? 'text-viking-gold bg-viking-gold/5 shadow-sm' 
