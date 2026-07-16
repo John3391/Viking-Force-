@@ -9029,6 +9029,17 @@ Equipe Viking Force`);
                               </div>
 
                               <div className="col-span-2 pt-1">
+                                <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Lembretes de Mobilidade</label>
+                                <textarea 
+                                  value={ex.mobilityReminders || ''}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'mobilityReminders', e.target.value)}
+                                  placeholder="Ex: Focar em liberar glúteo antes de começar."
+                                  rows={2}
+                                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
+                                />
+                              </div>
+
+                              <div className="col-span-2 pt-1">
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1 flex items-center gap-1">
                                   <Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Link do YouTube (Vídeo de Execução)
                                 </label>
@@ -9134,47 +9145,55 @@ Equipe Viking Force`);
                                   </div>
 
                                   <div className="space-y-2">
-                                    {(ex.mobility || []).map((step, sIdx) => (
-                                      <div key={sIdx} className="bg-[#0d0908]/80 p-2 rounded-lg border border-viking-gold/20 text-[10px] space-y-1">
-                                        <input 
-                                          type="text"
-                                          value={step.name}
-                                          onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'name', e.target.value)}
-                                          placeholder="Nome da mobilidade"
-                                          className="w-full bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded font-bold"
-                                        />
-                                        <div className="flex gap-2 items-center">
-                                          <input 
-                                            type="number"
-                                            value={step.sets || ''}
-                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                            placeholder="Séries"
-                                            className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
-                                          />
-                                          <span className="text-viking-silver/80">x</span>
-                                          <input 
-                                            type="number"
-                                            value={step.reps || ''}
-                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                            placeholder="Reps/Tempo"
-                                            className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
-                                          />
+                                    <AnimatePresence>
+                                      {(ex.mobility || []).map((step, sIdx) => (
+                                        <motion.div 
+                                          key={sIdx}
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          exit={{ opacity: 0, x: -10 }}
+                                          className="bg-[#0d0908]/80 p-2 rounded-lg border border-viking-gold/20 text-[10px] space-y-1"
+                                        >
                                           <input 
                                             type="text"
-                                            value={step.videoUrl || ''}
-                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'videoUrl', e.target.value)}
-                                            placeholder="URL Vídeo"
-                                            className="flex-1 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded"
+                                            value={step.name}
+                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'name', e.target.value)}
+                                            placeholder="Nome da mobilidade"
+                                            className="w-full bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded font-bold"
                                           />
-                                          <button 
-                                            onClick={() => handleEditorRemoveMobilityStep(originalIdx, sIdx)}
-                                            className="text-viking-red hover:brightness-125 cursor-pointer"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
+                                          <div className="flex gap-2 items-center">
+                                            <input 
+                                              type="number"
+                                              value={step.sets || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                              placeholder="Séries"
+                                              className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                            />
+                                            <span className="text-viking-silver/80">x</span>
+                                            <input 
+                                              type="number"
+                                              value={step.reps || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                              placeholder="Reps/Tempo"
+                                              className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                            />
+                                            <input 
+                                              type="text"
+                                              value={step.videoUrl || ''}
+                                              onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'videoUrl', e.target.value)}
+                                              placeholder="URL Vídeo"
+                                              className="flex-1 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded"
+                                            />
+                                            <button 
+                                              onClick={() => handleEditorRemoveMobilityStep(originalIdx, sIdx)}
+                                              className="text-viking-red hover:brightness-125 cursor-pointer"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </motion.div>
+                                      ))}
+                                    </AnimatePresence>
                                   </div>
                                 </div>
                               </>
