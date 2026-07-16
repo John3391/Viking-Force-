@@ -144,6 +144,13 @@ export interface StudentProfile {
     plan: string;
     dueDate: string; // The due date this payment covers
   }[];
+  notifications?: {
+    id: string;
+    message: string;
+    date: string;
+    read: boolean;
+    type: 'info' | 'success' | 'warning';
+  }[];
 }
 
 export interface VikingPlan {

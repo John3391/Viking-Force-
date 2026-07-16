@@ -3040,8 +3040,28 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     updatedWeeks[editorWeek][editorDay] = editorExercises;
 
     saveProgramToDB({ weeks: updatedWeeks });
+    
+    // Add notification to all students
+    const updatedStudents = { ...studentsData };
+    const notification = {
+      id: Date.now().toString(),
+      message: `Novo treino disponível! Semana ${editorWeek} - Treino ${editorDay}`,
+      date: new Date().toISOString(),
+      read: false,
+      type: 'info' as const
+    };
+    
+    Object.keys(updatedStudents).forEach(email => {
+      updatedStudents[email] = {
+        ...updatedStudents[email],
+        notifications: [notification, ...(updatedStudents[email].notifications || [])]
+      };
+      saveStudentToFirebase(email, updatedStudents[email]);
+    });
+    setStudentsData(updatedStudents);
+
     showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para todos os guerreiros!`, 'success');
-    showToast(`Treino postado com sucesso para o aluno!`, 'success');
+    showToast(`Treino postado e notificação enviada aos alunos!`, 'success');
     
     // Close drawer, reset view to home panel, and smooth scroll to top of screen
     setDrawerOpen(false);
