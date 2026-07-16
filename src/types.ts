@@ -4,6 +4,31 @@ export interface User {
   role: 'student' | 'trainer';
 }
 
+export interface MobilityStep {
+  name: string;
+  sets: number;
+  reps: number;
+  videoUrl?: string;
+}
+
+export interface WilksTier {
+  name: string;
+  targetWilks: number;
+  minWilks: number;
+  badge: string;
+  desc: string;
+  nextMin: number;
+}
+
+export const WILKS_LEVELS: WilksTier[] = [
+  { name: 'Aspirante Viking', targetWilks: 0, minWilks: 0, badge: '🪵', desc: 'Iniciando a jornada nos portões de ferro.', nextMin: 150 },
+  { name: 'Recruta Viking', targetWilks: 150, minWilks: 150, badge: '🛡️', desc: 'Primeiras conquistas alcançadas no templo.', nextMin: 250 },
+  { name: 'Guerreiro do Clã', targetWilks: 250, minWilks: 250, badge: '⚔️', desc: 'Força relativa expressiva e respeito na tribo.', nextMin: 325 },
+  { name: 'Berserker do Norte', targetWilks: 325, minWilks: 325, badge: '🔥', desc: 'Fúria devastadora erguendo grandes pesos.', nextMin: 400 },
+  { name: 'Guerreiro de Valhalla', targetWilks: 400, minWilks: 400, badge: '⚡', desc: 'Força extraordinária digna dos deuses.', nextMin: 475 },
+  { name: 'Semideus / Jarl', targetWilks: 475, minWilks: 475, badge: '👑', desc: 'Lenda absoluta no topo da montanha de ferro.', nextMin: 999 },
+];
+
 export interface WarmupStep {
   percent: number; // e.g., 0.4 for 40%
   reps: number;    // number of repetitions
@@ -22,6 +47,7 @@ export interface Exercise {
   techniqueTips?: string;
   trainerNote?: string;
   videoUrl?: string;
+  mobility?: MobilityStep[];
   methodology?: 'standard' | 'backoff' | 'myoreps' | 'clusters' | 'dropset';
   methodologyDetails?: string;
 }

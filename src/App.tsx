@@ -71,7 +71,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, CalendarEvent } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, CalendarEvent } from './types';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import { 
   fetchStudentsFromFirebase, 
@@ -2416,6 +2416,37 @@ export default function App() {
     };
 
     saveStudentsToDB(updatedStudents);
+
+    // Check for Wilks goal achievement
+    const oldTotal = (activeStudentProfile.prs.squat || 0) + (activeStudentProfile.prs.bench || 0) + (activeStudentProfile.prs.deadlift || 0);
+    const oldWilks = calculateWilks(activeStudentProfile.gender || 'male', activeStudentProfile.bodyWeight || 0, oldTotal);
+    
+    const getTierIdx = (w: number) => {
+      let idx = 0;
+      for (let i = WILKS_LEVELS.length - 1; i >= 0; i--) {
+        if (w >= WILKS_LEVELS[i].minWilks) {
+          idx = i;
+          break;
+        }
+      }
+      return idx;
+    };
+    
+    const oldTierIdx = getTierIdx(oldWilks);
+    const newTotal = (updatedProfile.prs.squat || 0) + (updatedProfile.prs.bench || 0) + (updatedProfile.prs.deadlift || 0);
+    const newWilks = calculateWilks(updatedProfile.gender || 'male', updatedProfile.bodyWeight || 0, newTotal);
+    const newTierIdx = getTierIdx(newWilks);
+
+    if (newTierIdx > oldTierIdx) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#e0d3a8', '#ffffff']
+      });
+      showToast(`🏆 Parabéns! Você atingiu a meta Wilks: ${WILKS_LEVELS[newTierIdx].name}!`, 'success');
+    }
+
     setWorkoutModalOpen(false);
     setSessionRpeState({});
     setExerciseFailureState({});
@@ -2957,10 +2988,30 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     }));
   };
 
+  const handleEditorAddMobilityStep = (exIdx: number) => {
+    setEditorExercises(prev => prev.map((ex, i) => {
+      if (i === exIdx) {
+        const mobility = ex.mobility ? [...ex.mobility] : [];
+        mobility.push({ name: 'Nova Mobilidade', sets: 1, reps: 10 });
+        return { ...ex, mobility };
+      }
+      return ex;
+    }));
+  };
+
   const handleEditorRemoveWarmupStep = (exIdx: number, stepIdx: number) => {
     setEditorExercises(prev => prev.map((ex, i) => {
       if (i === exIdx && ex.warmup) {
         return { ...ex, warmup: ex.warmup.filter((_, s) => s !== stepIdx) };
+      }
+      return ex;
+    }));
+  };
+
+  const handleEditorRemoveMobilityStep = (exIdx: number, stepIdx: number) => {
+    setEditorExercises(prev => prev.map((ex, i) => {
+      if (i === exIdx && ex.mobility) {
+        return { ...ex, mobility: ex.mobility.filter((_, s) => s !== stepIdx) };
       }
       return ex;
     }));
@@ -2976,6 +3027,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           return step;
         });
         return { ...ex, warmup };
+      }
+      return ex;
+    }));
+  };
+
+  const handleEditorUpdateMobilityStep = (exIdx: number, stepIdx: number, field: keyof MobilityStep, value: any) => {
+    setEditorExercises(prev => prev.map((ex, i) => {
+      if (i === exIdx && ex.mobility) {
+        const mobility = ex.mobility.map((step, s) => {
+          if (s === stepIdx) {
+            return { ...step, [field]: value };
+          }
+          return step;
+        });
+        return { ...ex, mobility };
       }
       return ex;
     }));
@@ -9011,46 +9077,107 @@ Equipe Viking Force`);
 
                             {/* Warmup editor nested inside exercise */}
                             {ex.main && (
-                              <div className="mt-3 pt-3 border-t border-viking-gold/15 space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[9px] font-bold text-viking-gold uppercase tracking-widest flex items-center gap-1">
-                                    <Flame className="w-3.5 h-3.5" /> Passos de Aquecimento (%)
-                                  </span>
-                                  <button 
-                                    onClick={() => handleEditorAddWarmupStep(originalIdx)}
-                                    className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
-                                  >
-                                    + Adicionar
-                                  </button>
+                              <>
+                                <div className="mt-3 pt-3 border-t border-viking-gold/15 space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-viking-gold uppercase tracking-widest flex items-center gap-1">
+                                      <Flame className="w-3.5 h-3.5" /> Passos de Aquecimento (%)
+                                    </span>
+                                    <button 
+                                      onClick={() => handleEditorAddWarmupStep(originalIdx)}
+                                      className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
+                                    >
+                                      + Adicionar
+                                    </button>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    {(ex.warmup || []).map((step, sIdx) => (
+                                      <div key={sIdx} className="bg-[#0d0908]/80 px-2.5 py-1.5 rounded-lg border border-viking-gold/20 flex items-center gap-1.5 text-[10px]">
+                                        <input 
+                                          type="number"
+                                          value={Math.round(step.percent * 100)}
+                                          onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
+                                          className="w-8 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                        />
+                                        <span className="text-viking-silver/80">% ×</span>
+                                        <input 
+                                          type="number"
+                                          value={step.reps || ''}
+                                          onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                          className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                        />
+                                        <span className="text-viking-silver/80">reps</span>
+                                        <button 
+                                          onClick={() => handleEditorRemoveWarmupStep(originalIdx, sIdx)}
+                                          className="text-viking-red hover:brightness-125 ml-1 cursor-pointer"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                  {(ex.warmup || []).map((step, sIdx) => (
-                                    <div key={sIdx} className="bg-[#0d0908]/80 px-2.5 py-1.5 rounded-lg border border-viking-gold/20 flex items-center gap-1.5 text-[10px]">
-                                      <input 
-                                        type="number"
-                                        value={Math.round(step.percent * 100)}
-                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
-                                        className="w-8 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
-                                      />
-                                      <span className="text-viking-silver/80">% ×</span>
-                                      <input 
-                                        type="number"
-                                        value={step.reps || ''}
-                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                        className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
-                                      />
-                                      <span className="text-viking-silver/80">reps</span>
-                                      <button 
-                                        onClick={() => handleEditorRemoveWarmupStep(originalIdx, sIdx)}
-                                        className="text-viking-red hover:brightness-125 ml-1 cursor-pointer"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  ))}
+                                {/* Passos de Mobilidade */}
+                                <div className="space-y-2 pt-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-viking-gold uppercase tracking-widest flex items-center gap-1">
+                                      <Zap className="w-3.5 h-3.5" /> Mobilidade
+                                    </span>
+                                    <button 
+                                      onClick={() => handleEditorAddMobilityStep(originalIdx)}
+                                      className="text-[9px] text-viking-gold hover:underline uppercase font-bold cursor-pointer"
+                                    >
+                                      + Adicionar
+                                    </button>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    {(ex.mobility || []).map((step, sIdx) => (
+                                      <div key={sIdx} className="bg-[#0d0908]/80 p-2 rounded-lg border border-viking-gold/20 text-[10px] space-y-1">
+                                        <input 
+                                          type="text"
+                                          value={step.name}
+                                          onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'name', e.target.value)}
+                                          placeholder="Nome da mobilidade"
+                                          className="w-full bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded font-bold"
+                                        />
+                                        <div className="flex gap-2 items-center">
+                                          <input 
+                                            type="number"
+                                            value={step.sets || ''}
+                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                            placeholder="Séries"
+                                            className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                          />
+                                          <span className="text-viking-silver/80">x</span>
+                                          <input 
+                                            type="number"
+                                            value={step.reps || ''}
+                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
+                                            placeholder="Reps/Tempo"
+                                            className="w-12 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded text-center"
+                                          />
+                                          <input 
+                                            type="text"
+                                            value={step.videoUrl || ''}
+                                            onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'videoUrl', e.target.value)}
+                                            placeholder="URL Vídeo"
+                                            className="flex-1 bg-black/40 border border-viking-gold/10 text-[#e0d3a8] p-1 rounded"
+                                          />
+                                          <button 
+                                            onClick={() => handleEditorRemoveMobilityStep(originalIdx, sIdx)}
+                                            className="text-viking-red hover:brightness-125 cursor-pointer"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              </>
                             )}
 
                           </div>
