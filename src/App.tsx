@@ -23,6 +23,7 @@ import {
   Phone, 
   Activity, 
   ChevronRight, 
+  ChevronDown, 
   Scale, 
   Shield, 
   Coins, 
@@ -64,7 +65,9 @@ import {
   Users,
   Camera,
   Image as ImageIcon,
-  Bell
+  Bell,
+  Grid,
+  List
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -104,6 +107,7 @@ import WilksScatterChart from './components/WilksScatterChart';
 import FailureSentinel from './components/FailureSentinel';
 import PatentTimeline from './components/PatentTimeline';
 import WeeklyVolumeLineChart from './components/WeeklyVolumeLineChart';
+import { VikingLogo } from './components/VikingLogo';
 
 const TRAINER_EMAIL = 'john.vasquesrodrigues@gmail.com';
 const TRAINER_PASSWORD = '3636';
@@ -234,6 +238,8 @@ export default function App() {
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [historyTab, setHistoryTab] = useState<'list' | 'comparison'>('list');
+  const [navDropdownOpen, setNavDropdownOpen] = useState<boolean>(false);
+  const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'list'>('grid');
 
   // Delete Athlete state (Trainer)
   const [deletingStudentEmail, setDeletingStudentEmail] = useState<string | null>(null);
@@ -2933,9 +2939,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-viking-gold-dark to-viking-gold flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-              <Shield className="w-7 h-7 text-viking-dark animate-pulse-gold" />
-            </div>
+            <VikingLogo size={52} className="shrink-0" />
             <div>
               <span className="font-viking-display text-xl sm:text-2xl font-bold tracking-wider bg-gradient-to-r from-white via-viking-gold to-viking-gold-dark bg-clip-text text-transparent">
                 VIKING FORCE
@@ -2949,7 +2953,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-20">
               <div className="flex items-center gap-1.5 bg-[#0f0a08] border border-viking-gold/20 p-1 rounded-2xl backdrop-blur-md">
                 <button 
-                  onClick={() => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); }}
+                  onClick={() => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === 'home' && !drawerOpen && !workoutModalOpen 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -2962,7 +2966,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {currentUser?.role === 'student' ? (
                   <>
                     <button 
-                      onClick={() => { setWorkoutModalOpen(true); setDrawerOpen(false); }}
+                      onClick={() => { setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         workoutModalOpen 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -2972,7 +2976,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <Dumbbell className={`w-4 h-4 ${workoutModalOpen ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treino Hoje
                     </button>
                     <button 
-                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); }}
+                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         drawerOpen && drawerType === 'history' 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -2985,7 +2989,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 ) : (
                   <>
                     <button 
-                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); }}
+                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                         drawerOpen && drawerType === 'recentWorkouts' 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -2994,31 +2998,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     >
                       <CheckCircle className={`w-4 h-4 ${drawerOpen && drawerType === 'recentWorkouts' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treinos Concluídos
                     </button>
-                    <button 
-                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); }}
-                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                        drawerOpen && drawerType === 'rpeFeedback' 
-                          ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                          : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
-                      }`}
-                    >
-                      <MessageSquare className={`w-4 h-4 ${drawerOpen && drawerType === 'rpeFeedback' ? 'text-viking-dark' : 'text-viking-gold'}`} /> RPE dos Alunos
-                    </button>
-                    <button 
-                      onClick={() => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Recrutar Novo Aluno'); setDrawerOpen(true); }}
-                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                        drawerOpen && drawerType === 'addStudent' 
-                          ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                          : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
-                      }`}
-                    >
-                      <UserPlus className={`w-4 h-4 ${drawerOpen && drawerType === 'addStudent' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Adicionar Aluno
-                    </button>
                   </>
                 )}
 
                 <button 
-                  onClick={() => { setWorkoutModalOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); }}
+                  onClick={() => { setWorkoutModalOpen(false); setEditingDbExercise(null); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'exerciseLibrary' 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -3029,7 +3013,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </button>
 
                 <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); }}
+                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
                     drawerOpen && drawerType === 'ranking' 
                       ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
@@ -3038,38 +3022,124 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <Trophy className={`w-4 h-4 ${drawerOpen && drawerType === 'ranking' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Classificação
                 </button>
-                <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Calendário Competitivo'); setDrawerOpen(true); }}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                    drawerOpen && drawerType === 'calendar' 
-                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
-                  }`}
-                >
-                  <Calendar className={`w-4 h-4 ${drawerOpen && drawerType === 'calendar' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Calendário
-                </button>
 
-                <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Aliança Viking - Planos'); setDrawerOpen(true); }}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                    drawerOpen && drawerType === 'plans' 
-                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
-                  }`}
+                {/* Dropdown for Secondary Tools */}
+                <div 
+                  className="relative"
+                  onMouseLeave={() => setNavDropdownOpen(false)}
                 >
-                  <CreditCard className={`w-4 h-4 ${drawerOpen && drawerType === 'plans' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Planos
-                </button>
+                  <button
+                    onClick={() => setNavDropdownOpen(!navDropdownOpen)}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                      navDropdownOpen || (['rpeFeedback', 'addStudent', 'calendar', 'plans', 'gmail'].includes(drawerType) && drawerOpen)
+                        ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                        : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                    }`}
+                  >
+                    <span>Mais</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${navDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
 
-                <button 
-                  onClick={() => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                    drawerOpen && drawerType === 'gmail' 
-                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
-                  }`}
-                >
-                  <Mail className={`w-4 h-4 ${drawerOpen && drawerType === 'gmail' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Correio Gmail
-                </button>
+                  <AnimatePresence>
+                    {navDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-56 bg-[#0f0a08]/98 border border-viking-gold/30 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl z-50 flex flex-col gap-1"
+                      >
+                        {currentUser?.role === 'trainer' ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setWorkoutModalOpen(false);
+                                setDrawerType('rpeFeedback');
+                                setDrawerTitle('Feedback RPE de Alunos');
+                                setDrawerOpen(true);
+                                setNavDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                                drawerOpen && drawerType === 'rpeFeedback'
+                                  ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                                  : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                              }`}
+                            >
+                              <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" /> Feedback de RPE
+                            </button>
+                            <button
+                              onClick={() => {
+                                setWorkoutModalOpen(false);
+                                setDrawerType('addStudent');
+                                setDrawerTitle('Recrutar Novo Aluno');
+                                setDrawerOpen(true);
+                                setNavDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                                drawerOpen && drawerType === 'addStudent'
+                                  ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                                  : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                              }`}
+                            >
+                              <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" /> Adicionar Aluno
+                            </button>
+                          </>
+                        ) : null}
+
+                        <button
+                          onClick={() => {
+                            setWorkoutModalOpen(false);
+                            setDrawerType('calendar');
+                            setDrawerTitle('Calendário Competitivo');
+                            setDrawerOpen(true);
+                            setNavDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                            drawerOpen && drawerType === 'calendar'
+                              ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                              : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                          }`}
+                        >
+                          <Calendar className="w-4 h-4 shrink-0 text-viking-gold" /> Calendário
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setWorkoutModalOpen(false);
+                            setDrawerType('plans');
+                            setDrawerTitle('Aliança Viking - Planos');
+                            setDrawerOpen(true);
+                            setNavDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                            drawerOpen && drawerType === 'plans'
+                              ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                              : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                          }`}
+                        >
+                          <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" /> Planos de Treino
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setWorkoutModalOpen(false);
+                            setDrawerType('gmail');
+                            setDrawerTitle('Correio de Valhalla (Gmail)');
+                            setDrawerOpen(true);
+                            setNavDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                            drawerOpen && drawerType === 'gmail'
+                              ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                              : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                          }`}
+                        >
+                          <Mail className="w-4 h-4 shrink-0 text-viking-gold" /> Correio Gmail
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           )}
@@ -3199,9 +3269,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
 
                 <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#0d0908] border border-viking-gold/20 flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.2)]">
-                    <Shield className="w-9 h-9 text-viking-gold" />
-                  </div>
+                  <VikingLogo size={80} className="mx-auto mb-4" />
                   <h2 className="font-viking-display text-2xl sm:text-3xl font-bold tracking-wider bg-gradient-to-r from-[#e0d3a8] via-viking-gold to-[#e0d3a8] bg-clip-text text-transparent">
                     {isRegisterMode ? 'FORGE SUA CONTA' : (authTab === 'trainer' ? 'PORTAL DO TREINADOR' : 'TEMPLO VIKING FORCE')}
                   </h2>
@@ -5210,26 +5278,55 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
               </div>
 
-              {/* Search Bar for Athlete Filtering */}
-              <div className="mb-6 relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-viking-gold/60" />
+              {/* Search Bar & Grid/List Toggle */}
+              <div className="mb-6 flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-viking-gold/60" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Buscar guerreiro por nome ou email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-16 py-3 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-2xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                    >
+                      Limpar
+                    </button>
+                  )}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Buscar guerreiro por nome ou email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-16 py-3 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-2xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
-                />
-                {searchTerm && (
+
+                <div className="flex bg-[#0d0908]/80 rounded-2xl border border-viking-gold/20 p-1 shrink-0 self-stretch md:self-center">
                   <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                    onClick={() => setStudentsLayoutMode('grid')}
+                    className={`flex-1 md:flex-none px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      studentsLayoutMode === 'grid' 
+                        ? 'bg-viking-gold text-viking-dark font-black shadow-[0_0_15px_rgba(212,175,55,0.3)]' 
+                        : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                    }`}
+                    title="Modo Caixas"
                   >
-                    Limpar
+                    <Grid className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap">Caixas</span>
                   </button>
-                )}
+                  <button
+                    onClick={() => setStudentsLayoutMode('list')}
+                    className={`flex-1 md:flex-none px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      studentsLayoutMode === 'list' 
+                        ? 'bg-viking-gold text-viking-dark font-black shadow-[0_0_15px_rgba(212,175,55,0.3)]' 
+                        : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                    }`}
+                    title="Modo Lista"
+                  >
+                    <List className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap">Lista</span>
+                  </button>
+                </div>
               </div>
 
               {/* Active Payment Filter Indicator */}
@@ -5335,7 +5432,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 }
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className={
+                    studentsLayoutMode === 'grid'
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                      : "flex flex-col gap-2.5"
+                  }>
                     {filteredStudentEmails.map(email => {
                       const s = studentsData[email];
                       const lastSess = (s.sessions || [])[0];
@@ -5344,6 +5445,128 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       const preferredTime = s.preferredTime || '18:00';
                       const isPastPreferredTime = simulatedTime > preferredTime;
                       const isSelected = selectedStudentEmails.includes(email);
+
+                      if (studentsLayoutMode === 'list') {
+                        return (
+                          <div 
+                            key={email}
+                            onClick={() => {
+                              if (isBatchMode) {
+                                setSelectedStudentEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]);
+                              } else {
+                                setEditingStudentEmail(email);
+                                setDrawerTitle(`Painel do Guerreiro: ${s.name}`);
+                                setDrawerType('studentPanel');
+                                setDrawerOpen(true);
+                              }
+                            }}
+                            className={`relative p-4 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 ${
+                              isSelected 
+                                ? 'bg-viking-gold/10 border-viking-gold shadow-[0_0_12px_rgba(212,175,55,0.15)]'
+                                : 'bg-[#0d0908]/80 border-viking-gold/15 hover:border-viking-gold/40 hover:bg-[#140e0c]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {isBatchMode ? (
+                                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                                  <button
+                                    onClick={() => setSelectedStudentEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+                                    className="text-viking-gold hover:text-white transition-colors cursor-pointer"
+                                  >
+                                    {isSelected ? <CheckSquare className="w-5 h-5 text-viking-gold" /> : <Square className="w-5 h-5 text-viking-silver/40" />}
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-bold text-[#e0d3a8] hover:text-viking-gold transition-colors truncate">{s.name}</h4>
+                                  <span className="text-[10px] text-viking-silver/50 hidden sm:inline">•</span>
+                                  <span className="text-[10px] text-viking-silver/60 truncate hidden sm:inline">{email}</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-[10px] text-viking-silver/50 sm:hidden">
+                                  <span>{email}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
+                              {/* Status badge */}
+                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
+                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold">Plano:</span>
+                                <span className={`text-[10px] font-black uppercase ${obterStatusVencimento(s.dueDate || new Date().toISOString()).cor.replace('border', '')}`}>
+                                  {obterStatusVencimento(s.dueDate || new Date().toISOString()).texto}
+                                </span>
+                              </div>
+
+                              {/* Last RPE */}
+                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
+                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold">Último RPE:</span>
+                                {lastSess ? (
+                                  <span className={`font-bold text-[10px] flex items-center gap-0.5 ${
+                                    lastSess.avgRPE >= 9 ? 'text-red-400' : lastSess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
+                                  }`}>
+                                    <Activity className="w-3 h-3" /> {(lastSess.avgRPE || 0).toFixed(1)}
+                                  </span>
+                                ) : (
+                                  <span className="text-viking-silver/40 text-[10px] italic">N/A</span>
+                                )}
+                              </div>
+
+                              {/* Vencimento */}
+                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
+                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold flex items-center gap-0.5"><Calendar className="w-3 h-3 text-viking-gold/60" /> Venc:</span>
+                                <span className="text-[10px] font-black text-[#e0d3a8]">
+                                  {s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}
+                                </span>
+                              </div>
+
+                              {/* Status de treino hoje */}
+                              <div className="flex items-center gap-1.5 px-2 bg-[#140e0c] py-1.5 rounded-lg border border-viking-gold/10">
+                                {hasTrainedToday ? (
+                                  <span className="inline-flex items-center gap-0.5 text-emerald-400 font-bold text-[10px]" title="Treino registrado hoje!">
+                                    <Check className="w-3.5 h-3.5" /> Hoje
+                                  </span>
+                                ) : isPastPreferredTime ? (
+                                  <span className="inline-flex items-center gap-0.5 text-red-400 font-bold text-[10px] animate-pulse" title={`Horário de preferência (${preferredTime}) ultrapassado`}>
+                                    <AlertTriangle className="w-3 h-3 text-red-500" /> Atrasado
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-0.5 text-viking-silver/65 font-medium text-[10px]" title={`Horário preferencial às ${preferredTime}`}>
+                                    <Clock className="w-3.5 h-3.5" /> {preferredTime}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-2 md:mt-0 justify-end shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {!isBatchMode && s.phone && (
+                                <button
+                                  onClick={() => window.open(`https://wa.me/${s.phone?.replace(/\D/g, '')}`, '_blank')}
+                                  className="p-2 rounded-lg bg-[#0d0908] hover:bg-emerald-500/10 border border-viking-gold/10 hover:border-emerald-500/30 text-emerald-500 transition-all cursor-pointer shadow-sm"
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {!isBatchMode && (
+                                <button
+                                  onClick={() => {
+                                    setEditingStudentEmail(email);
+                                    setDrawerTitle(`Painel do Guerreiro: ${s.name}`);
+                                    setDrawerType('studentPanel');
+                                    setDrawerOpen(true);
+                                  }}
+                                  className="p-2 rounded-lg bg-[#0d0908] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold text-viking-gold transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <span className="text-[10px] font-bold uppercase tracking-wider pl-1 hidden sm:inline">Acessar</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div 
@@ -5508,7 +5731,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
               exit={{ opacity: 0, scale: 0.85, x: '-50%', y: '-48%' }}
               transition={{ type: 'spring', damping: 20, stiffness: 280 }}
-              className="fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-2xl bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] overflow-hidden text-[#e0d3a8]"
+              className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] ${
+                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp'].includes(drawerType)
+                  ? 'max-w-4xl' 
+                  : 'max-w-2xl'
+              } bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] overflow-hidden text-[#e0d3a8]`}
             >
               <div className="p-6 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center shrink-0">
                 <h3 className="font-viking-display text-sm sm:text-base font-black tracking-wider text-viking-gold flex items-center gap-2 uppercase">
