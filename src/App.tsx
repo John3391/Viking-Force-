@@ -8687,9 +8687,9 @@ Equipe Viking Force`);
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
                                 <input 
                                   type="number"
-                                  value={ex.sets || ''}
+                                  value={ex.sets === 0 ? '' : ex.sets}
                                   onFocus={e => e.target.select()}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -8698,9 +8698,9 @@ Equipe Viking Force`);
                                 <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
                                 <input 
                                   type="number"
-                                  value={ex.reps || ''}
+                                  value={ex.reps === 0 ? '' : ex.reps}
                                   onFocus={e => e.target.select()}
-                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                                  onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
                                   className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
                               </div>
@@ -8876,8 +8876,8 @@ Equipe Viking Force`);
                                       <span className="text-viking-silver/80">% ×</span>
                                       <input 
                                         type="number"
-                                        value={step.reps}
-                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', parseInt(e.target.value) || 1)}
+                                        value={step.reps || ''}
+                                        onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
                                         className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
                                       />
                                       <span className="text-viking-silver/80">reps</span>
