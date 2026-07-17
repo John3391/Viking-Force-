@@ -188,6 +188,37 @@ export async function deleteStudentFromFirebase(email: string): Promise<void> {
 }
 
 /**
+ * Subscribe to the training program in real-time.
+ */
+export function subscribeProgram(
+  onUpdate: (program: TrainingProgram) => void
+): () => void {
+  const docRef = doc(db, 'config', 'program');
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onUpdate(snapshot.data() as TrainingProgram);
+      }
+    },
+    (error) => {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      if (
+        errMessage.includes('offline') || 
+        errMessage.includes('network') || 
+        errMessage.includes('token') || 
+        errMessage.includes('Could not reach') ||
+        errMessage.includes('Backend didn\'t respond')
+      ) {
+        console.warn("Inscrição em tempo real offline/instável:", error);
+        return;
+      }
+      handleFirestoreError(error, OperationType.GET, 'config/program');
+    }
+  );
+}
+
+/**
  * Fetch training program from Firestore.
  * If not found, initializes with DEFAULT_PROGRAM.
  */

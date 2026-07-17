@@ -80,6 +80,7 @@ import {
   saveStudentToFirebase, 
   deleteStudentFromFirebase, 
   fetchProgramFromFirebase, 
+  subscribeProgram,
   saveProgramToFirebase, 
   fetchPlansFromFirebase, 
   savePlansToFirebase,
@@ -586,6 +587,7 @@ export default function App() {
 
     // 2. Cloud Sync: Set up the auth listener. Fetch only when authenticated!
     let unsubscribeStudents: (() => void) | null = null;
+    let unsubscribeProgram: (() => void) | null = null;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -646,14 +648,29 @@ export default function App() {
         }
 
         try {
-          const remoteProgram = await fetchProgramFromFirebase();
-          if (remoteProgram) {
-            setTrainingProgram(remoteProgram);
-            localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+          if (unsubscribeProgram) {
+            unsubscribeProgram();
+            unsubscribeProgram = null;
           }
+          unsubscribeProgram = subscribeProgram((remoteProgram) => {
+            if (remoteProgram) {
+              setTrainingProgram(remoteProgram);
+              localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+            }
+          });
         } catch (e) {
-          console.warn("Using offline storage for training program:", e);
+          console.warn("Error subscribing to training program real-time feed:", e);
           syncSuccess = false;
+          // Fallback to one-time fetch
+          try {
+            const remoteProgram = await fetchProgramFromFirebase();
+            if (remoteProgram) {
+              setTrainingProgram(remoteProgram);
+              localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+            }
+          } catch (err) {
+            console.warn("Using offline storage for training program:", err);
+          }
         }
 
         try {
@@ -727,6 +744,9 @@ export default function App() {
       unsubscribe();
       if (unsubscribeStudents) {
         unsubscribeStudents();
+      }
+      if (unsubscribeProgram) {
+        unsubscribeProgram();
       }
     };
   }, []);
@@ -3586,7 +3606,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     placeholder="Pesquisar..."
                     value={navSearchQuery}
                     onChange={(e) => setNavSearchQuery(e.target.value)}
-                    className="w-48 xl:w-64 bg-[#0a0706]/80 text-viking-silver text-xs px-9 py-2 rounded-xl border border-viking-gold/20 outline-none focus:border-viking-gold/80 focus:bg-[#0f0a08] focus:shadow-[0_0_15px_rgba(212,175,55,0.3)] transition-all"
+                    className="w-48 xl:w-64 search-input-viking text-viking-silver text-xs px-9 py-2 rounded-xl outline-none transition-all"
                   />
                   {navSearchQuery && (
                     <button 
@@ -10858,10 +10878,11 @@ Equipe Viking Force`);
                                     </button>
                                     <input
                                       type="number"
-                                      value={set.reps}
+                                      value={set.reps === 0 ? '' : set.reps}
+                                      placeholder="0"
                                       disabled={set.done}
                                       onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
+                                        const val = e.target.value === '' ? 0 : (parseInt(e.target.value) || 0);
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
                                           if (sets[setIdx]) {
@@ -10895,11 +10916,11 @@ Equipe Viking Force`);
                                     <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1">Peso:</span>
                                     <input
                                       type="number"
-                                      value={set.weight || ''}
+                                      value={set.weight === 0 ? '' : set.weight}
                                       disabled={set.done}
                                       placeholder="0"
                                       onChange={(e) => {
-                                        const val = parseFloat(e.target.value) || 0;
+                                        const val = e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0);
                                         setExerciseSetsState(prev => {
                                           const sets = [...(prev[ex.id] || [])];
                                           if (sets[setIdx]) {
