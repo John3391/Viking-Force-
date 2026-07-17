@@ -21,11 +21,11 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
     let totalSessionVolume = 0;
     const prs = profile.prs;
     
-    sess.exercises.forEach(ex => {
+    sess.exercises.forEach((ex: any) => {
       let exerciseVolume = 0;
       
-      if (ex.sets && ex.sets.length > 0) {
-        ex.sets.forEach(set => {
+      if (ex.sets && Array.isArray(ex.sets) && ex.sets.length > 0) {
+        ex.sets.forEach((set: any) => {
            if (set.done !== false) {
              const weight = set.weight || 0;
              exerciseVolume += (set.reps * weight);
@@ -34,32 +34,40 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
       }
       
       if (exerciseVolume === 0) {
-        const rpe = ex.rpe || 7;
-        const lowerName = ex.name.toLowerCase();
-        let estimatedWeight = 100; // in kg
-        let sets = 4;
-        let reps = 6;
+        // Fallback to prescribed weight or RPE estimation
+        let estimatedWeight = ex.baseWeight || 0;
+        let intensity = 1;
         
-        if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
-          estimatedWeight = prs.squat || 140;
-          sets = 4;
-          reps = 8;
-        } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
-          estimatedWeight = prs.deadlift || 180;
-          sets = 3;
-          reps = 5;
-        } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
-          estimatedWeight = prs.bench || 100;
-          sets = 4;
-          reps = 8;
-        } else {
-          estimatedWeight = (prs.bench || 100) * 0.4;
-          sets = 3;
-          reps = 10;
+        if (typeof ex.intensity === 'number') intensity = ex.intensity;
+        else if (typeof ex.intensity === 'string') {
+          const pct = parseFloat(ex.intensity);
+          if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
         }
         
-        const intensityFactor = rpe / 10;
-        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensityFactor));
+        if (!estimatedWeight) {
+            const rpe = ex.rpe || 7;
+            const lowerName = ex.name.toLowerCase();
+            
+            if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
+              estimatedWeight = prs.squat || 140;
+            } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
+              estimatedWeight = prs.deadlift || 180;
+            } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
+              estimatedWeight = prs.bench || 100;
+            } else {
+              estimatedWeight = (prs.bench || 100) * 0.4;
+            }
+            intensity = rpe / 10;
+        }
+        
+        let sets = ex.sets;
+        // If ex.sets is an array, we get its length as a fallback for sets count if it was passed weirdly
+        if (Array.isArray(ex.sets)) sets = ex.sets.length || 3;
+        else if (typeof sets !== 'number') sets = 3;
+        
+        let reps = ex.reps || 8;
+        
+        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensity));
       }
       totalSessionVolume += exerciseVolume;
     });
