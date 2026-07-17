@@ -30,7 +30,7 @@ interface WeeklyVolumeLineChartProps {
 interface WeeklyVolumeData {
   weekLabel: string;
   weekIndex: number;
-  volume: number;
+  volume: number | null;
   plannedVolume: number;
   sessionCount: number;
   avgRpe: number;
@@ -41,41 +41,50 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
 
   // Helper to calculate a session's volume
   const calculateSessionVolume = (sess: LoggedSession) => {
-    // If the session already has totalAchievedVolume stored, use it
-    if (sess.totalAchievedVolume && sess.totalAchievedVolume > 0) {
-      return sess.totalAchievedVolume;
-    }
-
     let totalSessionVolume = 0;
     const prs = profile.prs;
     
     sess.exercises.forEach(ex => {
-      const rpe = ex.rpe || 7;
-      const lowerName = ex.name.toLowerCase();
-      let estimatedWeight = 100; // in kg
-      let sets = 4;
-      let reps = 6;
+      let exerciseVolume = 0;
       
-      if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
-        estimatedWeight = prs.squat || 140;
-        sets = 4;
-        reps = 8;
-      } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
-        estimatedWeight = prs.deadlift || 180;
-        sets = 3;
-        reps = 5;
-      } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
-        estimatedWeight = prs.bench || 100;
-        sets = 4;
-        reps = 8;
-      } else {
-        estimatedWeight = (prs.bench || 100) * 0.4;
-        sets = 3;
-        reps = 10;
+      if (ex.sets && ex.sets.length > 0) {
+        ex.sets.forEach(set => {
+           if (set.done !== false) {
+             const weight = set.weight || 0;
+             exerciseVolume += (set.reps * weight);
+           }
+        });
       }
       
-      const intensityFactor = rpe / 10;
-      totalSessionVolume += Math.round(sets * reps * (estimatedWeight * intensityFactor));
+      if (exerciseVolume === 0) {
+        const rpe = ex.rpe || 7;
+        const lowerName = ex.name.toLowerCase();
+        let estimatedWeight = 100; // in kg
+        let sets = 4;
+        let reps = 6;
+        
+        if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
+          estimatedWeight = prs.squat || 140;
+          sets = 4;
+          reps = 8;
+        } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
+          estimatedWeight = prs.deadlift || 180;
+          sets = 3;
+          reps = 5;
+        } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
+          estimatedWeight = prs.bench || 100;
+          sets = 4;
+          reps = 8;
+        } else {
+          estimatedWeight = (prs.bench || 100) * 0.4;
+          sets = 3;
+          reps = 10;
+        }
+        
+        const intensityFactor = rpe / 10;
+        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensityFactor));
+      }
+      totalSessionVolume += exerciseVolume;
     });
     return totalSessionVolume === 0 ? 3200 : totalSessionVolume;
   };
@@ -105,7 +114,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
   }
 
   // Set up 8-week buckets
-  const weeklyBuckets: Record<number, { volume: number; plannedVolume: number; sessions: LoggedSession[] }> = {};
+  const weeklyBuckets: Record<number, { volume: number | null; plannedVolume: number; sessions: LoggedSession[] }> = {};
   for (let w = 1; w <= 8; w++) {
     weeklyBuckets[w] = { volume: 0, plannedVolume: 0, sessions: [] };
   }
@@ -128,12 +137,42 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
     // Clip/Clamp to weeks 1 to 8
     if (weekNum >= 1 && weekNum <= 8) {
       const vol = calculateSessionVolume(sess);
-      const plannedVol = sess.totalPlannedVolume || Math.round(vol * 0.95);
+      const plannedVol = Math.round(vol * 1.05); // using a default +5% if no program data
       weeklyBuckets[weekNum].volume += vol;
       weeklyBuckets[weekNum].plannedVolume += plannedVol;
       weeklyBuckets[weekNum].sessions.push(sess);
     }
   });
+
+  
+  const calculatePlannedVolumeForWeek = (weekNum: number) => {
+    if (!profile.customProgram?.weeks?.[weekNum]) return null;
+    const week = profile.customProgram.weeks[weekNum];
+    let vol = 0;
+    const prs = profile.prs;
+    Object.values(week).forEach(exercises => {
+      exercises.forEach(ex => {
+        let weight = ex.baseWeight;
+        if (!weight) {
+          const lowerName = ex.name.toLowerCase();
+          if (lowerName.includes('agachamento') || lowerName.includes('squat')) weight = prs.squat || 140;
+          else if (lowerName.includes('terra') || lowerName.includes('deadlift')) weight = prs.deadlift || 180;
+          else if (lowerName.includes('supino') || lowerName.includes('bench')) weight = prs.bench || 100;
+          else weight = (prs.bench || 100) * 0.4;
+        }
+        
+        let intensity = 1;
+        if (typeof ex.intensity === 'number') intensity = ex.intensity;
+        else if (typeof ex.intensity === 'string') {
+          const pct = parseFloat(ex.intensity);
+          if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
+        }
+        
+        vol += Math.round((ex.sets || 0) * (ex.reps || 0) * (weight * intensity));
+      });
+    });
+    return vol;
+  };
 
   // Calculate base reference PR Sum to generate realistic mock data if needed
   const prs = profile.prs;
@@ -155,12 +194,39 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
 
     // If no sessions logged for this week, we generate a realistic progressive baseline 
     // to give the user immediate visual satisfaction of how the 8-week workload behaves
+
+    const programPlannedVol = calculatePlannedVolumeForWeek(w);
     let finalVolume = bucket.volume;
-    let finalPlannedVolume = bucket.plannedVolume;
+    
+    // Default planned volume logic if no program exists:
+    // If we have actual volume, use it to anchor the planned volume.
+    // Otherwise, try to guess based on week 1, or use defaultWeeklyBase.
+    let fallbackPlanned = bucket.plannedVolume;
+    if (fallbackPlanned === 0) {
+       // Try to use a baseline if they haven't logged this week
+       const base = defaultWeeklyBase;
+       let plannedMult = 1.0;
+       if (w === 1) plannedMult = 0.92;
+       else if (w === 2) plannedMult = 0.95;
+       else if (w === 3) plannedMult = 1.00;
+       else if (w === 4) plannedMult = 0.80; // Deload
+       else if (w === 5) plannedMult = 1.02;
+       else if (w === 6) plannedMult = 1.08;
+       else if (w === 7) plannedMult = 1.15;
+       else if (w === 8) plannedMult = 0.85; // Taper
+       fallbackPlanned = Math.round(base * plannedMult);
+    }
+    
+    let finalPlannedVolume = programPlannedVol !== null && programPlannedVol > 0 ? programPlannedVol : fallbackPlanned;
     let finalAvgRpe = avgRpeVal;
-    const isMocked = bucket.volume === 0;
+
+    const hasAnyProgram = !!profile.customProgram?.weeks && Object.keys(profile.customProgram.weeks).length > 0;
+    
+    // Only mock real volume if they have NO sessions AT ALL and NO program
+    const isMocked = rawSessions.length === 0 && !hasAnyProgram;
 
     if (isMocked) {
+
       // Create a nice waves-like block periodization progression
       // Week 1-3: Load Accumulation (+5% per week)
       // Week 4: Deload (-25% volume)
@@ -187,7 +253,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
     chartData.push({
       weekLabel: `Semana ${w}`,
       weekIndex: w,
-      volume: finalVolume,
+      volume: finalVolume > 0 ? finalVolume : null,
       plannedVolume: finalPlannedVolume,
       sessionCount: isMocked ? 3 : bucket.sessions.length,
       avgRpe: Math.round(finalAvgRpe * 10) / 10
@@ -195,9 +261,9 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
   }
 
   // Calculate stats based on chartData
-  const totalVolumeSum = chartData.reduce((sum, item) => sum + item.volume, 0);
+  const totalVolumeSum = chartData.reduce((sum, item) => sum + (item.volume || 0), 0);
   const avgWeeklyVolume = totalVolumeSum / 8;
-  const maxVolumeWeek = [...chartData].sort((a, b) => b.volume - a.volume)[0];
+  const maxVolumeWeek = [...chartData].sort((a, b) => (b.volume || 0) - (a.volume || 0))[0];
 
   // ACWR (Acute-to-Chronic Workload Ratio) 
   // Acute workload = Week 8 volume (latest week)
@@ -293,7 +359,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
         <div className="bg-[#0d0908]/80 border border-viking-gold/10 p-3.5 rounded-2xl">
           <span className="text-[9px] text-viking-silver/50 uppercase font-black block tracking-wider">Pico de Trabalho</span>
           <strong className="text-sm text-white font-mono mt-1 block">
-            {maxVolumeWeek.volume.toLocaleString('pt-BR')} <span className="text-[10px] text-viking-silver font-normal">kg ({maxVolumeWeek.weekLabel})</span>
+            {(maxVolumeWeek.volume || 0).toLocaleString('pt-BR')} <span className="text-[10px] text-viking-silver font-normal">kg ({maxVolumeWeek.weekLabel})</span>
           </strong>
         </div>
 
@@ -347,7 +413,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
                         <div className="border-t border-viking-gold/15 pt-1.5 mt-1 space-y-1">
                           <p className="text-white font-semibold flex items-center justify-between gap-5">
                             <span>Volume Real:</span>
-                            <span className="text-viking-gold font-mono font-bold">{data.volume.toLocaleString('pt-BR')} kg</span>
+                            <span className="text-viking-gold font-mono font-bold">{(data.volume || 0).toLocaleString('pt-BR')} kg</span>
                           </p>
                           <p className="text-viking-silver flex items-center justify-between gap-5">
                             <span>Volume Planejado:</span>

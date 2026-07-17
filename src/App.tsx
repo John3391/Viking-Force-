@@ -225,6 +225,7 @@ export default function App() {
   const [restTimerSeconds, setRestTimerSeconds] = useState<number>(120);
   const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
   const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
+  const [timerShake, setTimerShake] = useState<boolean>(false);
   const [sessionNote, setSessionNote] = useState<string>('');
 
   // Touch swiping states for mobile exercise card slide navigation
@@ -552,6 +553,8 @@ export default function App() {
           if (prev <= 1) {
             setRestTimerActive(false);
             showToast('🛡️ Intervalo Concluído! De volta à batalha, guerreiro!', 'success');
+            setTimerShake(true);
+            setTimeout(() => setTimerShake(false), 800);
             return 0;
           }
           return prev - 1;
@@ -3385,7 +3388,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                   }`}
                 >
-                  <Activity className={`w-4 h-4 ${activeTab === 'home' && !drawerOpen && !workoutModalOpen ? 'text-viking-dark' : 'text-viking-gold'}`} /> Início
+                  <Activity className="w-4 h-4" /> Início
                 </button>
                 
                 {currentUser?.role === 'student' ? (
@@ -3410,7 +3413,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                       }`}
                     >
-                      <Dumbbell className={`w-4 h-4 ${workoutModalOpen ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treino Hoje
+                      <Dumbbell className="w-4 h-4" /> Treino Hoje
                     </button>
                     <button 
                       onClick={() => { 
@@ -3434,7 +3437,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                       }`}
                     >
-                      <History className={`w-4 h-4 ${drawerOpen && drawerType === 'history' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Histórico
+                      <History className="w-4 h-4" /> Histórico
                     </button>
                   </>
                 ) : (
@@ -3447,7 +3450,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                       }`}
                     >
-                      <CheckCircle className={`w-4 h-4 ${drawerOpen && drawerType === 'recentWorkouts' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Treinos Concluídos
+                      <CheckCircle className="w-4 h-4" /> Treinos Concluídos
                     </button>
                   </>
                 )}
@@ -3477,7 +3480,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                   }`}
                 >
-                  <BookOpen className={`w-4 h-4 ${drawerOpen && drawerType === 'exerciseLibrary' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Biblioteca
+                  <BookOpen className="w-4 h-4" /> Biblioteca
                 </button>
 
                 <button 
@@ -3504,7 +3507,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                   }`}
                 >
-                  <Trophy className={`w-4 h-4 ${drawerOpen && drawerType === 'ranking' ? 'text-viking-dark' : 'text-viking-gold'}`} /> Classificação
+                  <Trophy className="w-4 h-4" /> Classificação
                 </button>
 
                 {/* Dropdown for Secondary Tools */}
@@ -3549,7 +3552,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                               }`}
                             >
-                              <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" /> Feedback de RPE
+                              <MessageSquare className="w-4 h-4 shrink-0" /> Feedback de RPE
                             </button>
                             <button
                               onClick={() => {
@@ -3565,7 +3568,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                               }`}
                             >
-                              <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" /> Adicionar Aluno
+                              <UserPlus className="w-4 h-4 shrink-0" /> Adicionar Aluno
                             </button>
                           </>
                         ) : null}
@@ -3594,7 +3597,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                           }`}
                         >
-                          <Calendar className="w-4 h-4 shrink-0 text-viking-gold" /> Calendário
+                          <Calendar className="w-4 h-4 shrink-0" /> Calendário
                         </button>
 
                         <button
@@ -3611,7 +3614,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                           }`}
                         >
-                          <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" /> Planos de Treino
+                          <CreditCard className="w-4 h-4 shrink-0" /> Planos de Treino
                         </button>
 
                         <button
@@ -3638,7 +3641,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                           }`}
                         >
-                          <Mail className="w-4 h-4 shrink-0 text-viking-gold" /> Correio Gmail
+                          <Mail className="w-4 h-4 shrink-0" /> Correio Gmail
                         </button>
                       </motion.div>
                     )}
@@ -3680,39 +3683,39 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         className="absolute left-0 top-full mt-2 w-full bg-[#0f0a08]/98 border border-viking-gold/30 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl z-50 flex flex-col gap-1 max-h-64 overflow-y-auto"
                       >
                         {[
-                          { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                           ...(currentUser?.role === 'student' ? [
-                            { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                            { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
                           ] : [
-                            { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                            { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
                           ]),
-                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                          { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                           ...(currentUser?.role === 'trainer' ? [
-                            { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                           ] : [])
                         ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).length > 0 ? (
                           [
-                            { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                             ...(currentUser?.role === 'student' ? [
-                              { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                              { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                              { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
                             ] : [
-                              { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                              { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
                             ]),
-                            { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                            { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                             ...(currentUser?.role === 'trainer' ? [
-                              { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                              { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                              { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                              { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
-                              { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
                             ] : [])
                           ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).map((item, idx) => (
                             <button
@@ -4711,12 +4714,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         )}
                         {ex.techniqueTips && (
                           <p className="text-[10px] text-viking-gold/80 italic mt-1 flex items-center gap-1">
-                            <Info className="w-3.5 h-3.5 shrink-0 text-viking-gold" /> Dica: {ex.techniqueTips}
+                            <Info className="w-3.5 h-3.5 shrink-0" /> Dica: {ex.techniqueTips}
                           </p>
                         )}
                         {ex.trainerNote && (
                           <p className="text-[10px] text-[#e0d3a8] font-bold mt-1 flex items-start gap-1.5 bg-viking-gold/10 px-2.5 py-1.5 rounded-md border border-viking-gold/30">
-                            <Info className="w-3.5 h-3.5 shrink-0 text-viking-gold mt-0.5" /> 
+                            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" /> 
                             <span className="leading-tight">Obs: {ex.trainerNote}</span>
                           </p>
                         )}
@@ -6376,25 +6379,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   onClick={() => { setDrawerType('payments'); setDrawerTitle('Fluxo de Caixa Viking'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" /> Visualizar Pagamentos
+                  <CreditCard className="w-4 h-4 shrink-0" /> Visualizar Pagamentos
                 </button>
                 <button 
                   onClick={() => { setDrawerType('rpeFeedback'); setDrawerTitle('Alertas & Notas de RPE'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" /> Logs de Treino dos Alunos
+                  <MessageSquare className="w-4 h-4 shrink-0" /> Logs de Treino dos Alunos
                 </button>
                 <button 
                   onClick={() => { setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Mail className="w-4 h-4 shrink-0 text-viking-gold" /> Central de Gmail (Correio)
+                  <Mail className="w-4 h-4 shrink-0" /> Central de Gmail (Correio)
                 </button>
                 <button 
                   onClick={handleBackupData}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Save className="w-4 h-4 shrink-0 text-viking-gold" /> Fazer Backup (JSON)
+                  <Save className="w-4 h-4 shrink-0" /> Fazer Backup (JSON)
                 </button>
               </div>
 
@@ -9226,25 +9229,33 @@ Equipe Viking Force`);
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
-                                      <input type="number" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <div className="flex gap-1">
+                                        <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'sets', Math.max(0, ex.sets - 1))} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">-</button>
+                                        <input type="number" inputMode="numeric" pattern="[0-9]*" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                        <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'sets', ex.sets + 1)} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">+</button>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
-                                      <input type="number" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <div className="flex gap-1">
+                                        <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'reps', Math.max(0, ex.reps - 1))} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">-</button>
+                                        <input type="number" inputMode="numeric" pattern="[0-9]*" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                        <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'reps', ex.reps + 1)} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">+</button>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Intensidade (%) ou Livre</label>
-                                      <input value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} onChange={e => { const val = e.target.value; const parsedNum = parseFloat(val); if (!isNaN(parsedNum) && parsedNum <= 100) { handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); } else { handleEditorUpdateField(originalIdx, 'intensity', val); } }} placeholder="Ex: 80 ou Carga Livre" className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <input inputMode="decimal" value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} onFocus={e => e.target.select()} onChange={e => { const val = e.target.value; const parsedNum = parseFloat(val); if (!isNaN(parsedNum) && parsedNum <= 100) { handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); } else { handleEditorUpdateField(originalIdx, 'intensity', val); } }} placeholder="Ex: 80 ou Carga Livre" className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">RPE Alvo</label>
-                                      <input type="number" step="0.5" value={ex.targetRPE} onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <input type="number" inputMode="decimal" step="0.5" value={ex.targetRPE} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'targetRPE', parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
                                     </div>
                                   </div>
                                   <div className="pt-3 border-t border-viking-gold/15 space-y-3">
                                     <div className="relative">
                                       <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">{ex.main ? <><Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)</> : <><Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)</>}</label>
-                                      <input type="number" value={ex.baseWeight || ''} onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)} placeholder={ex.main ? "Ex: 150" : "Ex: 24"} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <input type="number" inputMode="decimal" value={ex.baseWeight || ''} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)} placeholder={ex.main ? "Ex: 150" : "Ex: 24"} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
                                     </div>
                                     {ex.main && typeof ex.intensity === 'number' && (
                                       <div className="text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver">
@@ -10415,7 +10426,7 @@ Equipe Viking Force`);
                       className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-viking-gold hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
                       title="Mover para Painel Lateral"
                     >
-                      <Columns className="w-4 h-4 shrink-0 text-viking-gold" />
+                      <Columns className="w-4 h-4 shrink-0" />
                       <span className="hidden md:inline">Mover para Lateral</span>
                     </button>
                   ) : (
@@ -10428,7 +10439,7 @@ Equipe Viking Force`);
                       className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold/40 text-viking-gold hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
                       title="Centralizar na Tela"
                     >
-                      <Maximize2 className="w-4 h-4 shrink-0 text-viking-gold" />
+                      <Maximize2 className="w-4 h-4 shrink-0" />
                       <span className="hidden md:inline">Centralizar Treino</span>
                     </button>
                   )}
@@ -10516,9 +10527,13 @@ Equipe Viking Force`);
                 </div>
 
                 {/* VIKING REST TIMER */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-[#1a1210] to-[#120b09] border border-viking-gold/25 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
+                <motion.div 
+                  animate={timerShake ? { x: [-10, 10, -10, 10, -5, 5, -2, 2, 0] } : { x: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className={`p-4 rounded-xl bg-gradient-to-r from-[#1a1210] to-[#120b09] border shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-300 ${timerShake ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-viking-gold/25'}`}
+                >
                   <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-lg bg-viking-gold/10 border border-viking-gold/25 flex items-center justify-center ${restTimerActive ? 'animate-pulse text-viking-gold' : 'text-viking-silver'}`}>
+                    <div className={`p-2.5 rounded-lg flex items-center justify-center transition-all ${restTimerActive ? 'bg-viking-gold/10 border border-viking-gold/25 animate-pulse text-viking-gold' : 'bg-black/40 border border-viking-silver/10 text-viking-silver'}`}>
                       <Timer className="w-5 h-5 animate-spin-slow" />
                     </div>
                     <div>
@@ -10531,13 +10546,18 @@ Equipe Viking Force`);
 
                   <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
                     {/* Time Display */}
-                    <div className="bg-black/60 px-4 py-2 rounded-xl border border-viking-gold/15 flex items-center justify-center font-mono text-xl font-black tracking-widest text-viking-gold min-w-[90px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]">
-                      {(() => {
-                        const mins = Math.floor(restTimerRemaining / 60);
-                        const secs = restTimerRemaining % 60;
-                        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                      })()}
-                    </div>
+                    {(() => {
+                      const isEnding = restTimerActive && restTimerRemaining > 0 && restTimerRemaining <= 5;
+                      return (
+                        <div className={`bg-black/60 px-4 py-2 rounded-xl border flex items-center justify-center font-mono text-xl font-black tracking-widest min-w-[90px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] transition-all duration-300 ${isEnding ? 'border-red-500 text-red-500 scale-110 shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse' : timerShake ? 'border-red-500 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]' : 'border-viking-gold/15 text-viking-gold'}`}>
+                          {(() => {
+                            const mins = Math.floor(restTimerRemaining / 60);
+                            const secs = restTimerRemaining % 60;
+                            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                          })()}
+                        </div>
+                      );
+                    })()}
 
                     {/* Controls */}
                     <div className="flex items-center gap-1.5">
@@ -10609,7 +10629,7 @@ Equipe Viking Force`);
                       })}
                     </div>
                   </div>
-                </div>
+                </motion.div>
 
                 {/* RPE Explanatory note */}
                 <div className="p-3.5 rounded-xl border border-dashed border-viking-gold/25 text-[11px] text-viking-silver leading-relaxed flex gap-2.5 bg-viking-gold/5">
@@ -11341,7 +11361,7 @@ Equipe Viking Force`);
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border border-viking-gold/25 shadow-xl relative overflow-hidden animate-fade-in"
+                        className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border-b border-viking-gold/60 shadow-xl relative overflow-hidden animate-fade-in"
                       >
                       <div className="absolute inset-0 bg-viking-gold/[0.02] pointer-events-none" />
                       

@@ -22,32 +22,46 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
     const prs = profile.prs;
     
     sess.exercises.forEach(ex => {
-      const rpe = ex.rpe || 7;
-      const lowerName = ex.name.toLowerCase();
-      let estimatedWeight = 100; // in kg
-      let sets = 4;
-      let reps = 6;
+      let exerciseVolume = 0;
       
-      if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
-        estimatedWeight = prs.squat || 140;
-        sets = 4;
-        reps = 8;
-      } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
-        estimatedWeight = prs.deadlift || 180;
-        sets = 3;
-        reps = 5;
-      } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
-        estimatedWeight = prs.bench || 100;
-        sets = 4;
-        reps = 8;
-      } else {
-        estimatedWeight = (prs.bench || 100) * 0.4;
-        sets = 3;
-        reps = 10;
+      if (ex.sets && ex.sets.length > 0) {
+        ex.sets.forEach(set => {
+           if (set.done !== false) {
+             const weight = set.weight || 0;
+             exerciseVolume += (set.reps * weight);
+           }
+        });
       }
       
-      const intensityFactor = rpe / 10;
-      totalSessionVolume += Math.round(sets * reps * (estimatedWeight * intensityFactor));
+      if (exerciseVolume === 0) {
+        const rpe = ex.rpe || 7;
+        const lowerName = ex.name.toLowerCase();
+        let estimatedWeight = 100; // in kg
+        let sets = 4;
+        let reps = 6;
+        
+        if (lowerName.includes('agachamento') || lowerName.includes('squat')) {
+          estimatedWeight = prs.squat || 140;
+          sets = 4;
+          reps = 8;
+        } else if (lowerName.includes('terra') || lowerName.includes('deadlift')) {
+          estimatedWeight = prs.deadlift || 180;
+          sets = 3;
+          reps = 5;
+        } else if (lowerName.includes('supino') || lowerName.includes('bench')) {
+          estimatedWeight = prs.bench || 100;
+          sets = 4;
+          reps = 8;
+        } else {
+          estimatedWeight = (prs.bench || 100) * 0.4;
+          sets = 3;
+          reps = 10;
+        }
+        
+        const intensityFactor = rpe / 10;
+        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensityFactor));
+      }
+      totalSessionVolume += exerciseVolume;
     });
     return totalSessionVolume === 0 ? 3200 : totalSessionVolume;
   };
@@ -69,9 +83,55 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
     { name: 'Treino 4', volume: Math.round(basePrSum * 10.1), rpe: 8.0, date: '05/07/2026' },
   ];
 
+
+  // Generate data from custom program if available
+  const generateProgramData = () => {
+    if (!profile.customProgram || !profile.customProgram.weeks) return [];
+    let data = [];
+    const prs = profile.prs;
+    const weeks = Object.keys(profile.customProgram.weeks).map(Number).sort((a,b)=>a-b);
+    
+    for (const w of weeks) {
+       const week = profile.customProgram.weeks[w];
+       for (const day of ['A', 'B', 'C', 'D', 'E', 'F']) {
+         if (week[day] && week[day].length > 0) {
+           let vol = 0;
+           week[day].forEach(ex => {
+             let weight = ex.baseWeight;
+             if (!weight) {
+               const lowerName = ex.name.toLowerCase();
+               if (lowerName.includes('agachamento') || lowerName.includes('squat')) weight = prs.squat || 140;
+               else if (lowerName.includes('terra') || lowerName.includes('deadlift')) weight = prs.deadlift || 180;
+               else if (lowerName.includes('supino') || lowerName.includes('bench')) weight = prs.bench || 100;
+               else weight = (prs.bench || 100) * 0.4;
+             }
+             
+             let intensity = 1;
+             if (typeof ex.intensity === 'number') intensity = ex.intensity;
+             else if (typeof ex.intensity === 'string') {
+               const pct = parseFloat(ex.intensity);
+               if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
+             }
+             
+             vol += Math.round((ex.sets || 0) * (ex.reps || 0) * (weight * intensity));
+           });
+           
+           data.push({
+             name: `S${w}T${day}`,
+             volume: vol,
+             rpe: 7.5,
+             date: 'Prescrito'
+           });
+         }
+       }
+    }
+    return data.length > 0 ? data : null;
+  };
+
   if (rawSessions.length === 0) {
     // If absolutely no sessions, show the seed sessions as reference/projection
-    chartData = seedSessions;
+    const programData = generateProgramData();
+    chartData = programData || seedSessions;
   } else {
     // Calculate actual logged session volumes
     const loggedData = [...rawSessions].reverse().map((sess, idx) => {
@@ -84,31 +144,7 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
       };
     });
 
-    if (loggedData.length === 1) {
-      // If only 1, prepend 3 seed sessions so we have a nice line
-      const baselineVolume = loggedData[0].volume;
-      chartData = [
-        { name: 'Sessão 1', volume: Math.round(baselineVolume * 0.85), rpe: 7.0, date: 'Histórico' },
-        { name: 'Sessão 2', volume: Math.round(baselineVolume * 0.90), rpe: 7.5, date: 'Histórico' },
-        { name: 'Sessão 3', volume: Math.round(baselineVolume * 0.95), rpe: 7.8, date: 'Histórico' },
-        loggedData[0]
-      ];
-    } else if (loggedData.length === 2) {
-      const firstVolume = loggedData[0].volume;
-      chartData = [
-        { name: 'Sessão 1', volume: Math.round(firstVolume * 0.88), rpe: 7.2, date: 'Histórico' },
-        { name: 'Sessão 2', volume: Math.round(firstVolume * 0.94), rpe: 7.5, date: 'Histórico' },
-        ...loggedData
-      ];
-    } else if (loggedData.length === 3) {
-      const firstVolume = loggedData[0].volume;
-      chartData = [
-        { name: 'Sessão 1', volume: Math.round(firstVolume * 0.90), rpe: 7.4, date: 'Histórico' },
-        ...loggedData
-      ];
-    } else {
-      chartData = loggedData;
-    }
+    chartData = loggedData;
   }
 
   // Calculate volume change %
