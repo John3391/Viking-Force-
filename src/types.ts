@@ -205,3 +205,12 @@ export interface DbMobilityExercise {
   tips?: string;
 }
 
+
+export interface TrainingProtocol {
+  id: string;
+  name: string;
+  description?: string;
+  folder?: string;
+  program: TrainingProgram;
+  createdAt: string;
+}

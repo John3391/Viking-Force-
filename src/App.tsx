@@ -70,10 +70,13 @@ import {
   Grid,
   List,
   Info
+,
+  Folder
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent , TrainingProtocol } from './types';
+import { ProtocolsDrawer } from './components/ProtocolsDrawer';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 import { 
   fetchStudentsFromFirebase, 
@@ -189,6 +192,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [drawerTitle, setDrawerTitle] = useState<string>('');
   const [drawerType, setDrawerType] = useState<string>(''); // 'history' | 'ranking' | 'plans' | 'settings' | 'addStudent' | 'whatsapp' | 'payments' | 'rpeFeedback' | 'editProgram'
+  const [trainingProtocols, setTrainingProtocols] = useState<TrainingProtocol[]>(() => { const stored = localStorage.getItem('viking_protocols'); return stored ? JSON.parse(stored) : []; });
   const [editingStudentEmail, setEditingStudentEmail] = useState<string>('');
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
   
@@ -483,6 +487,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('viking_plans', JSON.stringify(vikingPlans));
   }, [vikingPlans]);
+
+  useEffect(() => {
+    localStorage.setItem('viking_protocols', JSON.stringify(trainingProtocols));
+  }, [trainingProtocols]);
 
   // Auto-scroll chat container to the bottom when chat is active or new messages arrive
   useEffect(() => {
@@ -3691,7 +3699,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     onClick={() => {
                       setNavSearchQuery(navSearchInput);
                     }}
-                    className="p-2 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-viking-gold rounded-xl transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                    className="p-2 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.3)] text-viking-gold rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center shrink-0"
                     title="Acionar Pesquisa"
                   >
                     <Search className="w-4 h-4" />
@@ -3713,6 +3721,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           ] : [
                             { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
                           ]),
+                          { title: 'Protocolos & Metodologias', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           ...(currentUser?.role === 'trainer' ? [
@@ -3731,7 +3740,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             ] : [
                               { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
                             ]),
-                            { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Protocolos & Metodologias', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                             { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                             ...(currentUser?.role === 'trainer' ? [
                               { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
@@ -8980,7 +8990,21 @@ Equipe Viking Force`);
                   <div className="space-y-4">
                     {/* Controls to load specific Week and Day */}
                     <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
-                      <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">🗓️ Carregar Período</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">🗓️ Carregar Período</p>
+                        <button
+                          onClick={() => {
+                            closeAllDrawers();
+                            setDrawerType('protocols');
+                            setDrawerTitle('Protocolos de Treino');
+                            setDrawerOpen(true);
+                          }}
+                          className="px-2 py-1 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/30 text-viking-gold rounded flex items-center gap-1 text-[10px] uppercase font-bold"
+                          title="Carregar de um protocolo salvo"
+                        >
+                          <Folder className="w-3 h-3" /> Protocolos
+                        </button>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Semana</label>
@@ -10010,6 +10034,32 @@ Equipe Viking Force`);
                       </div>
                     )}
                   </div>
+                )}
+
+                
+                {/* Protocolos Drawer */}
+                {drawerType === 'protocols' && (
+                  <ProtocolsDrawer
+                    protocols={trainingProtocols}
+                    setProtocols={setTrainingProtocols}
+                    studentsData={studentsData}
+                    onApplyToStudent={(protocol, studentEmail) => {
+                      // Apply protocol to student
+                      const student = studentsData[studentEmail];
+                      if (student) {
+                         const updatedStudent = {
+                           ...student,
+                           customProgram: JSON.parse(JSON.stringify(protocol.program))
+                         };
+                         setStudentsData(prev => ({
+                           ...prev,
+                           [studentEmail]: updatedStudent
+                         }));
+                         // Also update Firebase
+                         saveStudentToFirebase(studentEmail, updatedStudent);
+                      }
+                    }}
+                  />
                 )}
 
                 {/* 12. Biblioteca de Exercícios Drawer */}
@@ -11384,7 +11434,7 @@ Equipe Viking Force`);
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border-b border-viking-gold/60 shadow-xl relative overflow-hidden animate-fade-in"
+                        className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0d0908]/80 border border-viking-gold/30 shadow-[0_4px_25px_rgba(212,175,55,0.15)] relative overflow-hidden animate-fade-in"
                       >
                       <div className="absolute inset-0 bg-viking-gold/[0.02] pointer-events-none" />
                       
@@ -11598,6 +11648,19 @@ Equipe Viking Force`);
                   >
                     <BookOpen className="w-4 h-4 text-viking-gold" /> Biblioteca de Exercícios
                   </button>
+                  {currentUser?.role === 'trainer' && (
+                    <button 
+                      onClick={() => { 
+                        setMobileMenuOpen(false); 
+                        setDrawerType('protocols'); 
+                        setDrawerTitle('Protocolos de Treino'); 
+                        setDrawerOpen(true); 
+                      }}
+                      className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                    >
+                      <Folder className="w-4 h-4 text-viking-gold" /> Protocolos & Metodologias
+                    </button>
+                  )}
 
                   <button 
                     onClick={() => { 
