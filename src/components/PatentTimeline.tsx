@@ -47,18 +47,18 @@ export default function PatentTimeline({ studentProfile, showToast }: PatentTime
   const [interactiveMode, setInteractiveMode] = useState<boolean>(false);
   
   // Interactive state
-  const [simulatedWeight, setSimulatedWeight] = useState<number>(studentProfile.bodyWeight || 80.0);
-  const [simulatedSquat, setSimulatedSquat] = useState<number>(studentProfile.prs.squat || 0);
-  const [simulatedBench, setSimulatedBench] = useState<number>(studentProfile.prs.bench || 0);
-  const [simulatedDeadlift, setSimulatedDeadlift] = useState<number>(studentProfile.prs.deadlift || 0);
-  const [simulatedGender, setSimulatedGender] = useState<'male' | 'female'>(studentProfile.gender || 'male');
+  const [simulatedWeight, setSimulatedWeight] = useState<number>(studentProfile?.bodyWeight || 80.0);
+  const [simulatedSquat, setSimulatedSquat] = useState<number>(studentProfile?.prs?.squat || 0);
+  const [simulatedBench, setSimulatedBench] = useState<number>(studentProfile?.prs?.bench || 0);
+  const [simulatedDeadlift, setSimulatedDeadlift] = useState<number>(studentProfile?.prs?.deadlift || 0);
+  const [simulatedGender, setSimulatedGender] = useState<'male' | 'female'>(studentProfile?.gender || 'male');
 
   // Real values
-  const realWeight = studentProfile.bodyWeight || 80.0;
-  const realGender = studentProfile.gender || 'male';
-  const realSquat = studentProfile.prs.squat || 0;
-  const realBench = studentProfile.prs.bench || 0;
-  const realDeadlift = studentProfile.prs.deadlift || 0;
+  const realWeight = studentProfile?.bodyWeight || 80.0;
+  const realGender = studentProfile?.gender || 'male';
+  const realSquat = studentProfile?.prs?.squat || 0;
+  const realBench = studentProfile?.prs?.bench || 0;
+  const realDeadlift = studentProfile?.prs?.deadlift || 0;
   const realTotal = realSquat + realBench + realDeadlift;
   const realRatio = realWeight > 0 ? realTotal / realWeight : 0;
 
@@ -220,6 +220,14 @@ export default function PatentTimeline({ studentProfile, showToast }: PatentTime
     }
   }, []);
 
+  if (!studentProfile) {
+    return (
+      <div id="patent-timeline-card" className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md text-center text-viking-silver">
+        Carregando patente do guerreiro...
+      </div>
+    );
+  }
+
   return (
     <div id="patent-timeline-card" className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden text-left">
       <div className="absolute -right-16 -top-16 text-viking-gold/5 pointer-events-none">
@@ -227,17 +235,17 @@ export default function PatentTimeline({ studentProfile, showToast }: PatentTime
       </div>
 
       {/* Header Panel */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
         <div>
           <div className="flex items-center gap-2 text-viking-gold">
             <Award className="w-5 h-5" />
-            <span className="font-viking-medieval text-xs font-black uppercase tracking-widest">Soberania Corporal de Carga</span>
+            <span className="font-viking-medieval text-[10px] sm:text-xs font-black uppercase tracking-widest">Soberania Corporal de Carga</span>
           </div>
-          <h2 className="text-xl font-black text-white font-viking-display tracking-wide mt-1">
+          <h2 className="text-lg sm:text-xl font-black text-white font-viking-display tracking-wide mt-1">
             Cronograma de Patentes de Força
           </h2>
-          <p className="text-xs text-viking-silver/80 mt-1 max-w-2xl">
-            Sua classificação na tribo é baseada na sua força relativa: o total levantado no Agachamento, Supino e Terra (SBD Total) dividido pelo seu peso corporal.
+          <p className="text-[10px] sm:text-xs text-viking-silver/80 mt-1 max-w-2xl">
+            Sua classificação na tribo é baseada na sua força relativa: o total levantado no SBD dividido pelo seu peso corporal.
           </p>
         </div>
 
@@ -283,11 +291,11 @@ export default function PatentTimeline({ studentProfile, showToast }: PatentTime
           </div>
 
           <div className="mt-4 space-y-1">
-            <h4 className="text-sm font-black text-white uppercase tracking-wide flex items-center justify-center gap-1.5">
+            <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wide flex items-center justify-center gap-1.5">
               <span>{activeRank.badge}</span>
               <span className={activeRank.textColor}>{activeRank.name.replace(/\(.*?\)/g, '').trim()}</span>
             </h4>
-            <p className="text-[10px] text-viking-silver/70 italic max-w-[200px] leading-relaxed mx-auto">
+            <p className="text-[9px] sm:text-[10px] text-viking-silver/70 italic max-w-[200px] leading-relaxed mx-auto">
               "{activeRank.lore}"
             </p>
           </div>
@@ -462,102 +470,103 @@ export default function PatentTimeline({ studentProfile, showToast }: PatentTime
         </div>
       </div>
 
-      {/* HORIZONTAL STEPPER TIMELINE */}
-      <div className="mt-8 space-y-6">
-        <h3 className="font-viking-display text-xs font-black tracking-widest text-viking-gold uppercase border-b border-viking-gold/15 pb-2">
-          Sua Jornada na Linha do Tempo
-        </h3>
+        {/* HORIZONTAL STEPPER TIMELINE */}
+        <div className="mt-8 space-y-6">
+          <h3 className="font-viking-display text-[10px] sm:text-xs font-black tracking-widest text-viking-gold uppercase border-b border-viking-gold/15 pb-2">
+            Sua Jornada na Linha do Tempo
+          </h3>
 
-        {/* Stepper track wrapper */}
-        <div className="relative pt-6 pb-2 px-1">
-          {/* Timeline continuous track bar */}
-          <div className="absolute top-1/2 left-0 right-0 h-1 bg-[#140e0c] -translate-y-1/2 border-t border-b border-viking-gold/10" />
-          
-          {/* Active progress colored filling bar */}
-          {(() => {
-            // Find progress ratio between ranks
-            const numRanks = RANKS.length;
-            let activeIndex = RANKS.indexOf(activeRank);
-            if (activeIndex === -1) activeIndex = 0;
-            
-            // Calculate approximate percentage completion
-            let totalPct = 0;
-            if (activeIndex === numRanks - 1) {
-              totalPct = 100;
-            } else {
-              const currentRankMult = getMultiplier(RANKS[activeIndex], currentGender);
-              const nextRankMult = getMultiplier(RANKS[activeIndex + 1], currentGender);
-              const fraction = (currentRatio - currentRankMult) / (nextRankMult - currentRankMult);
-              const clampedFraction = Math.min(1, Math.max(0, fraction));
+          {/* Stepper track wrapper - Scrollable on mobile */}
+          <div className="relative pt-6 pb-2 px-1 overflow-x-auto no-scrollbar">
+            <div className="min-w-[500px] relative">
+              {/* Timeline continuous track bar */}
+              <div className="absolute top-1/2 left-0 right-0 h-1 bg-[#140e0c] -translate-y-1/2 border-t border-b border-viking-gold/10" />
               
-              const stepWeight = 100 / (numRanks - 1);
-              totalPct = (activeIndex * stepWeight) + (clampedFraction * stepWeight);
-            }
+              {/* Active progress colored filling bar */}
+              {(() => {
+                // Find progress ratio between ranks
+                const numRanks = RANKS.length;
+                let activeIndex = RANKS.indexOf(activeRank);
+                if (activeIndex === -1) activeIndex = 0;
+                
+                // Calculate approximate percentage completion
+                let totalPct = 0;
+                if (activeIndex === numRanks - 1) {
+                  totalPct = 100;
+                } else {
+                  const currentRankMult = getMultiplier(RANKS[activeIndex], currentGender);
+                  const nextRankMult = getMultiplier(RANKS[activeIndex + 1], currentGender);
+                  const fraction = (currentRatio - currentRankMult) / (nextRankMult - currentRankMult);
+                  const clampedFraction = Math.min(1, Math.max(0, fraction));
+                  
+                  const stepWeight = 100 / (numRanks - 1);
+                  totalPct = (activeIndex * stepWeight) + (clampedFraction * stepWeight);
+                }
 
-            return (
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${totalPct}%` }}
-                transition={{ duration: 0.8 }}
-                className="absolute top-1/2 left-0 h-1 bg-gradient-to-r from-viking-gold-dark to-viking-gold -translate-y-1/2 shadow-[0_0_10px_rgba(212,175,55,0.4)]"
-              />
-            );
-          })()}
+                return (
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${totalPct}%` }}
+                    transition={{ duration: 0.8 }}
+                    className="absolute top-1/2 left-0 h-1 bg-gradient-to-r from-viking-gold-dark to-viking-gold -translate-y-1/2 shadow-[0_0_10px_rgba(212,175,55,0.4)]"
+                  />
+                );
+              })()}
 
-          {/* Steps list */}
-          <div className="relative flex justify-between items-center z-10">
-            {RANKS.map((rank, index) => {
-              const reqMultiplier = getMultiplier(rank, currentGender);
-              const targetKg = getTargetKg(rank, currentGender, currentWeight);
-              const isUnlocked = currentRatio >= reqMultiplier;
-              const isCurrent = rank.id === activeRank.id;
-              const StepIcon = rank.icon;
+              {/* Steps list */}
+              <div className="relative flex justify-between items-center z-10 px-4">
+                {RANKS.map((rank, index) => {
+                  const reqMultiplier = getMultiplier(rank, currentGender);
+                  const targetKg = getTargetKg(rank, currentGender, currentWeight);
+                  const isUnlocked = currentRatio >= reqMultiplier;
+                  const isCurrent = rank.id === activeRank.id;
 
-              return (
-                <div 
-                  key={rank.id} 
-                  className="flex flex-col items-center group cursor-pointer"
-                  onClick={() => setSelectedRankId(selectedRankId === rank.id ? null : rank.id)}
-                >
-                  {/* Circle Badge Node */}
-                  <motion.div
-                    whileHover={{ scale: 1.15 }}
-                    className={`w-11 h-11 rounded-full flex items-center justify-center border-2 transition-all duration-300 relative ${
-                      isUnlocked 
-                        ? `bg-gradient-to-br ${rank.themeColor} border-viking-gold text-white shadow-[0_0_15px_rgba(197,160,89,0.25)]`
-                        : 'bg-black/80 border-viking-gold/20 text-viking-silver/30'
-                    } ${isCurrent ? 'ring-2 ring-viking-gold ring-offset-2 ring-offset-viking-dark' : ''}`}
-                  >
-                    {isUnlocked ? (
-                      <span className="text-lg">{rank.badge}</span>
-                    ) : (
-                      <Lock className="w-4 h-4 text-viking-silver/40" />
-                    )}
+                  return (
+                    <div 
+                      key={rank.id} 
+                      className="flex flex-col items-center group cursor-pointer"
+                      onClick={() => setSelectedRankId(selectedRankId === rank.id ? null : rank.id)}
+                    >
+                      {/* Circle Badge Node */}
+                      <motion.div
+                        whileHover={{ scale: 1.15 }}
+                        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center border-2 transition-all duration-300 relative ${
+                          isUnlocked 
+                            ? `bg-gradient-to-br ${rank.themeColor} border-viking-gold text-white shadow-[0_0_15px_rgba(197,160,89,0.25)]`
+                            : 'bg-black/80 border-viking-gold/20 text-viking-silver/30'
+                        } ${isCurrent ? 'ring-2 ring-viking-gold ring-offset-2 ring-offset-viking-dark' : ''}`}
+                      >
+                        {isUnlocked ? (
+                          <span className="text-base sm:text-lg">{rank.badge}</span>
+                        ) : (
+                          <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-viking-silver/40" />
+                        )}
 
-                    {/* Miniature lock status dot */}
-                    {isUnlocked ? (
-                      <span className="absolute -top-1 -right-1 bg-emerald-500 rounded-full p-0.5 border border-black">
-                        <CheckCircle2 className="w-2.5 h-2.5 text-black" />
-                      </span>
-                    ) : null}
-                  </motion.div>
+                        {/* Miniature lock status dot */}
+                        {isUnlocked ? (
+                          <span className="absolute -top-1 -right-1 bg-emerald-500 rounded-full p-0.5 border border-black">
+                            <CheckCircle2 className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-black" />
+                          </span>
+                        ) : null}
+                      </motion.div>
 
-                  {/* Under Step Label */}
-                  <div className="text-center mt-2 px-1 max-w-[80px] sm:max-w-[120px]">
-                    <span className={`text-[9px] font-black uppercase tracking-wider block leading-none ${
-                      isUnlocked ? 'text-white' : 'text-viking-silver/40'
-                    } ${isCurrent ? 'text-viking-gold font-extrabold underline decoration-viking-gold/40 decoration-1 underline-offset-2' : ''}`}>
-                      {rank.name.split(' (')[0]}
-                    </span>
-                    <span className={`text-[8px] font-mono block mt-0.5 ${isUnlocked ? 'text-viking-gold' : 'text-viking-silver/30'}`}>
-                      {reqMultiplier.toFixed(1)}x ({targetKg}kg)
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Under Step Label */}
+                      <div className="text-center mt-2 px-1 max-w-[70px] sm:max-w-[120px]">
+                        <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-wider block leading-none ${
+                          isUnlocked ? 'text-white' : 'text-viking-silver/40'
+                        } ${isCurrent ? 'text-viking-gold font-extrabold underline decoration-viking-gold/40 decoration-1 underline-offset-2' : ''}`}>
+                          {rank.name.split(' (')[0]}
+                        </span>
+                        <span className={`text-[7px] sm:text-[8px] font-mono block mt-0.5 ${isUnlocked ? 'text-viking-gold' : 'text-viking-silver/30'}`}>
+                          {reqMultiplier.toFixed(1)}x
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
 
         {/* DETAILS OF SELECTED OR ACTIVE RANK */}
         <div className="pt-2">

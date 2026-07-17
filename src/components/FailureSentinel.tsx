@@ -56,6 +56,7 @@ export default function FailureSentinel({
     // 1. Process real historical data
     Object.keys(studentsData).forEach(email => {
       const student = studentsData[email];
+      if (!student) return;
       const sessions = student.sessions || [];
       
       sessions.forEach(sess => {

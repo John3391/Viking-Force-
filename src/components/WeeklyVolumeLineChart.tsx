@@ -39,8 +39,18 @@ interface WeeklyVolumeData {
 export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChartProps) {
   const [showTips, setShowTips] = useState<boolean>(true);
 
+  if (!profile) {
+    return (
+      <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md text-center text-viking-silver">
+        Carregando gráfico de volume semanal...
+      </div>
+    );
+  }
+
   // Helper to calculate a session's volume
   const calculateSessionVolume = (sess: LoggedSession) => {
+    if (sess.totalAchievedVolume) return sess.totalAchievedVolume;
+    
     let totalSessionVolume = 0;
     const prs = profile.prs;
     
@@ -51,7 +61,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
         ex.sets.forEach((set: any) => {
            if (set.done !== false) {
              const weight = set.weight || 0;
-             exerciseVolume += (set.reps * weight);
+             exerciseVolume += ((set.reps || 0) * weight);
            }
         });
       }
@@ -63,7 +73,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
         
         if (typeof ex.intensity === 'number') intensity = ex.intensity;
         else if (typeof ex.intensity === 'string') {
-          const pct = parseFloat(ex.intensity);
+          const pct = parseFloat(ex.intensity.replace('%', ''));
           if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
         }
         
@@ -83,18 +93,16 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
             intensity = rpe / 10;
         }
         
-        let sets = ex.sets;
-        // If ex.sets is an array, we get its length as a fallback for sets count if it was passed weirdly
-        if (Array.isArray(ex.sets)) sets = ex.sets.length || 3;
-        else if (typeof sets !== 'number') sets = 3;
+        let setsCount = 3;
+        if (Array.isArray(ex.sets)) setsCount = ex.sets.length;
+        else if (typeof ex.sets === 'number') setsCount = ex.sets;
         
         let reps = ex.reps || 8;
-        
-        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensity));
+        exerciseVolume = Math.round(setsCount * reps * (estimatedWeight * intensity));
       }
       totalSessionVolume += exerciseVolume;
     });
-    return totalSessionVolume === 0 ? 3200 : totalSessionVolume;
+    return totalSessionVolume;
   };
 
   // Extract sessions and aggregate into 8 weeks
@@ -192,7 +200,7 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
         let intensity = 1;
         if (typeof ex.intensity === 'number') intensity = ex.intensity;
         else if (typeof ex.intensity === 'string') {
-          const pct = parseFloat(ex.intensity);
+          const pct = parseFloat(ex.intensity.replace('%', ''));
           if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
         }
         
@@ -213,39 +221,37 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
   const chartData: WeeklyVolumeData[] = [];
   let totalSessionsLogged = 0;
 
-  for (let w = 1; w <= 8; w++) {
+  for (let w = 1; w <= numWeeks; w++) {
     const bucket = weeklyBuckets[w];
+    if (!bucket) continue;
+
     const rpes = bucket.sessions.map(s => s.avgRPE).filter(r => r > 0);
     const avgRpeVal = rpes.length > 0 ? rpes.reduce((sum, r) => sum + r, 0) / rpes.length : 0;
     
     totalSessionsLogged += bucket.sessions.length;
 
     // If no sessions logged for this week, we generate a realistic progressive baseline 
-    // to give the user immediate visual satisfaction of how the 8-week workload behaves
+    // to give the user immediate visual satisfaction of how the workload behaves
 
     const programPlannedVol = calculatePlannedVolumeForWeek(w);
-    let finalVolume = bucket.volume;
+    let finalVolume = bucket.volume || 0;
     
     // Default planned volume logic if no program exists:
     // If we have actual volume, use it to anchor the planned volume.
     // Otherwise, try to guess based on week 1, or use defaultWeeklyBase.
-    let fallbackPlanned = bucket.plannedVolume;
+    let fallbackPlanned = bucket.plannedVolume || 0;
     if (fallbackPlanned === 0) {
        // Try to use a baseline if they haven't logged this week
        const base = defaultWeeklyBase;
        let plannedMult = 1.0;
-       if (w === 1) plannedMult = 0.92;
-       else if (w === 2) plannedMult = 0.95;
-       else if (w === 3) plannedMult = 1.00;
-       else if (w === 4) plannedMult = 0.80; // Deload
-       else if (w === 5) plannedMult = 1.02;
-       else if (w === 6) plannedMult = 1.08;
-       else if (w === 7) plannedMult = 1.15;
-       else if (w === 8) plannedMult = 0.85; // Taper
+       if (w % 4 === 1) plannedMult = 0.92;
+       else if (w % 4 === 2) plannedMult = 0.95;
+       else if (w % 4 === 3) plannedMult = 1.00;
+       else if (w % 4 === 0) plannedMult = 0.80; // Deload
        fallbackPlanned = Math.round(base * plannedMult);
     }
     
-    let finalPlannedVolume = programPlannedVol !== null && programPlannedVol > 0 ? programPlannedVol : fallbackPlanned;
+    let finalPlannedVolume = (programPlannedVol !== null && programPlannedVol > 0) ? programPlannedVol : fallbackPlanned;
     let finalAvgRpe = avgRpeVal;
 
     const hasAnyProgram = !!profile.customProgram?.weeks && Object.keys(profile.customProgram.weeks).length > 0;
@@ -254,24 +260,16 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
     const isMocked = rawSessions.length === 0 && !hasAnyProgram;
 
     if (isMocked) {
-
       // Create a nice waves-like block periodization progression
-      // Week 1-3: Load Accumulation (+5% per week)
-      // Week 4: Deload (-25% volume)
-      // Week 5-7: Transmutation Peak (+7% per week starting from week 3 load)
-      // Week 8: Taper (-30% volume, peak intensity)
       let multiplier = 1.0;
       let plannedMult = 1.0;
       let rpeEst = 7.0;
 
-      if (w === 1) { multiplier = 0.90; plannedMult = 0.92; rpeEst = 7.0; }
-      else if (w === 2) { multiplier = 0.96; plannedMult = 0.95; rpeEst = 7.5; }
-      else if (w === 3) { multiplier = 1.04; plannedMult = 1.00; rpeEst = 8.0; }
-      else if (w === 4) { multiplier = 0.78; plannedMult = 0.80; rpeEst = 6.0; } // Deload week
-      else if (w === 5) { multiplier = 1.06; plannedMult = 1.02; rpeEst = 7.5; }
-      else if (w === 6) { multiplier = 1.13; plannedMult = 1.08; rpeEst = 8.2; }
-      else if (w === 7) { multiplier = 1.20; plannedMult = 1.15; rpeEst = 8.8; } // Overreaching peak
-      else if (w === 8) { multiplier = 0.84; plannedMult = 0.85; rpeEst = 6.5; } // Taper week
+      const phase = (w - 1) % 4;
+      if (phase === 0) { multiplier = 0.90; plannedMult = 0.92; rpeEst = 7.0; }
+      else if (phase === 1) { multiplier = 0.96; plannedMult = 0.95; rpeEst = 7.5; }
+      else if (phase === 2) { multiplier = 1.04; plannedMult = 1.00; rpeEst = 8.0; }
+      else if (phase === 3) { multiplier = 0.78; plannedMult = 0.80; rpeEst = 6.0; } // Deload week
 
       finalVolume = Math.round(defaultWeeklyBase * multiplier);
       finalPlannedVolume = Math.round(defaultWeeklyBase * plannedMult);
@@ -290,14 +288,19 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
 
   // Calculate stats based on chartData
   const totalVolumeSum = chartData.reduce((sum, item) => sum + (item.volume || 0), 0);
-  const avgWeeklyVolume = totalVolumeSum / numWeeks;
-  const maxVolumeWeek = [...chartData].sort((a, b) => (b.volume || 0) - (a.volume || 0))[0];
+  const avgWeeklyVolume = chartData.length > 0 ? totalVolumeSum / chartData.length : 0;
+  const maxVolumeWeek = chartData.length > 0 ? [...chartData].sort((a, b) => (b.volume || 0) - (a.volume || 0))[0] : { volume: 0, weekLabel: 'N/A' };
 
   // ACWR (Acute-to-Chronic Workload Ratio) 
-  // Acute workload = Week 8 volume (latest week)
-  // Chronic workload = average volume of last 4 weeks (Weeks 5, 6, 7, 8)
-  const acuteWorkload = chartData[7].volume;
-  const chronicWorkload = (chartData[4].volume + chartData[5].volume + chartData[6].volume + chartData[7].volume) / 4;
+  // Acute workload = Latest week volume
+  // Chronic workload = average volume of last 4 weeks
+  const acuteWorkload = chartData.length > 0 ? (chartData[chartData.length - 1].volume || 0) : 0;
+  
+  const last4 = chartData.slice(-4);
+  const chronicWorkload = last4.length > 0 
+    ? last4.reduce((sum, item) => sum + (item.volume || 0), 0) / last4.length 
+    : 0;
+    
   const acwr = chronicWorkload > 0 ? (acuteWorkload / chronicWorkload) : 1.0;
 
   // Determine workload status based on ACWR
@@ -336,8 +339,8 @@ export default function WeeklyVolumeLineChart({ profile }: WeeklyVolumeLineChart
   }
 
   // Calculate volume progression % from first 2 weeks to last 2 weeks to show general trend
-  const earlyWeeksAvg = (chartData[0].volume + chartData[1].volume) / 2;
-  const lateWeeksAvg = (chartData[6].volume + chartData[7].volume) / 2;
+  const earlyWeeksAvg = chartData.length >= 2 ? ((chartData[0].volume || 0) + (chartData[1].volume || 0)) / 2 : (chartData[0]?.volume || 0);
+  const lateWeeksAvg = chartData.length >= 8 ? ((chartData[6].volume || 0) + (chartData[7].volume || 0)) / 2 : (chartData[chartData.length - 1]?.volume || 0);
   const trendPercent = earlyWeeksAvg > 0 ? Math.round(((lateWeeksAvg - earlyWeeksAvg) / earlyWeeksAvg) * 100) : 0;
 
   return (

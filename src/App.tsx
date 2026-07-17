@@ -82,10 +82,12 @@ import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 
 function DebouncedInput({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
-  
-  useEffect(() => {
+  const lastValueRef = useRef(value);
+
+  if (value !== lastValueRef.current) {
     setLocalValue(value);
-  }, [value]);
+    lastValueRef.current = value;
+  }
 
   return (
     <input
@@ -105,10 +107,12 @@ function DebouncedInput({ value, onChange, ...props }: any) {
 
 function DebouncedTextarea({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
-  
-  useEffect(() => {
+  const lastValueRef = useRef(value);
+
+  if (value !== lastValueRef.current) {
     setLocalValue(value);
-  }, [value]);
+    lastValueRef.current = value;
+  }
 
   return (
     <textarea
@@ -117,6 +121,53 @@ function DebouncedTextarea({ value, onChange, ...props }: any) {
       onChange={(e) => setLocalValue(e.target.value)}
       onBlur={(e) => onChange(e.target.value)}
     />
+  );
+}
+
+function WeightControl({ value, onChange, placeholder, disabled, title, step = 2.5 }: any) {
+  const handleDecrement = () => {
+    const current = typeof value === 'number' ? value : parseFloat(value) || 0;
+    onChange(Math.max(0, current - step));
+  };
+
+  const handleIncrement = () => {
+    const current = typeof value === 'number' ? value : parseFloat(value) || 0;
+    onChange(current + step);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 w-full">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={handleDecrement}
+        className="w-8 h-8 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0 border border-viking-gold/20 transition-colors"
+      >
+        -
+      </button>
+      <input
+        type="number"
+        inputMode="decimal"
+        step={step}
+        value={value === 0 || value === undefined ? '' : value}
+        onChange={(e) => {
+          const val = e.target.value;
+          onChange(val === '' ? 0 : (parseFloat(val) || 0));
+        }}
+        disabled={disabled}
+        placeholder={placeholder}
+        title={title}
+        className="flex-1 min-w-0 bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-center font-bold text-xs py-2 rounded focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={handleIncrement}
+        className="w-8 h-8 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0 border border-viking-gold/20 transition-colors"
+      >
+        +
+      </button>
+    </div>
   );
 }
 
@@ -575,8 +626,18 @@ export default function App() {
               pr = activeStudentProfile.prs.deadlift;
             }
           }
-          if (pr && typeof ex.intensity === 'number') {
-            defaultWeight = Math.round(pr * ex.intensity);
+          let intensityRatio = 0;
+          if (typeof ex.intensity === 'number') {
+            intensityRatio = ex.intensity;
+          } else if (typeof ex.intensity === 'string') {
+            const parsed = parseFloat(ex.intensity.replace('%', ''));
+            if (!isNaN(parsed)) {
+              intensityRatio = parsed > 1 ? parsed / 100 : parsed;
+            }
+          }
+
+          if (pr && intensityRatio > 0) {
+            defaultWeight = Math.round(pr * intensityRatio);
           } else if (pr) {
             defaultWeight = pr;
           }
@@ -595,7 +656,7 @@ export default function App() {
       
       setExerciseSetsState(initialSets);
     }
-  }, [workoutModalOpen, selectedWeek, selectedDay, activeStudentProfile?.customProgram, trainingProgram]);
+  }, [workoutModalOpen, selectedWeek, selectedDay, activeStudentProfile?.customProgram, activeStudentProfile?.prs, trainingProgram]);
 
   // Rest Timer countdown logic
   useEffect(() => {
@@ -832,7 +893,7 @@ export default function App() {
 
     Object.keys(newStudentsData).forEach(email => {
       const student = newStudentsData[email];
-      if (!student.dueDate) return;
+      if (!student || !student.dueDate) return;
 
       const [year, month, day] = student.dueDate.split('-');
       if (!year || !month || !day) return;
@@ -2152,6 +2213,7 @@ export default function App() {
       ["Nome", "Email", "Plano", "Status", "Vencimento"],
       ...Object.keys(studentsData).map(email => {
         const s = studentsData[email];
+        if (!s) return ['', email, '', '', 'N/A'];
         return [s.name, email, s.plan, s.status, s.dueDate || 'N/A'];
       })
     ].map(row => row.join(';')).join('\n');
@@ -2173,24 +2235,33 @@ export default function App() {
     return todayStr > activeStudentProfile.dueDate;
   })();
 
-  // Calculate volume: Sets * Reps * 1RM * intensity ratio for each logged exercise
+  // Calculate volume: Sets * Reps * Weight for each logged exercise
   const calculateTotalVolume = () => {
     if (!activeStudentProfile) return 0;
-    // Just sum up arbitrary but sensible weight lifting values based on logged sessions
     let sum = 0;
-    activeStudentProfile.sessions.forEach(sess => {
-      sess.exercises.forEach(ex => {
-        // Find exercise inside program to get sets & reps
-        // Or default to 3 * 8 * RPE * multiplier
-        const rpe = ex.rpe || 7;
-        sum += 3 * 8 * rpe * 5; // dynamic representation of volume lifted
-      });
+    const sessions = activeStudentProfile.sessions || [];
+    sessions.forEach(sess => {
+      if (sess.totalAchievedVolume) {
+        sum += sess.totalAchievedVolume;
+      } else {
+        sess.exercises.forEach(ex => {
+          if (ex.achievedVolume) {
+            sum += ex.achievedVolume;
+          } else if (ex.sets && Array.isArray(ex.sets)) {
+            ex.sets.forEach(set => {
+              if (set.done !== false) {
+                sum += (set.reps || 0) * (set.weight || 0);
+              }
+            });
+          }
+        });
+      }
     });
-    return sum === 0 ? 1280 : sum; // sensible starter volume
+    return sum === 0 ? 0 : sum;
   };
 
   const calculateAvgRpe = () => {
-    if (!activeStudentProfile || activeStudentProfile.sessions.length === 0) return '—';
+    if (!activeStudentProfile || !activeStudentProfile.sessions || activeStudentProfile.sessions.length === 0) return '—';
     const last3 = activeStudentProfile.sessions.slice(0, 3);
     const avg = last3.reduce((sum, s) => sum + s.avgRPE, 0) / last3.length;
     return avg.toFixed(1);
@@ -2442,14 +2513,14 @@ export default function App() {
     const warmup = steps.map(step => ({
       percent: step.percent,
       reps: step.reps,
-      weight: Math.round(pr * step.percent * 10) / 10,
+      weight: Math.round(pr * step.percent),
     }));
 
     // Target work set preview
     warmup.push({
       percent: parsedIntensity,
       reps: 2,
-      weight: Math.round(pr * parsedIntensity * 10) / 10,
+      weight: Math.round(pr * parsedIntensity),
       isTarget: true
     } as any);
 
@@ -2724,33 +2795,35 @@ export default function App() {
 
   const leaderboard = React.useMemo((): GymLeaderboardEntry[] => {
     // Collect everyone (default + active student) and calculate dynamic rank
-    const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
-      const profile = studentsData[email];
-      const squat = profile.prs?.squat || 0;
-      const bench = profile.prs?.bench || 0;
-      const deadlift = profile.prs?.deadlift || 0;
-      const total = squat + bench + deadlift;
-      const age = profile.age || 25;
-      const bw = profile.bodyWeight || 80.0;
-      const gender = profile.gender || 'male';
-      const wilks = calculateWilks(gender, bw, total);
+    const entries: GymLeaderboardEntry[] = Object.keys(studentsData)
+      .map(email => ({ email, profile: studentsData[email] }))
+      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null)
+      .map(({ email, profile }) => {
+        const squat = profile.prs?.squat || 0;
+        const bench = profile.prs?.bench || 0;
+        const deadlift = profile.prs?.deadlift || 0;
+        const total = squat + bench + deadlift;
+        const age = profile.age || 25;
+        const bw = profile.bodyWeight || 80.0;
+        const gender = profile.gender || 'male';
+        const wilks = calculateWilks(gender, bw, total);
 
-      return {
-        position: 0,
-        name: profile.name,
-        email,
-        squat,
-        bench,
-        deadlift,
-        total,
-        wilks,
-        gender,
-        age,
-        bodyWeight: bw,
-        ageDivision: getAgeDivision(age),
-        weightClass: getWeightClass(gender, bw)
-      };
-    });
+        return {
+          position: 0,
+          name: profile.name,
+          email,
+          squat,
+          bench,
+          deadlift,
+          total,
+          wilks,
+          gender,
+          age,
+          bodyWeight: bw,
+          ageDivision: getAgeDivision(age),
+          weightClass: getWeightClass(gender, bw)
+        };
+      });
 
     // Dynamic sorting
     entries.sort((a, b) => {
@@ -2785,33 +2858,35 @@ export default function App() {
   }, [leaderboard, leaderboardGenderFilter, leaderboardAgeFilter, leaderboardWeightFilter]);
 
   const absoluteLeader = React.useMemo((): GymLeaderboardEntry | null => {
-    const entries: GymLeaderboardEntry[] = Object.keys(studentsData).map(email => {
-      const profile = studentsData[email];
-      const squat = profile.prs?.squat || 0;
-      const bench = profile.prs?.bench || 0;
-      const deadlift = profile.prs?.deadlift || 0;
-      const total = squat + bench + deadlift;
-      const age = profile.age || 25;
-      const bw = profile.bodyWeight || 80.0;
-      const gender = profile.gender || 'male';
-      const wilks = calculateWilks(gender, bw, total);
+    const entries: GymLeaderboardEntry[] = Object.keys(studentsData)
+      .map(email => ({ email, profile: studentsData[email] }))
+      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null)
+      .map(({ email, profile }) => {
+        const squat = profile.prs?.squat || 0;
+        const bench = profile.prs?.bench || 0;
+        const deadlift = profile.prs?.deadlift || 0;
+        const total = squat + bench + deadlift;
+        const age = profile.age || 25;
+        const bw = profile.bodyWeight || 80.0;
+        const gender = profile.gender || 'male';
+        const wilks = calculateWilks(gender, bw, total);
 
-      return {
-        position: 0,
-        name: profile.name,
-        email,
-        squat,
-        bench,
-        deadlift,
-        total,
-        wilks,
-        gender,
-        age,
-        bodyWeight: bw,
-        ageDivision: getAgeDivision(age),
-        weightClass: getWeightClass(gender, bw)
-      };
-    });
+        return {
+          position: 0,
+          name: profile.name,
+          email,
+          squat,
+          bench,
+          deadlift,
+          total,
+          wilks,
+          gender,
+          age,
+          bodyWeight: bw,
+          ageDivision: getAgeDivision(age),
+          weightClass: getWeightClass(gender, bw)
+        };
+      });
 
     if (entries.length === 0) return null;
     entries.sort((a, b) => b.wilks - a.wilks);
@@ -3312,6 +3387,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
   const filteredStudentEmails = Object.keys(studentsData).filter(email => {
     const s = studentsData[email];
+    if (!s) return false;
     if (paymentFilter === 'pending_or_overdue' && s.status === 'Pago') {
       return false;
     }
@@ -3717,20 +3793,40 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <input
                       id="navSearchInput"
                       type="text"
-                      placeholder="Pesquisar..."
+                      placeholder="Pesquisar atalhos..."
                       value={navSearchInput}
                       onChange={(e) => {
                         setNavSearchInput(e.target.value);
-                        if (e.target.value === '') {
-                           setNavSearchQuery(''); setNavSearchInput('');
-                        }
+                        setNavSearchQuery(e.target.value);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          setNavSearchQuery(navSearchInput);
+                        if (e.key === 'Enter' && navSearchInput.trim()) {
+                          const allShortcuts = [
+                            { title: 'Início', action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            ...(currentUser?.role === 'student' ? [
+                              { title: 'Treino Hoje', action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Histórico', action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                            ] : [
+                              { title: 'Treinos Concluídos', action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                            ]),
+                            { title: 'Protocolos & Metodologias', action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Biblioteca de Exercícios', action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Ranking do Templo', action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            ...(currentUser?.role === 'trainer' ? [
+                              { title: 'Feedback de RPE', action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Adicionar Aluno', action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Agenda de Treinador', action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Planos & Mensalidades', action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Correio Gmail', action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            ] : [])
+                          ];
+                          const matched = allShortcuts.filter(item => item.title.toLowerCase().includes(navSearchInput.toLowerCase()));
+                          if (matched.length > 0) {
+                            matched[0].action();
+                          }
                         }
                       }}
-                      className="w-48 xl:w-64 search-input-viking text-viking-silver text-xs pl-9 pr-9 py-2 rounded-xl outline-none transition-all"
+                      className="w-48 xl:w-64 search-input-viking text-viking-silver text-xs pl-9 pr-9 py-2 rounded-xl outline-none transition-all focus:border-viking-gold/60 focus:shadow-[0_0_12px_rgba(212,175,55,0.25)]"
                     />
                     {navSearchInput && (
                       <button 
@@ -3743,73 +3839,109 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </div>
                   <button 
                     onClick={() => {
-                      setNavSearchQuery(navSearchInput);
+                      if (navSearchInput.trim()) {
+                        const allShortcuts = [
+                          { title: 'Início', action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          ...(currentUser?.role === 'student' ? [
+                            { title: 'Treino Hoje', action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Histórico', action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                          ] : [
+                            { title: 'Treinos Concluídos', action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                          ]),
+                          { title: 'Protocolos & Metodologias', action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Biblioteca de Exercícios', action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Ranking do Templo', action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          ...(currentUser?.role === 'trainer' ? [
+                            { title: 'Feedback de RPE', action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Adicionar Aluno', action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Agenda de Treinador', action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Planos & Mensalidades', action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Correio Gmail', action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          ] : [])
+                        ];
+                        const matched = allShortcuts.filter(item => item.title.toLowerCase().includes(navSearchInput.toLowerCase()));
+                        if (matched.length > 0) {
+                          matched[0].action();
+                        }
+                      }
                     }}
-                    className="p-2 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.3)] text-viking-gold rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center shrink-0"
+                    className="p-2 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] text-viking-gold rounded-xl transition-all duration-300 cursor-pointer flex items-center justify-center shrink-0"
                     title="Acionar Pesquisa"
                   >
                     <Search className="w-4 h-4" />
                   </button>
                   <AnimatePresence>
-                    {navSearchQuery.trim() && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute left-0 top-full mt-2 w-full bg-[#0f0a08]/98 border border-viking-gold/30 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl z-50 flex flex-col gap-1 max-h-64 overflow-y-auto"
-                      >
-                        {[
-                          { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          ...(currentUser?.role === 'student' ? [
-                            { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
-                          ] : [
-                            { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
-                          ]),
-                          { title: 'Protocolos & Metodologias', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          ...(currentUser?.role === 'trainer' ? [
-                            { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          ] : [])
-                        ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).length > 0 ? (
-                          [
-                            { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            ...(currentUser?.role === 'student' ? [
-                              { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                              { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
-                            ] : [
-                              { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
-                            ]),
-                            { title: 'Protocolos & Metodologias', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            ...(currentUser?.role === 'trainer' ? [
-                              { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                              { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                              { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                              { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                              { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
-                            ] : [])
-                          ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).map((item, idx) => (
-                            <button
-                              key={idx}
-                              onClick={item.action}
-                              className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
-                            >
-                              {item.icon} {item.title}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-4 text-center text-xs text-viking-silver/50">Nenhum atalho encontrado.</div>
-                        )}
-                      </motion.div>
-                    )}
+                    {(() => {
+                      if (!navSearchInput.trim()) return null;
+                      const allShortcuts = [
+                        { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                        ...(currentUser?.role === 'student' ? [
+                          { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                        ] : [
+                          { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } }
+                        ]),
+                        { title: 'Protocolos & Metodologias', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student') return; setWorkoutModalOpen(false); setDrawerType('protocols'); setDrawerTitle('Protocolos de Treino'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                        { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                        { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                        ...(currentUser?.role === 'trainer' ? [
+                          { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                        ] : [])
+                      ];
+
+                      const filtered = allShortcuts.filter(item => 
+                        item.title.toLowerCase().includes(navSearchInput.toLowerCase())
+                      );
+
+                      const highlightMatch = (text: string, query: string) => {
+                        if (!query.trim()) return <span>{text}</span>;
+                        const parts = text.split(new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi'));
+                        return (
+                          <span>
+                            {parts.map((part, i) => 
+                              part.toLowerCase() === query.toLowerCase() ? (
+                                <span key={i} className="text-viking-gold font-bold drop-shadow-[0_0_6px_rgba(212,175,55,0.7)] select-none">
+                                  {part}
+                                </span>
+                              ) : (
+                                part
+                              )
+                            )}
+                          </span>
+                        );
+                      };
+
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute left-0 top-full mt-2 w-full bg-[#0f0a08]/98 border border-viking-gold/40 rounded-2xl p-1.5 shadow-[0_4px_24px_rgba(212,175,55,0.15)] backdrop-blur-xl z-50 flex flex-col gap-1 max-h-64 overflow-y-auto"
+                        >
+                          {filtered.length > 0 ? (
+                            filtered.map((item, idx) => (
+                              <button
+                                key={idx}
+                                onClick={item.action}
+                                className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer text-viking-silver bg-viking-gold/[0.02] border border-viking-gold/10 hover:border-viking-gold/40 hover:text-viking-gold hover:bg-viking-gold/10 hover:shadow-[0_0_12px_rgba(212,175,55,0.25)]"
+                              >
+                                {item.icon}
+                                {highlightMatch(item.title, navSearchInput)}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-4 text-center text-xs text-viking-silver/50">
+                              Nenhum atalho encontrado.
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })()}
                   </AnimatePresence>
 
                 </div>
@@ -3898,7 +4030,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       </nav>
 
       {/* --- MAIN CONTAINER --- */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-28 md:pb-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 sm:mt-8 pb-32 md:pb-8">
 
         {/* --- AUTHENTICATION SCREEN --- */}
         <AnimatePresence>
@@ -4123,67 +4255,72 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         Seus recordes pessoais (1RM) são usados para prescrever as porcentagens corretas de aquecimento automático no agachamento, supino e terra.
                       </p>
                       
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Agachamento (kg)</label>
-                          <input 
-                            type="number" 
-                            disabled={authLoading}
-                            value={prSquat}
-                            onChange={e => setPrSquat(e.target.value)}
-                            placeholder="Ex: 140"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Agachamento (kg)</label>
+                            <input 
+                              type="number" 
+                              inputMode="decimal"
+                              disabled={authLoading}
+                              value={prSquat}
+                              onChange={e => setPrSquat(e.target.value)}
+                              placeholder="Ex: 140"
+                              className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Supino (kg)</label>
+                            <input 
+                              type="number" 
+                              inputMode="decimal"
+                              disabled={authLoading}
+                              value={prBench}
+                              onChange={e => setPrBench(e.target.value)}
+                              placeholder="Ex: 100"
+                              className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Terra (kg)</label>
+                            <input 
+                              type="number" 
+                              inputMode="decimal"
+                              disabled={authLoading}
+                              value={prDeadlift}
+                              onChange={e => setPrDeadlift(e.target.value)}
+                              placeholder="Ex: 180"
+                              className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Supino (kg)</label>
-                          <input 
-                            type="number" 
-                            disabled={authLoading}
-                            value={prBench}
-                            onChange={e => setPrBench(e.target.value)}
-                            placeholder="Ex: 100"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Terra (kg)</label>
-                          <input 
-                            type="number" 
-                            disabled={authLoading}
-                            value={prDeadlift}
-                            onChange={e => setPrDeadlift(e.target.value)}
-                            placeholder="Ex: 180"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-2 gap-2 pt-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
-                          <input 
-                            type="number" 
-                            disabled={authLoading}
-                            value={regAge}
-                            onChange={e => setRegAge(e.target.value)}
-                            placeholder="Ex: 25"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
+                            <input 
+                              type="number" 
+                              inputMode="decimal"
+                              disabled={authLoading}
+                              value={regAge}
+                              onChange={e => setRegAge(e.target.value)}
+                              placeholder="Ex: 25"
+                              className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Peso Corporal (kg)</label>
+                            <input 
+                              type="number" 
+                              inputMode="decimal"
+                              step="0.1"
+                              disabled={authLoading}
+                              value={regBodyWeight}
+                              onChange={e => setRegBodyWeight(e.target.value)}
+                              placeholder="Ex: 80.0"
+                              className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Peso Corporal (kg)</label>
-                          <input 
-                            type="number" 
-                            step="0.1"
-                            disabled={authLoading}
-                            value={regBodyWeight}
-                            onChange={e => setRegBodyWeight(e.target.value)}
-                            placeholder="Ex: 80.0"
-                            className="w-full px-3 py-2 rounded-lg bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] text-xs text-center font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
 
                       <div className="pt-1">
                         <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Gênero para Competição</label>
@@ -4337,7 +4474,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             className="space-y-6 relative z-10"
           >
             {/* Header Greeting */}
-            <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl backdrop-blur-md relative overflow-hidden">
+            <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl backdrop-blur-md relative overflow-hidden">
               <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
                 <Shield className="w-48 h-48 text-viking-gold" />
               </div>
@@ -4348,10 +4485,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 <p className="text-viking-silver/80 text-sm mt-1">
                   ⚔️ Saudações, <span className="text-viking-gold font-bold">{activeStudentProfile.name}</span>! O ferro espera sua soberania.
                 </p>
-                <div className="mt-4 bg-[#140e0c] p-3 rounded-xl border border-viking-gold/20 flex items-center gap-4">
-                  <div className="text-center">
+                <div className="mt-4 bg-[#140e0c] p-2.5 sm:p-3 rounded-xl border border-viking-gold/20 flex items-center gap-3 sm:gap-4">
+                  <div className="text-center min-w-[50px]">
                     <div className="text-2xl font-black text-viking-gold">
-                      {activeStudentProfile.sessions.filter(s => (s.completedMobility?.length || 0) > 0).length}
+                      {(activeStudentProfile.sessions || []).filter(s => (s.completedMobility?.length || 0) > 0).length}
                     </div>
                     <div className="text-[9px] text-viking-silver uppercase">Sessões com Mobilidade</div>
                   </div>
@@ -4425,7 +4562,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', duration: 0.5 }}
-                className="bg-gradient-to-br from-amber-500/15 via-[#231710]/95 to-amber-950/20 border-2 border-viking-gold rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(217,119,6,0.25)] text-left"
+                className="bg-gradient-to-br from-amber-500/15 via-[#231710]/95 to-amber-950/20 border-2 border-viking-gold rounded-3xl p-4 sm:p-6 relative overflow-hidden shadow-[0_0_25px_rgba(217,119,6,0.25)] text-left"
               >
                 {/* Sparkly decorative elements */}
                 <div className="absolute right-4 top-4 text-viking-gold/20 pointer-events-none">
@@ -4454,26 +4591,26 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             )}
 
             {/* Sub-Tab Navigation inside Student Profile */}
-            <div className="flex border-b border-viking-gold/15 gap-2 sm:gap-6 bg-[#140e0c]/40 p-1.5 rounded-2xl border border-viking-gold/10">
+            <div className="flex border-b border-viking-gold/15 gap-1.5 sm:gap-6 bg-[#140e0c]/40 p-1 rounded-2xl border border-viking-gold/10 overflow-x-auto no-scrollbar">
               <button 
                 onClick={() => setStudentSubTab('overview')}
-                className={`flex-1 sm:flex-initial py-3 px-5 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
                   studentSubTab === 'overview' 
                     ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
                     : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
                 }`}
               >
-                ⚔️ Treinos &amp; Progresso
+                ⚔️ Treinos
               </button>
               <button 
                 onClick={() => setStudentSubTab('wilks')}
-                className={`flex-1 sm:flex-initial py-3 px-5 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
                   studentSubTab === 'wilks' 
                     ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
                     : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
                 }`}
               >
-                🏆 Metas de Wilks
+                🏆 Metas Wilks
               </button>
             </div>
 
@@ -4490,7 +4627,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               return (
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                   {/* Alarm / Status Banner */}
-                  <div className={`rounded-3xl p-6 border transition-all md:col-span-7 flex flex-col justify-between ${
+                  <div className={`rounded-3xl p-4 sm:p-6 border transition-all md:col-span-7 flex flex-col justify-between ${
                     showAlert 
                       ? 'bg-red-950/30 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.15)] text-[#ffdede]' 
                       : 'bg-[#1a1210]/60 border-viking-gold/15 text-viking-silver/95'
@@ -4638,32 +4775,32 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             })()}
 
             {/* Performance Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               
-              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                <Dumbbell className="w-8 h-8 text-viking-gold mx-auto mb-2" />
-                <p className="text-2xl font-black text-white">{calculateTotalVolume().toLocaleString('pt-BR')} kg</p>
-                <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Volume Total</p>
+              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
+                <Dumbbell className="w-6 h-6 sm:w-8 sm:h-8 text-viking-gold mx-auto mb-2" />
+                <p className="text-lg sm:text-2xl font-black text-white">{calculateTotalVolume().toLocaleString('pt-BR')} kg</p>
+                <p className="text-[9px] sm:text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Volume Total</p>
               </div>
 
-              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                <Trophy className="w-8 h-8 text-viking-gold mx-auto mb-2" />
-                <p className="text-2xl font-black text-white">
+              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
+                <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-viking-gold mx-auto mb-2" />
+                <p className="text-lg sm:text-2xl font-black text-white">
                   {(activeStudentProfile.prs.squat || 0) > 0 ? '3' : '0'}
                 </p>
-                <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">PRs Ativos</p>
+                <p className="text-[9px] sm:text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">PRs Ativos</p>
               </div>
 
-              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                <History className="w-8 h-8 text-viking-gold mx-auto mb-2" />
-                <p className="text-2xl font-black text-white">{activeStudentProfile.sessions.length}</p>
-                <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Treinos Concluídos</p>
+              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
+                <History className="w-6 h-6 sm:w-8 sm:h-8 text-viking-gold mx-auto mb-2" />
+                <p className="text-lg sm:text-2xl font-black text-white">{(activeStudentProfile.sessions || []).length}</p>
+                <p className="text-[9px] sm:text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Treinos</p>
               </div>
 
-              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                <Activity className="w-8 h-8 text-viking-gold mx-auto mb-2" />
-                <p className="text-2xl font-black text-white">{calculateAvgRpe()}</p>
-                <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">RPE Médio Recente</p>
+              <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
+                <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-viking-gold mx-auto mb-2" />
+                <p className="text-lg sm:text-2xl font-black text-white">{calculateAvgRpe()}</p>
+                <p className="text-[9px] sm:text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">RPE Médio</p>
               </div>
 
             </div>
@@ -4684,38 +4821,38 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             <TotalSBDChart profile={activeStudentProfile} />
 
             {/* Quick Actions Panel */}
-            <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md">
-              <h3 className="font-viking-display text-sm font-bold tracking-widest text-viking-gold uppercase mb-4 flex items-center gap-2">
+            <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-4 sm:p-6 rounded-3xl backdrop-blur-md">
+              <h3 className="font-viking-display text-[11px] sm:text-sm font-bold tracking-widest text-viking-gold uppercase mb-4 flex items-center gap-2">
                 <Play className="w-4 h-4 text-viking-gold" /> Portões do Combate - Ações Rápidas
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
                 
                 <button 
                   onClick={() => setWorkoutModalOpen(true)}
-                  className="p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
+                  className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
                 >
-                  <Dumbbell className="w-5 h-5 shrink-0" /> Treinar Hoje
+                  <Dumbbell className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Treinar Hoje</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('history'); setDrawerTitle('Histórico & RPE de Treinos'); setDrawerOpen(true); }}
-                  className="p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
                 >
-                  <History className="w-5 h-5 shrink-0" /> Histórico &amp; RPE
+                  <History className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Histórico</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('ranking'); setDrawerTitle('Tabela de Honra Viking'); setDrawerOpen(true); }}
-                  className="p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
                 >
-                  <Trophy className="w-5 h-5 shrink-0" /> Classificação
+                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Ranking</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('settings'); setDrawerTitle('Configurações de Força'); setDrawerOpen(true); }}
-                  className="p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
                 >
-                  <Settings className="w-5 h-5 shrink-0" /> Ajustar 1RM
+                  <Settings className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Ajustar 1RM</span>
                 </button>
 
                 <button 
@@ -4724,9 +4861,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setDrawerTitle('Feedback com o Treinador'); 
                     setDrawerOpen(true); 
                   }}
-                  className="p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
+                  className="p-3 sm:p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
                 >
-                  <MessageSquare className="w-5 h-5 shrink-0" /> Falar com Coach
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Falar com Coach</span>
                 </button>
 
               </div>
@@ -5372,19 +5509,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             {/* Resumo Financeiro Section */}
             {(() => {
-              const expectedTotal = Object.keys(studentsData).reduce((sum, email) => sum + getPlanMonthlyEquivalent(studentsData[email].plan), 0);
+              const expectedTotal = Object.keys(studentsData).reduce((sum, email) => {
+                const s = studentsData[email];
+                return s ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
+              }, 0);
               const receivedTotal = Object.keys(studentsData).reduce((sum, email) => {
                 const s = studentsData[email];
-                return s.status === 'Pago' ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
+                return (s && s.status === 'Pago') ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
               }, 0);
               const pendingOrOverdueTotal = Object.keys(studentsData).reduce((sum, email) => {
                 const s = studentsData[email];
-                return (s.status === 'Pendente' || s.status === 'Atrasado') ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
+                return (s && (s.status === 'Pendente' || s.status === 'Atrasado')) ? sum + getPlanMonthlyEquivalent(s.plan) : sum;
               }, 0);
 
-              const countMensal = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Mensal').length;
-              const countTrimestral = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Trimestral').length;
-              const countAnual = Object.keys(studentsData).filter(email => studentsData[email].plan === 'Anual').length;
+              const countMensal = Object.keys(studentsData).filter(email => studentsData[email]?.plan === 'Mensal').length;
+              const countTrimestral = Object.keys(studentsData).filter(email => studentsData[email]?.plan === 'Trimestral').length;
+              const countAnual = Object.keys(studentsData).filter(email => studentsData[email]?.plan === 'Anual').length;
 
               const receivedPercentage = expectedTotal > 0 ? Math.round((receivedTotal / expectedTotal) * 100) : 0;
 
@@ -5512,7 +5652,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <Coins className="w-8 h-8 text-viking-gold mx-auto mb-2" />
                 <p className="text-2xl font-black text-white">
-                  R$ {Object.keys(studentsData).reduce((sum, email) => sum + getPlanMonthlyEquivalent(studentsData[email].plan), 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  R$ {Object.keys(studentsData).reduce((sum, email) => { const s = studentsData[email]; return s ? sum + getPlanMonthlyEquivalent(s.plan) : sum; }, 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </p>
                 <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Faturamento Est. / mês</p>
               </div>
@@ -5520,7 +5660,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <Clock className="w-8 h-8 text-viking-red mx-auto mb-2" />
                 <p className="text-2xl font-black text-white">
-                  {Object.keys(studentsData).map(email => studentsData[email]).filter(s => s.status !== 'Pago').length}
+                  {Object.keys(studentsData).map(email => studentsData[email]).filter(s => s && s.status !== 'Pago').length}
                 </p>
                 <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Atrasos/Pendências</p>
               </div>
@@ -5547,6 +5687,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
               Object.keys(studentsData).forEach(email => {
                 const student = studentsData[email];
+                if (!student) return;
                 const { prs, prevPrs, name } = student;
                 
                 if (prs) {
@@ -5712,7 +5853,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             {(() => {
               const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
               Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
-                if (student.sessions && student.sessions.length > 0) {
+                if (student && student.sessions && student.sessions.length > 0) {
                   student.sessions.forEach(sess => {
                     allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
                   });
@@ -5819,8 +5960,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             {/* Payment Highlight Card */}
             {(() => {
               const overdueOrPending = Object.keys(studentsData)
-                .map(email => ({ email, ...studentsData[email] }))
-                .filter(s => s.status === 'Pendente' || s.status === 'Atrasado');
+                .map(email => {
+                  const s = studentsData[email];
+                  return s ? { email, ...s } : null;
+                })
+                .filter((s): s is NonNullable<typeof s> => s !== null && (s.status === 'Pendente' || s.status === 'Atrasado'));
 
               const isFiltered = paymentFilter === 'pending_or_overdue';
 
@@ -6213,6 +6357,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   }>
                     {filteredStudentEmails.map(email => {
                       const s = studentsData[email];
+                      if (!s) return null;
                       const lastSess = (s.sessions || [])[0];
                       const todayString = new Date().toLocaleDateString('pt-BR');
                       const hasTrainedToday = s.sessions?.some(sess => sess.date === todayString);
@@ -6613,7 +6758,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                        let athleteTotalVolume = 0;
                        let athleteSessionsCount = 0;
 
-                       activeStudentProfile.sessions.forEach(sess => {
+                       (activeStudentProfile.sessions || []).forEach(sess => {
                          if (sess.avgRPE && sess.avgRPE > 0) {
                            athleteTotalRpe += sess.avgRPE;
                            athleteRpeCount++;
@@ -6685,14 +6830,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     })()}
 
                     {historyTab === 'list' && (
-                      activeStudentProfile.sessions.length === 0 ? (
+                      (activeStudentProfile.sessions || []).length === 0 ? (
                         <div className="text-center py-12 text-viking-silver">
                           <History className="w-12 h-12 text-viking-gold/30 mx-auto mb-3" />
                           <p className="font-bold">Nenhum treino realizado ainda.</p>
                           <p className="text-xs mt-1">Conclua sua primeira prova em "Treino Hoje" para iniciar seu histórico.</p>
                         </div>
                       ) : (
-                        activeStudentProfile.sessions.map((sess, idx) => (
+                        (activeStudentProfile.sessions || []).map((sess, idx) => (
                         <div key={idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                           <div className="flex justify-between items-center">
                             <span className="text-xs text-viking-silver font-bold">{sess.date}</span>
@@ -7425,6 +7570,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 <label className="block text-[10px] font-bold text-viking-silver uppercase mb-1">Preço (R$)</label>
                                 <input 
                                   type="number"
+                                  inputMode="decimal"
                                   value={plan.price}
                                   onChange={e => {
                                     const copy = [...vikingPlans];
@@ -7626,35 +7772,45 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       <div className="space-y-3 pt-2">
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Agachamento Máximo (kg)</label>
-                          <input 
-                            type="number" 
-                            id="cfgSquat"
-                            defaultValue={activeStudentProfile.prs.squat || ''}
+                          <WeightControl 
+                            value={activeStudentProfile.prs.squat || 0}
+                            onChange={(val: number) => {
+                              const input = document.getElementById('cfgSquat') as HTMLInputElement;
+                              if (input) input.value = val.toString();
+                            }}
                             placeholder="Ex: 150"
-                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            title="Agachamento Máximo (kg)"
                           />
+                          {/* Hidden input to maintain compatibility with existing save logic that uses getElementById */}
+                          <input type="hidden" id="cfgSquat" defaultValue={activeStudentProfile.prs.squat || ''} />
                         </div>
 
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Supino Máximo (kg)</label>
-                          <input 
-                            type="number" 
-                            id="cfgBench"
-                            defaultValue={activeStudentProfile.prs.bench || ''}
+                          <WeightControl 
+                            value={activeStudentProfile.prs.bench || 0}
+                            onChange={(val: number) => {
+                              const input = document.getElementById('cfgBench') as HTMLInputElement;
+                              if (input) input.value = val.toString();
+                            }}
                             placeholder="Ex: 110"
-                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            title="Supino Máximo (kg)"
                           />
+                          <input type="hidden" id="cfgBench" defaultValue={activeStudentProfile.prs.bench || ''} />
                         </div>
 
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Levantamento Terra Máximo (kg)</label>
-                          <input 
-                            type="number" 
-                            id="cfgDeadlift"
-                            defaultValue={activeStudentProfile.prs.deadlift || ''}
+                          <WeightControl 
+                            value={activeStudentProfile.prs.deadlift || 0}
+                            onChange={(val: number) => {
+                              const input = document.getElementById('cfgDeadlift') as HTMLInputElement;
+                              if (input) input.value = val.toString();
+                            }}
                             placeholder="Ex: 190"
-                            className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            title="Levantamento Terra Máximo (kg)"
                           />
+                          <input type="hidden" id="cfgDeadlift" defaultValue={activeStudentProfile.prs.deadlift || ''} />
                         </div>
                       </div>
 
@@ -7670,6 +7826,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <label className="block text-xs font-bold text-viking-silver mb-1">Idade (anos)</label>
                             <input 
                               type="number" 
+                              inputMode="decimal"
                               id="cfgAge"
                               defaultValue={activeStudentProfile.age || 25}
                               className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
@@ -7679,6 +7836,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <label className="block text-xs font-bold text-viking-silver mb-1">Peso Corporal (kg)</label>
                             <input 
                               type="number" 
+                              inputMode="decimal"
                               step="0.1"
                               id="cfgBodyWeight"
                               defaultValue={activeStudentProfile.bodyWeight || 80}
@@ -7883,6 +8041,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Idade (anos)</label>
                         <input 
                           type="number" 
+                          inputMode="decimal"
                           name="newStudentAge" 
                           defaultValue="25"
                           required
@@ -7893,6 +8052,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <label className="block text-xs font-bold text-viking-silver uppercase mb-1">Peso Corporal (kg)</label>
                         <input 
                           type="number" 
+                          inputMode="decimal"
                           step="0.1"
                           name="newStudentBodyWeight" 
                           defaultValue="80.0"
@@ -7990,35 +8150,44 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <div className="space-y-3">
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Agachamento Máximo (kg)</label>
-                              <input 
-                                type="number" 
-                                id="editStudentSquat"
-                                defaultValue={s.prs?.squat || ''}
+                              <WeightControl 
+                                value={s.prs?.squat || 0}
+                                onChange={(val: number) => {
+                                  const input = document.getElementById('editStudentSquat') as HTMLInputElement;
+                                  if (input) input.value = val.toString();
+                                }}
                                 placeholder="Ex: 150"
-                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                title="Agachamento Máximo (kg)"
                               />
+                              <input type="hidden" id="editStudentSquat" defaultValue={s.prs?.squat || ''} />
                             </div>
 
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Supino Máximo (kg)</label>
-                              <input 
-                                type="number" 
-                                id="editStudentBench"
-                                defaultValue={s.prs?.bench || ''}
+                              <WeightControl 
+                                value={s.prs?.bench || 0}
+                                onChange={(val: number) => {
+                                  const input = document.getElementById('editStudentBench') as HTMLInputElement;
+                                  if (input) input.value = val.toString();
+                                }}
                                 placeholder="Ex: 110"
-                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                title="Supino Máximo (kg)"
                               />
+                              <input type="hidden" id="editStudentBench" defaultValue={s.prs?.bench || ''} />
                             </div>
 
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Levantamento Terra Máximo (kg)</label>
-                              <input 
-                                type="number" 
-                                id="editStudentDeadlift"
-                                defaultValue={s.prs?.deadlift || ''}
+                              <WeightControl 
+                                value={s.prs?.deadlift || 0}
+                                onChange={(val: number) => {
+                                  const input = document.getElementById('editStudentDeadlift') as HTMLInputElement;
+                                  if (input) input.value = val.toString();
+                                }}
                                 placeholder="Ex: 190"
-                                className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                title="Levantamento Terra Máximo (kg)"
                               />
+                              <input type="hidden" id="editStudentDeadlift" defaultValue={s.prs?.deadlift || ''} />
                             </div>
                           </div>
                         </div>
@@ -8033,6 +8202,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <label className="block text-xs font-bold text-viking-silver mb-1">Idade (anos)</label>
                               <input 
                                 type="number" 
+                                inputMode="decimal"
                                 id="editStudentAge"
                                 defaultValue={s.age || 25}
                                 className="w-full px-4 py-2.5 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
@@ -8042,6 +8212,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               <label className="block text-xs font-bold text-viking-silver mb-1">Peso Corporal (kg)</label>
                               <input 
                                 type="number" 
+                                inputMode="decimal"
                                 step="0.1"
                                 id="editStudentBodyWeight"
                                 defaultValue={s.bodyWeight || 80}
@@ -8479,6 +8650,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                          const filtered = Object.keys(studentsData)
                            .map(email => ({ email, s: studentsData[email] }))
+                           .filter((item): item is { email: string; s: NonNullable<typeof item.s> } => item.s !== undefined && item.s !== null)
                            .filter(({ email, s }) => {
                              if (s.status !== 'Atrasado') return false; // ONLY Atrasado
                              
@@ -8632,6 +8804,7 @@ Equipe Viking Force`);
                       {(() => {
                         const filtered = Object.keys(studentsData).filter(email => {
                           const s = studentsData[email];
+                          if (!s) return false;
                           const term = paymentsSearch.toLowerCase().trim();
                           if (!term) return true;
                           return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
@@ -8843,7 +9016,7 @@ Equipe Viking Force`);
                       {(() => {
                         const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
                         Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
-                          if (student.sessions && student.sessions.length > 0) {
+                          if (student && student.sessions && student.sessions.length > 0) {
                             student.sessions.forEach(sess => {
                               allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
                             });
@@ -8928,14 +9101,15 @@ Equipe Viking Force`);
                       {(() => {
                         const filteredEmails = Object.keys(studentsData).filter(email => {
                           const s = studentsData[email];
+                          if (!s) return false;
                           const term = rpeSearch.toLowerCase().trim();
                           if (!term) return true;
                           return s.name.toLowerCase().includes(term) || email.toLowerCase().includes(term);
                         });
-                        const hasSessions = filteredEmails.some(email => (studentsData[email].sessions?.length || 0) > 0);
+                        const hasSessions = filteredEmails.some(email => (studentsData[email]?.sessions?.length || 0) > 0);
                         
                         return hasSessions ? (
-                          filteredEmails.map(email => studentsData[email]).map(student => 
+                          filteredEmails.map(email => studentsData[email]).filter(Boolean).map(student => 
                             (student.sessions || []).map((sess, sIdx) => (
                             <div key={`${student.name}-${sIdx}`} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                               <div className="flex justify-between items-center">
@@ -9324,7 +9498,7 @@ Equipe Viking Force`);
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Séries</label>
                                       <div className="flex gap-1">
                                         <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'sets', Math.max(0, ex.sets - 1))} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">-</button>
-                                        <input type="number" inputMode="numeric" pattern="[0-9]*" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                        <input type="number" inputMode="decimal" pattern="[0-9]*" value={ex.sets === 0 ? '' : ex.sets} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
                                         <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'sets', ex.sets + 1)} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">+</button>
                                       </div>
                                     </div>
@@ -9332,13 +9506,40 @@ Equipe Viking Force`);
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Repetições</label>
                                       <div className="flex gap-1">
                                         <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'reps', Math.max(0, ex.reps - 1))} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">-</button>
-                                        <input type="number" inputMode="numeric" pattern="[0-9]*" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                        <input type="number" inputMode="decimal" pattern="[0-9]*" value={ex.reps === 0 ? '' : ex.reps} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="w-full text-center px-2 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
                                         <button type="button" tabIndex={-1} onClick={() => handleEditorUpdateField(originalIdx, 'reps', ex.reps + 1)} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">+</button>
                                       </div>
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Intensidade (%) ou Livre</label>
-                                      <input inputMode="decimal" value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} onFocus={e => e.target.select()} onChange={e => { const val = e.target.value; const parsedNum = parseFloat(val); if (!isNaN(parsedNum) && parsedNum <= 100) { handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); } else { handleEditorUpdateField(originalIdx, 'intensity', val); } }} placeholder="Ex: 80 ou Carga Livre" className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <div className="flex gap-1">
+                                        <button type="button" tabIndex={-1} onClick={() => {
+                                          const current = typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : parseFloat(ex.intensity) || 0;
+                                          const newVal = Math.max(0, current - 2.5);
+                                          handleEditorUpdateField(originalIdx, 'intensity', newVal / 100);
+                                        }} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">-</button>
+                                        <input 
+                                          inputMode="decimal" 
+                                          value={typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : ex.intensity} 
+                                          onFocus={e => e.target.select()} 
+                                          onChange={e => { 
+                                            const val = e.target.value; 
+                                            const parsedNum = parseFloat(val); 
+                                            if (!isNaN(parsedNum) && parsedNum <= 150) { 
+                                              handleEditorUpdateField(originalIdx, 'intensity', parsedNum / 100); 
+                                            } else { 
+                                              handleEditorUpdateField(originalIdx, 'intensity', val); 
+                                            } 
+                                          }} 
+                                          placeholder="Ex: 80 ou Livre" 
+                                          className="w-full text-center px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" 
+                                        />
+                                        <button type="button" tabIndex={-1} onClick={() => {
+                                          const current = typeof ex.intensity === 'number' ? Math.round(ex.intensity * 100) : parseFloat(ex.intensity) || 0;
+                                          const newVal = current + 2.5;
+                                          handleEditorUpdateField(originalIdx, 'intensity', newVal / 100);
+                                        }} className="px-2 bg-black/60 border border-viking-gold/20 rounded text-viking-gold hover:bg-viking-gold/20 transition-colors">+</button>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">RPE Alvo</label>
@@ -9348,7 +9549,12 @@ Equipe Viking Force`);
                                   <div className="pt-3 border-t border-viking-gold/15 space-y-3">
                                     <div className="relative">
                                       <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 flex items-center gap-1">{ex.main ? <><Flame className="w-3 h-3 text-viking-gold" /> Carga do Lift / 1RM (kg)</> : <><Dumbbell className="w-3 h-3 text-viking-gold" /> Carga Alvo Prescrita (kg)</>}</label>
-                                      <input type="number" inputMode="decimal" value={ex.baseWeight || ''} onFocus={e => e.target.select()} onChange={e => handleEditorUpdateField(originalIdx, 'baseWeight', parseFloat(e.target.value) || undefined)} placeholder={ex.main ? "Ex: 150" : "Ex: 24"} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/30 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold" />
+                                      <WeightControl 
+                                        value={ex.baseWeight || 0}
+                                        onChange={(val: number) => handleEditorUpdateField(originalIdx, 'baseWeight', val || undefined)}
+                                        placeholder={ex.main ? "Ex: 150" : "Ex: 24"}
+                                        title={ex.main ? "Carga do Lift / 1RM (kg)" : "Carga Alvo Prescrita (kg)"}
+                                      />
                                     </div>
                                     {ex.main && typeof ex.intensity === 'number' && (
                                       <div className="text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver">
@@ -9417,16 +9623,18 @@ Equipe Viking Force`);
                                       <div key={sIdx} className="bg-[#0d0908]/80 px-2.5 py-1.5 rounded-lg border border-viking-gold/20 flex items-center gap-1.5 text-[10px]">
                                         <input 
                                           type="number"
+                                          inputMode="decimal"
                                           value={Math.round(step.percent * 100)}
                                           onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'percent', (parseFloat(e.target.value) || 0) / 100)}
-                                          className="w-8 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                          className="w-9 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
                                         />
                                         <span className="text-viking-silver/80">% ×</span>
                                         <input 
                                           type="number"
+                                          inputMode="decimal"
                                           value={step.reps || ''}
                                           onChange={e => handleEditorUpdateWarmupStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
-                                          className="w-6 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
+                                          className="w-7 bg-black/40 border-none text-[#e0d3a8] text-center p-0 text-[10px] font-bold focus:ring-0 rounded"
                                         />
                                         <span className="text-viking-silver/80">reps</span>
                                         <button 
@@ -10522,7 +10730,7 @@ Equipe Viking Force`);
                 : "fixed top-0 right-0 h-screen w-full sm:w-[480px] md:w-[540px] lg:w-[600px] bg-[#140e0c]/98 border-l-2 border-viking-gold/30 z-50 flex flex-col overflow-hidden text-[#e0d3a8] shadow-[-15px_0_50px_rgba(0,0,0,0.85)] backdrop-blur-xl rounded-l-3xl"
               }
             >
-              <div className="p-6 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center shrink-0">
+              <div className="p-4 sm:p-6 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-viking-gold/10 flex items-center justify-center border border-viking-gold/20">
                     <Dumbbell className="w-5 h-5 text-viking-gold" />
@@ -10572,7 +10780,7 @@ Equipe Viking Force`);
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 md:pb-6 space-y-4 sm:space-y-6">
                 
                 {/* Workout Selector */}
                 <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
@@ -10657,85 +10865,80 @@ Equipe Viking Force`);
                 <motion.div 
                   animate={timerShake ? { x: [-10, 10, -10, 10, -5, 5, -2, 2, 0] } : { x: 0 }}
                   transition={{ duration: 0.5 }}
-                  className={`p-4 rounded-xl bg-gradient-to-r from-[#1a1210] to-[#120b09] border shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-300 ${timerShake ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-viking-gold/25'}`}
+                  className={`p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[#1a1210] to-[#120b09] border shadow-lg flex flex-col lg:flex-row items-center justify-between gap-4 transition-all duration-300 ${timerShake ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-viking-gold/25'}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-lg flex items-center justify-center transition-all ${restTimerActive ? 'bg-viking-gold/10 border border-viking-gold/25 animate-pulse text-viking-gold' : 'bg-black/40 border border-viking-silver/10 text-viking-silver'}`}>
-                      <Timer className="w-5 h-5 animate-spin-slow" />
+                  <div className="flex items-center gap-3 w-full lg:w-auto">
+                    <div className={`p-2 sm:p-2.5 rounded-lg flex items-center justify-center transition-all ${restTimerActive ? 'bg-viking-gold/10 border border-viking-gold/25 animate-pulse text-viking-gold' : 'bg-black/40 border border-viking-silver/10 text-viking-silver'}`}>
+                      <Timer className="w-4 h-4 sm:w-5 sm:h-5 animate-spin-slow" />
                     </div>
                     <div>
-                      <p className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                        Cronômetro de Descanso Viking
+                      <p className="text-[10px] sm:text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                        Cronômetro Viking
                       </p>
-                      <p className="text-[10px] text-viking-silver">Regule seu tempo de intervalo para manter a intensidade alta!</p>
+                      <p className="text-[9px] sm:text-[10px] text-viking-silver mt-0.5">Mantenha a intensidade!</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                    {/* Time Display */}
-                    {(() => {
-                      const isEnding = restTimerActive && restTimerRemaining > 0 && restTimerRemaining <= 5;
-                      return (
-                        <div className={`bg-black/60 px-4 py-2 rounded-xl border flex items-center justify-center font-mono text-xl font-black tracking-widest min-w-[90px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] transition-all duration-300 ${isEnding ? 'border-red-500 text-red-500 scale-110 shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse' : timerShake ? 'border-red-500 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]' : 'border-viking-gold/15 text-viking-gold'}`}>
-                          {(() => {
-                            const mins = Math.floor(restTimerRemaining / 60);
-                            const secs = restTimerRemaining % 60;
-                            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                          })()}
-                        </div>
-                      );
-                    })()}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                    <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+                      {/* Time Display */}
+                      {(() => {
+                        const isEnding = restTimerActive && restTimerRemaining > 0 && restTimerRemaining <= 5;
+                        return (
+                          <div className={`bg-black/60 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border flex items-center justify-center font-mono text-lg sm:text-xl font-black tracking-widest min-w-[80px] sm:min-w-[90px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] transition-all duration-300 ${isEnding ? 'border-red-500 text-red-500 scale-105 sm:scale-110 shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse' : timerShake ? 'border-red-500 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]' : 'border-viking-gold/15 text-viking-gold'}`}>
+                            {(() => {
+                              const mins = Math.floor(restTimerRemaining / 60);
+                              const secs = restTimerRemaining % 60;
+                              return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                            })()}
+                          </div>
+                        );
+                      })()}
 
-                    {/* Controls */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRestTimerActive(false);
-                          setRestTimerRemaining(prev => Math.max(0, prev - 30));
-                        }}
-                        className="p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[10px] font-black cursor-pointer transition-all"
-                        title="Remover 30 segundos"
-                      >
-                        -30s
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRestTimerActive(false);
-                          setRestTimerRemaining(prev => prev + 30);
-                        }}
-                        className="p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[10px] font-black cursor-pointer transition-all"
-                        title="Adicionar 30 segundos"
-                      >
-                        +30s
-                      </button>
-
-                      {/* Play / Pause */}
-                      <button
-                        type="button"
-                        onClick={() => setRestTimerActive(!restTimerActive)}
-                        className={`p-2 rounded-lg text-black font-black flex items-center justify-center cursor-pointer transition-all ${restTimerActive ? 'bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.4)]' : 'bg-[#d4af37] hover:brightness-110'}`}
-                        title={restTimerActive ? 'Pausar' : 'Iniciar'}
-                      >
-                        {restTimerActive ? <Pause className="w-4 h-4 text-black" /> : <Play className="w-4 h-4 text-black fill-black" />}
-                      </button>
-
-                      {/* Reset */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRestTimerActive(false);
-                          setRestTimerRemaining(restTimerSeconds);
-                        }}
-                        className="p-2 rounded-lg bg-[#0d0908] hover:bg-[#140e0c] text-viking-silver hover:text-viking-gold border border-viking-gold/20 cursor-pointer transition-all"
-                        title="Reiniciar"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
+                      {/* Controls */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRestTimerActive(false);
+                            setRestTimerRemaining(prev => Math.max(0, prev - 30));
+                          }}
+                          className="w-8 h-8 sm:p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[9px] sm:text-[10px] font-black cursor-pointer transition-all flex items-center justify-center"
+                        >
+                          -30
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRestTimerActive(false);
+                            setRestTimerRemaining(prev => prev + 30);
+                          }}
+                          className="w-8 h-8 sm:p-2 rounded-lg bg-black/40 hover:bg-[#d4af37]/10 text-viking-silver hover:text-viking-gold border border-viking-gold/10 text-[9px] sm:text-[10px] font-black cursor-pointer transition-all flex items-center justify-center"
+                        >
+                          +30
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRestTimerActive(!restTimerActive)}
+                          className={`w-9 h-9 sm:p-2 rounded-lg text-black font-black flex items-center justify-center cursor-pointer transition-all ${restTimerActive ? 'bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.4)]' : 'bg-[#d4af37] hover:brightness-110'}`}
+                        >
+                          {restTimerActive ? <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRestTimerActive(false);
+                            setRestTimerRemaining(restTimerSeconds);
+                          }}
+                          className="w-8 h-8 sm:p-2 rounded-lg bg-[#0d0908] hover:bg-[#140e0c] text-viking-silver hover:text-viking-gold border border-viking-gold/20 cursor-pointer transition-all flex items-center justify-center"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
+
                     {/* Adjust Presets */}
-                    <div className="flex gap-1 bg-black/30 p-1 rounded-lg border border-viking-gold/5 text-[9px] font-bold">
+                    <div className="flex gap-1 bg-black/30 p-1 rounded-lg border border-viking-gold/5 text-[9px] font-bold w-full sm:w-auto justify-around">
                       {[60, 90, 120, 180].map(sec => {
                         const label = sec === 60 ? '1m' : sec === 90 ? '1m30' : sec === 120 ? '2m' : '3m';
                         return (
@@ -10748,7 +10951,7 @@ Equipe Viking Force`);
                               setRestTimerRemaining(sec);
                               showToast(`Intervalo ajustado para ${label}!`, 'info');
                             }}
-                            className={`px-2 py-1 rounded transition-all cursor-pointer ${restTimerSeconds === sec ? 'bg-viking-gold/20 text-viking-gold border border-viking-gold/30' : 'text-viking-silver hover:text-viking-gold'}`}
+                            className={`flex-1 sm:flex-none px-2 py-1 rounded transition-all cursor-pointer text-center ${restTimerSeconds === sec ? 'bg-viking-gold/20 text-viking-gold border border-viking-gold/30' : 'text-viking-silver hover:text-viking-gold'}`}
                           >
                             {label}
                           </button>
@@ -10979,8 +11182,16 @@ Equipe Viking Force`);
                               Séries: <strong className="text-white">{ex.sets}x{ex.reps}</strong> @{' '}
                               <strong className="text-viking-gold">
                                 {ex.main ? (
-                                  currentPr && typeof ex.intensity === 'number' ? (
-                                    `${Math.round(currentPr * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)`
+                                  currentPr && (typeof ex.intensity === 'number' || (typeof ex.intensity === 'string' && !isNaN(parseFloat(ex.intensity)))) ? (
+                                    (() => {
+                                      let ratio = 0;
+                                      if (typeof ex.intensity === 'number') ratio = ex.intensity;
+                                      else {
+                                        const p = parseFloat(ex.intensity.replace('%', ''));
+                                        ratio = p > 1 ? p / 100 : p;
+                                      }
+                                      return `${Math.round(currentPr * ratio)} kg (${Math.round(ratio * 100)}%)`;
+                                    })()
                                   ) : (
                                     intensityStr
                                   )
@@ -11057,6 +11268,10 @@ Equipe Viking Force`);
                                                 newExWarmup[wIdx] = !newExWarmup[wIdx];
                                                 return { ...prev, [ex.id]: newExWarmup };
                                               });
+                                              if (!isDone) {
+                                                setRestTimerActive(true);
+                                                setRestTimerRemaining(restTimerSeconds);
+                                              }
                                             }}
                                             className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all cursor-pointer ${isDone ? 'bg-green-950/30 border-green-500/40 text-green-400' : 'bg-black/40 border-viking-gold/20 text-viking-silver hover:border-viking-gold/50'}`}
                                           >
@@ -11100,160 +11315,225 @@ Equipe Viking Force`);
                                       : 'bg-black/40 border-viking-gold/5 hover:border-viking-gold/10'
                                   }`}
                                 >
-                                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 w-full">
-                                  {/* Checkoff / Done Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setExerciseSetsState(prev => {
-                                        const sets = [...(prev[ex.id] || [])];
-                                        if (sets[setIdx]) {
-                                          const nextDone = !sets[setIdx].done;
-                                          sets[setIdx] = { ...sets[setIdx], done: nextDone };
-                                          
-                                          // Check for PR achievement
-                                          if (nextDone && activeStudentProfile) {
-                                              const allDone = sets.every(s => s.done);
-                                              if (allDone) {
-                                                  const maxWeight = Math.max(...sets.map(s => s.weight || 0));
-                                                  let prValue = null;
-                                                  const exNameLower = ex.name.toLowerCase();
-                                                  if (exNameLower.includes('squat') || exNameLower.includes('agachamento')) prValue = activeStudentProfile.prs.squat;
-                                                  else if (exNameLower.includes('bench') || exNameLower.includes('supino')) prValue = activeStudentProfile.prs.bench;
-                                                  else if (exNameLower.includes('deadlift') || exNameLower.includes('levantamento')) prValue = activeStudentProfile.prs.deadlift;
-                                                  
-                                                  if (prValue !== null && prValue > 0 && maxWeight > prValue) {
-                                                      confetti({
-                                                          particleCount: 150,
-                                                          spread: 70,
-                                                          origin: { y: 0.6 },
-                                                          colors: ['#d4af37', '#e0d3a8', '#ffffff']
-                                                      });
-                                                      showToast(`🔥 NOVO PR EM ${ex.name.toUpperCase()}: ${maxWeight}kg!`, 'success');
-                                                  }
+                                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                                    {/* Mobile Header Row / Desktop Left Side */}
+                                    <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+                                      <div className="flex items-center gap-2.5">
+                                        {/* Checkoff / Done Button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                const nextDone = !sets[setIdx].done;
+                                                sets[setIdx] = { ...sets[setIdx], done: nextDone };
+                                                
+                                                // Check for PR achievement
+                                                if (nextDone && activeStudentProfile) {
+                                                    const allDone = sets.every(s => s.done);
+                                                    if (allDone) {
+                                                        const maxWeight = Math.max(...sets.map(s => s.weight || 0));
+                                                        let prValue = null;
+                                                        const exNameLower = ex.name.toLowerCase();
+                                                        if (exNameLower.includes('squat') || exNameLower.includes('agachamento')) prValue = activeStudentProfile.prs.squat;
+                                                        else if (exNameLower.includes('bench') || exNameLower.includes('supino')) prValue = activeStudentProfile.prs.bench;
+                                                        else if (exNameLower.includes('deadlift') || exNameLower.includes('levantamento')) prValue = activeStudentProfile.prs.deadlift;
+                                                        
+                                                        if (prValue !== null && prValue > 0 && maxWeight > prValue) {
+                                                            confetti({
+                                                                particleCount: 150,
+                                                                spread: 70,
+                                                                origin: { y: 0.6 },
+                                                                colors: ['#d4af37', '#e0d3a8', '#ffffff']
+                                                            });
+                                                            showToast(`🔥 NOVO PR EM ${ex.name.toUpperCase()}: ${maxWeight}kg!`, 'success');
+                                                        }
+                                                    }
+                                                }
                                               }
-                                          }
-                                        }
-                                        return { ...prev, [ex.id]: sets };
-                                      });
-                                    }}
-                                    className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all shrink-0 cursor-pointer ${
-                                      set.done 
-                                        ? 'bg-green-500 border-green-400 text-black shadow-[0_0_8px_rgba(34,197,94,0.6)] hover:bg-green-600' 
-                                        : 'bg-black/40 border-viking-gold/30 text-viking-gold/40 hover:border-viking-gold hover:text-viking-gold hover:bg-viking-gold/5'
-                                    }`}
-                                    title={set.done ? "Desmarcar Série" : "Marcar como Feito"}
-                                  >
-                                    <Check className={`w-4 h-4 stroke-[3] ${set.done ? 'text-black' : ''}`} />
-                                  </button>
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all shrink-0 cursor-pointer ${
+                                            set.done 
+                                              ? 'bg-green-500 border-green-400 text-black shadow-[0_0_8px_rgba(34,197,94,0.6)] hover:bg-green-600' 
+                                              : 'bg-black/40 border-viking-gold/30 text-viking-gold/40 hover:border-viking-gold hover:text-viking-gold hover:bg-viking-gold/5'
+                                          }`}
+                                          title={set.done ? "Desmarcar Série" : "Marcar como Feito"}
+                                        >
+                                          <Check className={`w-4 h-4 stroke-[3] ${set.done ? 'text-black' : ''}`} />
+                                        </button>
 
-                                  {/* Set label */}
-                                  <div className="flex items-center gap-1.5 min-w-[55px]">
-                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider transition-all ${
-                                      set.done 
-                                        ? 'bg-green-500/20 text-green-400 border border-green-500/20' 
-                                        : 'bg-viking-gold text-black'
-                                    }`}>
-                                      SET {setIdx + 1}
-                                    </span>
+                                        {/* Set label */}
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider transition-all ${
+                                          set.done 
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/20' 
+                                            : 'bg-viking-gold text-black'
+                                        }`}>
+                                          SET {setIdx + 1}
+                                        </span>
+                                      </div>
+
+                                      {/* Delete set (Mobile only) */}
+                                      <div className="sm:hidden">
+                                        <button
+                                          type="button"
+                                          disabled={set.done || (exerciseSetsState[ex.id]?.length || 0) <= 1}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              sets.splice(setIdx, 1);
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-35 shrink-0"
+                                          title="Remover série"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Inputs Row - side-by-side on mobile, inline on desktop */}
+                                    <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+                                      {/* Reps selector */}
+                                      <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-1.5 flex-1 sm:flex-initial">
+                                        <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1 shrink-0">Reps:</span>
+                                        <button
+                                          type="button"
+                                          disabled={set.done}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], reps: Math.max(0, (sets[setIdx].reps || 0) - 1) };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0"
+                                        >
+                                          -
+                                        </button>
+                                        <DebouncedInput
+                                          type="number"
+                                          inputMode="decimal"
+                                          pattern="[0-9]*"
+                                          value={set.reps === 0 ? '' : set.reps}
+                                          placeholder="0"
+                                          disabled={set.done}
+                                          onChange={(val) => {
+                                            const parsed = val === '' ? 0 : (parseInt(val) || 0);
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], reps: parsed };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-full min-w-[30px] bg-transparent text-center font-mono text-base font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:text-white/40"
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={set.done}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], reps: (sets[setIdx].reps || 0) + 1 };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+
+                                      {/* Weight selector */}
+                                      <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-1.5 flex-1 sm:flex-initial">
+                                        <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1 shrink-0 hidden md:inline">Peso:</span>
+                                        <button
+                                          type="button"
+                                          disabled={set.done}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], weight: Math.max(0, (sets[setIdx].weight || 0) - 2.5) };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0"
+                                        >
+                                          -
+                                        </button>
+                                        <DebouncedInput
+                                          type="number"
+                                          inputMode="decimal"
+                                          step="2.5"
+                                          pattern="[0-9]*\\.?[0-9]*"
+                                          value={set.weight === 0 ? '' : set.weight}
+                                          disabled={set.done}
+                                          placeholder="0"
+                                          onChange={(val) => {
+                                            const parsed = val === '' ? 0 : (parseFloat(val) || 0);
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], weight: parsed };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-full min-w-[40px] bg-transparent text-center font-mono text-base font-bold focus:outline-none text-white disabled:text-viking-gold/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                          title={ex.main ? "Carga sugerida pelo treinador. Você pode alterar se realizou uma carga diferente." : "Carga realizada (kg)"}
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={set.done}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              if (sets[setIdx]) {
+                                                sets[setIdx] = { ...sets[setIdx], weight: (sets[setIdx].weight || 0) + 2.5 };
+                                              }
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed shrink-0"
+                                        >
+                                          +
+                                        </button>
+                                        <span className="text-[10px] text-viking-gold/70 font-bold shrink-0">kg</span>
+                                        {ex.main && <Flame className="w-3.5 h-3.5 text-viking-gold/60 shrink-0" title="Carga sugerida pelo treinador. Altere se precisar ajustar." />}
+                                      </div>
+
+                                      {/* Delete set (Desktop only) */}
+                                      <div className="hidden sm:block">
+                                        <button
+                                          type="button"
+                                          disabled={set.done || (exerciseSetsState[ex.id]?.length || 0) <= 1}
+                                          onClick={() => {
+                                            setExerciseSetsState(prev => {
+                                              const sets = [...(prev[ex.id] || [])];
+                                              sets.splice(setIdx, 1);
+                                              return { ...prev, [ex.id]: sets };
+                                            });
+                                          }}
+                                          className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-35 shrink-0"
+                                          title="Remover série"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
 
-                                  {/* Reps selector */}
-                                  <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-2">
-                                    <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1">Reps:</span>
-                                    <button
-                                      type="button"
-                                      disabled={set.done}
-                                      onClick={() => {
-                                        setExerciseSetsState(prev => {
-                                          const sets = [...(prev[ex.id] || [])];
-                                          if (sets[setIdx]) {
-                                            sets[setIdx] = { ...sets[setIdx], reps: Math.max(0, sets[setIdx].reps - 1) };
-                                          }
-                                          return { ...prev, [ex.id]: sets };
-                                        });
-                                      }}
-                                      className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-                                    >
-                                      -
-                                    </button>
-                                    <input
-                                      type="number"
-                                      value={set.reps === 0 ? '' : set.reps}
-                                      placeholder="0"
-                                      disabled={set.done}
-                                      onChange={(e) => {
-                                        const val = e.target.value === '' ? 0 : (parseInt(e.target.value) || 0);
-                                        setExerciseSetsState(prev => {
-                                          const sets = [...(prev[ex.id] || [])];
-                                          if (sets[setIdx]) {
-                                            sets[setIdx] = { ...sets[setIdx], reps: val };
-                                          }
-                                          return { ...prev, [ex.id]: sets };
-                                        });
-                                      }}
-                                      className="w-10 bg-transparent text-center font-mono text-base font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:text-white/40"
-                                    />
-                                    <button
-                                      type="button"
-                                      disabled={set.done}
-                                      onClick={() => {
-                                        setExerciseSetsState(prev => {
-                                          const sets = [...(prev[ex.id] || [])];
-                                          if (sets[setIdx]) {
-                                            sets[setIdx] = { ...sets[setIdx], reps: sets[setIdx].reps + 1 };
-                                          }
-                                          return { ...prev, [ex.id]: sets };
-                                        });
-                                      }}
-                                      className="w-7 h-7 rounded bg-viking-gold/15 text-viking-gold flex items-center justify-center font-bold text-sm hover:bg-viking-gold/25 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-
-                                  {/* Weight selector */}
-                                  <div className="flex items-center gap-1 bg-[#1d1613] border border-viking-gold/30 rounded-lg px-2 py-2 flex-1 min-w-[100px]">
-                                    <span className="text-[10px] text-viking-gold/70 uppercase font-bold mr-1">Peso:</span>
-                                    <input
-                                      type="number"
-                                      value={set.weight === 0 ? '' : set.weight}
-                                      disabled={set.done}
-                                      placeholder="0"
-                                      onChange={(e) => {
-                                        const val = e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0);
-                                        setExerciseSetsState(prev => {
-                                          const sets = [...(prev[ex.id] || [])];
-                                          if (sets[setIdx]) {
-                                            sets[setIdx] = { ...sets[setIdx], weight: val };
-                                          }
-                                          return { ...prev, [ex.id]: sets };
-                                        });
-                                      }}
-                                      className="w-full bg-transparent text-right font-mono text-base font-bold focus:outline-none text-white disabled:text-viking-gold/50"
-                                      title={ex.main ? "Carga sugerida pelo treinador. Você pode alterar se realizou uma carga diferente." : "Carga realizada (kg)"}
-                                    />
-                                    <span className="text-[10px] text-viking-gold/70 font-bold ml-1">kg</span>
-                                    {ex.main && <Flame className="w-3.5 h-3.5 text-viking-gold/60 shrink-0" title="Carga sugerida pelo treinador. Altere se precisar ajustar." />}
-                                  </div>
-
-                                  {/* Delete set */}
-                                  <button
-                                    type="button"
-                                    disabled={set.done || (exerciseSetsState[ex.id]?.length || 0) <= 1}
-                                    onClick={() => {
-                                      setExerciseSetsState(prev => {
-                                        const sets = [...(prev[ex.id] || [])];
-                                        sets.splice(setIdx, 1);
-                                        return { ...prev, [ex.id]: sets };
-                                      });
-                                    }}
-                                    className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-35 shrink-0"
-                                    title="Remover série"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                  </div>
                                   <div className="w-full">
                                     <input
                                       type="text"
@@ -11604,16 +11884,16 @@ Equipe Viking Force`);
               </div>
 
               {/* Submit panel */}
-              <div className="p-6 border-t border-viking-gold/15 bg-[#140e0c]/90 flex gap-3 shrink-0">
+              <div className="p-6 border-t border-viking-gold/15 bg-[#140e0c]/90 flex flex-col sm:flex-row gap-3 shrink-0">
                 <button 
                   onClick={handleWorkoutSubmit}
-                  className="flex-1 py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Check className="w-4 h-4 shrink-0" /> Guardar Sessão de Treino
                 </button>
                 <button 
                   onClick={() => setWorkoutModalOpen(false)}
-                  className="px-5 py-3.5 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
+                  className="w-full sm:w-auto sm:px-8 py-3.5 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center"
                 >
                   Cancelar
                 </button>

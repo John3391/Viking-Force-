@@ -17,6 +17,14 @@ interface TotalSBDChartProps {
 }
 
 export default function TotalSBDChart({ profile }: TotalSBDChartProps) {
+  if (!profile) {
+    return (
+      <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md text-center text-viking-silver">
+        Carregando gráfico de Total SBD...
+      </div>
+    );
+  }
+
   const currentSquat = profile.prs.squat || 140;
   const currentBench = profile.prs.bench || 100;
   const currentDeadlift = profile.prs.deadlift || 180;

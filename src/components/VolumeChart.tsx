@@ -16,8 +16,18 @@ interface VolumeChartProps {
 }
 
 export default function VolumeChart({ profile }: VolumeChartProps) {
+  if (!profile) {
+    return (
+      <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md text-center text-viking-silver">
+        Carregando dados de volume...
+      </div>
+    );
+  }
+
   // Calculate session volume based on exercises and student PRs
   const calculateSessionVolume = (sess: LoggedSession) => {
+    if (sess.totalAchievedVolume) return sess.totalAchievedVolume;
+
     let totalSessionVolume = 0;
     const prs = profile.prs;
     
@@ -28,7 +38,7 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
         ex.sets.forEach((set: any) => {
            if (set.done !== false) {
              const weight = set.weight || 0;
-             exerciseVolume += (set.reps * weight);
+             exerciseVolume += ((set.reps || 0) * weight);
            }
         });
       }
@@ -40,7 +50,7 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
         
         if (typeof ex.intensity === 'number') intensity = ex.intensity;
         else if (typeof ex.intensity === 'string') {
-          const pct = parseFloat(ex.intensity);
+          const pct = parseFloat(ex.intensity.replace('%', ''));
           if (!isNaN(pct)) intensity = pct > 1 ? pct / 100 : pct;
         }
         
@@ -60,18 +70,16 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
             intensity = rpe / 10;
         }
         
-        let sets = ex.sets;
-        // If ex.sets is an array, we get its length as a fallback for sets count if it was passed weirdly
-        if (Array.isArray(ex.sets)) sets = ex.sets.length || 3;
-        else if (typeof sets !== 'number') sets = 3;
+        let setsCount = 3;
+        if (Array.isArray(ex.sets)) setsCount = ex.sets.length;
+        else if (typeof ex.sets === 'number') setsCount = ex.sets;
         
         let reps = ex.reps || 8;
-        
-        exerciseVolume = Math.round(sets * reps * (estimatedWeight * intensity));
+        exerciseVolume = Math.round(setsCount * reps * (estimatedWeight * intensity));
       }
       totalSessionVolume += exerciseVolume;
     });
-    return totalSessionVolume === 0 ? 3200 : totalSessionVolume;
+    return totalSessionVolume;
   };
 
   // Prepare chart data
@@ -158,9 +166,9 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
   // Calculate volume change %
   let volumeChangePercent = 0;
   if (chartData.length >= 2) {
-    const prev = chartData[chartData.length - 2].volume;
-    const curr = chartData[chartData.length - 1].volume;
-    if (prev > 0) {
+    const prev = chartData[chartData.length - 2]?.volume;
+    const curr = chartData[chartData.length - 1]?.volume;
+    if (prev && prev > 0 && curr !== undefined) {
       volumeChangePercent = Math.round(((curr - prev) / prev) * 100);
     }
   }
@@ -226,7 +234,7 @@ export default function VolumeChart({ profile }: VolumeChartProps) {
                       <p className="font-bold text-viking-gold">{data.name.startsWith('S') || data.name.startsWith('T') ? `Treino: ${data.name}` : data.name}</p>
                       {data.date && <p className="text-[10px] text-viking-silver">Data: {data.date}</p>}
                       <div className="border-t border-viking-gold/15 pt-1 mt-1 space-y-1">
-                        <p className="text-white font-semibold">Volume: <span className="text-viking-gold font-bold">{data.volume.toLocaleString('pt-BR')} kg</span></p>
+                        <p className="text-white font-semibold">Volume: <span className="text-viking-gold font-bold">{(data.volume || 0).toLocaleString('pt-BR')} kg</span></p>
                         <p className="text-viking-silver">RPE Médio: <span className="text-amber-400 font-bold">{data.rpe}</span></p>
                       </div>
                     </div>

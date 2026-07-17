@@ -19,6 +19,14 @@ interface OneRepMaxChartProps {
 export default function OneRepMaxChart({ profile }: OneRepMaxChartProps) {
   const [activeLift, setActiveLift] = useState<'all' | 'squat' | 'bench' | 'deadlift'>('all');
 
+  if (!profile) {
+    return (
+      <div className="bg-[#1a1210]/85 border border-viking-gold/20 p-6 rounded-3xl backdrop-blur-md text-center text-viking-silver">
+        Carregando gráfico de 1RM...
+      </div>
+    );
+  }
+
   // Get current PR values from profile or set sensible defaults
   const currentSquat = profile.prs.squat || 140;
   const currentBench = profile.prs.bench || 100;
