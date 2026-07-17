@@ -53,6 +53,7 @@ export interface Exercise {
   mobility?: MobilityStep[];
   methodology?: 'standard' | 'backoff' | 'myoreps' | 'clusters' | 'dropset';
   methodologyDetails?: string;
+
 }
 
 export interface WeekWorkout {
@@ -152,6 +153,7 @@ export interface StudentProfile {
     read: boolean;
     type: 'info' | 'success' | 'warning';
   }[];
+  customProgram?: TrainingProgram;
 }
 
 export interface VikingPlan {

@@ -5,7 +5,7 @@ import {
   Trophy, 
   CreditCard, 
   Settings, 
-  LogOut, 
+  LogOut,
   Menu,
   CheckCircle,
   Edit, 
@@ -236,6 +236,7 @@ export default function App() {
   // Program Editor state (Trainer)
   const [editorWeek, setEditorWeek] = useState<number>(1);
   const [editorDay, setEditorDay] = useState<string>('A');
+  const [editorProgram, setEditorProgram] = useState<TrainingProgram>(DEFAULT_PROGRAM);
   const [editorExercises, setEditorExercises] = useState<Exercise[]>([]);
   const [editorSearchQuery, setEditorSearchQuery] = useState<string>('');
   const [copySourceWeek, setCopySourceWeek] = useState<number>(1);
@@ -469,6 +470,14 @@ export default function App() {
     }
   };
 
+  // --- STUDENT LEVEL LOGIC ---
+  const rawStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
+  const activeStudentProfile = rawStudentProfile ? { 
+    ...rawStudentProfile, 
+    sessions: rawStudentProfile.sessions || [],
+    prs: rawStudentProfile.prs || { squat: null, bench: null, deadlift: null }
+  } : null;
+
   useEffect(() => {
     localStorage.setItem('viking_plans', JSON.stringify(vikingPlans));
   }, [vikingPlans]);
@@ -494,7 +503,8 @@ export default function App() {
       setRestTimerRemaining(restTimerSeconds);
 
       // Initialize sets state for the exercises in the current selected training day
-      const currentExercises = trainingProgram.weeks[selectedWeek]?.[selectedDay] || [];
+      const activeProg = activeStudentProfile?.customProgram || trainingProgram;
+      const currentExercises = activeProg.weeks[selectedWeek]?.[selectedDay] || [];
       const initialSets: Record<string, { reps: number; weight: number }[]> = {};
       
       currentExercises.forEach(ex => {
@@ -531,7 +541,7 @@ export default function App() {
       
       setExerciseSetsState(initialSets);
     }
-  }, [workoutModalOpen, selectedWeek, selectedDay]);
+  }, [workoutModalOpen, selectedWeek, selectedDay, activeStudentProfile?.customProgram, trainingProgram]);
 
   // Rest Timer countdown logic
   useEffect(() => {
@@ -930,6 +940,21 @@ export default function App() {
     setTrainingProgram(newProg);
     localStorage.setItem('viking_program', JSON.stringify(newProg));
     saveProgramToFirebase(newProg).catch(err => console.error("Firebase save program error:", err));
+  };
+
+  const saveEditorProgramToDB = (newProg: TrainingProgram) => {
+    setEditorProgram(newProg);
+    const email = editingStudentEmail.toLowerCase();
+    const student = studentsData[email];
+    if (student) {
+      const updatedStudents = { ...studentsData };
+      updatedStudents[email] = {
+        ...updatedStudents[email],
+        customProgram: newProg
+      };
+      setStudentsData(updatedStudents);
+      saveStudentToFirebase(email, updatedStudents[email]);
+    }
   };
 
   const saveStudentsToDB = (newStuds: Record<string, StudentProfile>) => {
@@ -1915,7 +1940,7 @@ export default function App() {
         // Construct active training details
         let exercisesHTML = '';
         const currentWeek = 1; // standard or current week
-        const weekWorkout = trainingProgram.weeks[currentWeek] || trainingProgram.weeks[1];
+        const weekWorkout = (activeStudentProfile?.customProgram || trainingProgram).weeks[currentWeek] || (activeStudentProfile?.customProgram || trainingProgram).weeks[1];
         
         if (weekWorkout) {
           exercisesHTML += `
@@ -2083,14 +2108,6 @@ export default function App() {
     link.click();
     showToast('Resumo financeiro exportado!', 'success');
   };
-
-  // --- STUDENT LEVEL LOGIC ---
-  const rawStudentProfile = currentUser && currentUser.role === 'student' ? studentsData[currentUser.email.toLowerCase()] : null;
-  const activeStudentProfile = rawStudentProfile ? { 
-    ...rawStudentProfile, 
-    sessions: rawStudentProfile.sessions || [],
-    prs: rawStudentProfile.prs || { squat: null, bench: null, deadlift: null }
-  } : null;
 
   const isStudentPending = activeStudentProfile?.status === 'Pendente';
   const isStudentBlocked = !!activeStudentProfile?.accessBlocked || (() => {
@@ -2440,7 +2457,8 @@ export default function App() {
 
   const handleWorkoutSubmit = () => {
     if (!currentUser || !activeStudentProfile) return;
-    const currentExercises = trainingProgram.weeks[selectedWeek]?.[selectedDay] || [];
+    const activeProg = activeStudentProfile?.customProgram || trainingProgram;
+      const currentExercises = activeProg.weeks[selectedWeek]?.[selectedDay] || [];
     
     // Validate that all exercises have an RPE logged
     const loggedCount = Object.keys(sessionRpeState).length;
@@ -2882,8 +2900,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
   const openProgramEditor = (studentEmail: string) => {
     setEditingStudentEmail(studentEmail);
+    const student = studentsData[studentEmail.toLowerCase()];
+    const activeProg = student?.customProgram || trainingProgram;
+    setEditorProgram(activeProg);
     // Let's copy current week/day program to editor state
-    const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
+    const currentExercises = activeProg.weeks[editorWeek]?.[editorDay] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
     setEditorSearchQuery('');
     setCopySourceWeek(1);
@@ -2896,19 +2917,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   const handleEditorLoadWeekDay = (week: number, day: string) => {
     setEditorWeek(week);
     setEditorDay(day);
-    const currentExercises = trainingProgram.weeks[week]?.[day] || [];
+    const currentExercises = editorProgram.weeks[week]?.[day] || [];
     setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
     setEditorSearchQuery('');
   };
 
   const handleEditorAddWeek = () => {
-    const existingWeeks = Object.keys(trainingProgram.weeks).map(Number);
+    const existingWeeks = Object.keys(editorProgram.weeks).map(Number);
     const nextWeek = existingWeeks.length > 0 ? Math.max(...existingWeeks) + 1 : 1;
     
-    const updatedWeeks = { ...trainingProgram.weeks };
+    const updatedWeeks = { ...editorProgram.weeks };
     updatedWeeks[nextWeek] = { A: [], B: [], C: [] };
     
-    saveProgramToDB({ weeks: updatedWeeks });
+    saveEditorProgramToDB({ weeks: updatedWeeks });
     handleEditorLoadWeekDay(nextWeek, 'A');
     showToast(`Semana ${nextWeek} adicionada com sucesso ao cronograma de treinos!`, 'success');
   };
@@ -2918,7 +2939,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       'Excluir Semana',
       `Tem certeza de que deseja excluir permanentemente a Semana ${weekToDelete} e TODOS os treinos dentro dela? Esta ação não pode ser desfeita!`,
       () => {
-        const updatedWeeks = { ...trainingProgram.weeks };
+        const updatedWeeks = { ...editorProgram.weeks };
         delete updatedWeeks[weekToDelete];
         
         const remainingWeeks = Object.keys(updatedWeeks).map(Number).sort((a,b) => a-b);
@@ -2930,7 +2951,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           nextWeek = 1;
         }
 
-        saveProgramToDB({ weeks: updatedWeeks });
+        saveEditorProgramToDB({ weeks: updatedWeeks });
         
         const remainingDays = Object.keys(updatedWeeks[nextWeek] || {}).sort();
         const nextDay = remainingDays[0] || 'A';
@@ -2944,25 +2965,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   };
 
   const handleEditorAddWorkoutDay = () => {
-    const currentWeekWorkout = trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] };
+    const currentWeekWorkout = editorProgram.weeks[editorWeek] || { A: [], B: [], C: [] };
     const existingDays = Object.keys(currentWeekWorkout).sort();
     
     const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
     const nextDay = letters.find(l => !existingDays.includes(l)) || String.fromCharCode(65 + existingDays.length);
     
-    const updatedWeeks = { ...trainingProgram.weeks };
+    const updatedWeeks = { ...editorProgram.weeks };
     if (!updatedWeeks[editorWeek]) {
       updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
     }
     updatedWeeks[editorWeek][nextDay] = [];
     
-    saveProgramToDB({ weeks: updatedWeeks });
+    saveEditorProgramToDB({ weeks: updatedWeeks });
     handleEditorLoadWeekDay(editorWeek, nextDay);
     showToast(`Treino ${nextDay} adicionado com sucesso à Semana ${editorWeek}!`, 'success');
   };
 
   const handleEditorDeleteDay = (week: number, dayToDelete: string) => {
-    const currentWeekWorkout = trainingProgram.weeks[week] || { A: [], B: [], C: [] };
+    const currentWeekWorkout = editorProgram.weeks[week] || { A: [], B: [], C: [] };
     const existingDays = Object.keys(currentWeekWorkout).sort();
     
     if (existingDays.length <= 1) {
@@ -2974,14 +2995,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       'Excluir Treino',
       `Tem certeza de que deseja excluir permanentemente o Treino ${dayToDelete} da Semana ${week}? Esta ação não pode ser desfeita!`,
       () => {
-        const updatedWeeks = { ...trainingProgram.weeks };
+        const updatedWeeks = { ...editorProgram.weeks };
         if (updatedWeeks[week]) {
           const newWeekWorkout = { ...updatedWeeks[week] };
           delete newWeekWorkout[dayToDelete];
           updatedWeeks[week] = newWeekWorkout;
         }
 
-        saveProgramToDB({ weeks: updatedWeeks });
+        saveEditorProgramToDB({ weeks: updatedWeeks });
 
         const remainingDays = Object.keys(updatedWeeks[week] || {}).sort();
         const nextDay = remainingDays.includes(editorDay) ? (editorDay === dayToDelete ? remainingDays[0] : editorDay) : remainingDays[0] || 'A';
@@ -2994,8 +3015,41 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     );
   };
 
+  const handleImportProgram = (sourceEmail: string) => {
+    if (!sourceEmail) return;
+    let sourceProgram = DEFAULT_PROGRAM;
+    if (sourceEmail === 'global') {
+      sourceProgram = trainingProgram;
+    } else {
+      const sourceStudent = studentsData[sourceEmail.toLowerCase()];
+      if (sourceStudent?.customProgram) {
+        sourceProgram = sourceStudent.customProgram;
+      } else {
+        sourceProgram = trainingProgram;
+      }
+    }
+
+    triggerConfirm(
+      'Importar Treino',
+      `Tem certeza que deseja SOBRESCREVER o treino atual pelo treino selecionado? Isso apagará a prescrição atual do guerreiro no editor.`,
+      () => {
+        const clonedProgram = JSON.parse(JSON.stringify(sourceProgram));
+        setEditorProgram(clonedProgram);
+        const firstWeek = Object.keys(clonedProgram.weeks).map(Number).sort((a,b)=>a-b)[0] || 1;
+        const firstDay = Object.keys(clonedProgram.weeks[firstWeek] || {}).sort()[0] || 'A';
+        setEditorWeek(firstWeek);
+        setEditorDay(firstDay);
+        setEditorExercises(JSON.parse(JSON.stringify(clonedProgram.weeks[firstWeek]?.[firstDay] || [])));
+        showToast('Treino importado com sucesso no editor! Não esqueça de Salvar a Prescrição.', 'success');
+      },
+      true,
+      'Importar',
+      'Cancelar'
+    );
+  };
+
   const handleEditorCopyWorkout = (sourceWeek: number, sourceDay: string) => {
-    const sourceWeekWorkout = trainingProgram.weeks[sourceWeek];
+    const sourceWeekWorkout = editorProgram.weeks[sourceWeek];
     if (!sourceWeekWorkout) {
       showToast(`A Semana ${sourceWeek} não foi encontrada!`, 'error');
       return;
@@ -3081,15 +3135,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   };
 
   const handleEditorSaveProgram = () => {
-    const updatedWeeks = { ...trainingProgram.weeks };
+    const updatedWeeks = { ...editorProgram.weeks };
     if (!updatedWeeks[editorWeek]) {
       updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
     }
     updatedWeeks[editorWeek][editorDay] = editorExercises;
-
-    saveProgramToDB({ weeks: updatedWeeks });
+    saveEditorProgramToDB({ weeks: updatedWeeks });
     
-    // Add notification to all students
+    // Add notification to THIS student only
+    const email = editingStudentEmail.toLowerCase();
     const updatedStudents = { ...studentsData };
     const notification = {
       id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
@@ -3099,17 +3153,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       type: 'info' as const
     };
     
-    Object.keys(updatedStudents).forEach(email => {
+    if (updatedStudents[email]) {
       updatedStudents[email] = {
         ...updatedStudents[email],
         notifications: [notification, ...(updatedStudents[email].notifications || [])]
       };
       saveStudentToFirebase(email, updatedStudents[email]);
-    });
+    }
+    
     setStudentsData(updatedStudents);
 
-    showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para todos os guerreiros!`, 'success');
-    showToast(`Treino postado e notificação enviada aos alunos!`, 'success');
+    showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para o guerreiro!`, 'success');
     
     // Close drawer, reset view to home panel, and smooth scroll to top of screen
     setDrawerOpen(false);
@@ -3210,7 +3264,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
   const handleCloseDrawer = () => {
     if (drawerType === 'editProgram') {
-      const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
+      const currentExercises = editorProgram.weeks[editorWeek]?.[editorDay] || [];
       const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
       if (isModified) {
         triggerConfirm(
@@ -3232,7 +3286,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (drawerType === 'editProgram' && drawerOpen) {
-        const currentExercises = trainingProgram.weeks[editorWeek]?.[editorDay] || [];
+        const currentExercises = editorProgram.weeks[editorWeek]?.[editorDay] || [];
         const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
         if (isModified) {
           e.preventDefault();
@@ -3242,7 +3296,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [drawerType, drawerOpen, trainingProgram, editorWeek, editorDay, editorExercises]);
+  }, [drawerType, drawerOpen, editorProgram, editorWeek, editorDay, editorExercises]);
 
   return (
     <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
@@ -4609,7 +4663,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
 
               <div className="space-y-3">
-                {(trainingProgram.weeks[1]?.A || []).map((ex, idx) => (
+                {((activeStudentProfile?.customProgram || trainingProgram).weeks[1]?.A || []).map((ex, idx) => (
                   <div key={(ex.id || 'ex') + '_' + idx} className="p-4 rounded-xl bg-black/30 border border-viking-gold/10 flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-viking-gold/40 transition-all">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ex.main ? 'bg-viking-gold/15 text-viking-gold' : 'bg-white/[0.02] text-viking-silver border border-white/5'}`}>
@@ -8910,7 +8964,7 @@ Equipe Viking Force`);
                               onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
                               className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                             >
-                              {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                              {Object.keys(editorProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
                                 <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
                                   Semana {wk}
                                 </option>
@@ -8934,7 +8988,7 @@ Equipe Viking Force`);
                               onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
                               className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                             >
-                              {Object.keys(trainingProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                              {Object.keys(editorProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
                                 <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
                                   Treino {day}
                                 </option>
@@ -8970,6 +9024,30 @@ Equipe Viking Force`);
                       </div>
                     </div>
 
+                    {/* Import Workout Block */}
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <p className="text-xs text-viking-gold font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-viking-gold" /> Copiar Treino de Outro Guerreiro
+                      </p>
+                      <div>
+                        <select 
+                          onChange={e => handleImportProgram(e.target.value)}
+                          defaultValue=""
+                          className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
+                        >
+                          <option value="" disabled className="bg-[#140e0c] text-viking-silver/50">Selecione a origem...</option>
+                          <option value="global" className="bg-[#140e0c] text-viking-gold font-bold">Treino Base (Global)</option>
+                          {Object.entries(studentsData).map(([email, s]: [string, StudentProfile]) => (
+                            email.toLowerCase() !== editingStudentEmail.toLowerCase() && (
+                              <option key={email} value={email} className="bg-[#140e0c] text-[#e0d3a8]">
+                                {s.name} ({s.plan})
+                              </option>
+                            )
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
                     {/* Copy Workout Block */}
                     <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                       <p className="text-xs text-viking-gold font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -8983,14 +9061,14 @@ Equipe Viking Force`);
                             onChange={e => {
                               const wk = parseInt(e.target.value);
                               setCopySourceWeek(wk);
-                              const availableDays = Object.keys(trainingProgram.weeks[wk] || {}).sort();
+                              const availableDays = Object.keys(editorProgram.weeks[wk] || {}).sort();
                               if (availableDays.length > 0 && !availableDays.includes(copySourceDay)) {
                                 setCopySourceDay(availableDays[0]);
                               }
                             }}
                             className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
                           >
-                            {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                            {Object.keys(editorProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
                               <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
                                 Semana {wk}
                               </option>
@@ -9004,7 +9082,7 @@ Equipe Viking Force`);
                             onChange={e => setCopySourceDay(e.target.value)}
                             className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs"
                           >
-                            {Object.keys(trainingProgram.weeks[copySourceWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                            {Object.keys(editorProgram.weeks[copySourceWeek] || { A: [], B: [], C: [] }).sort().map(day => (
                               <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
                                 Treino {day}
                               </option>
@@ -10377,7 +10455,7 @@ Equipe Viking Force`);
                         onChange={e => { setSelectedWeek(parseInt(e.target.value)); setSessionRpeState({}); setExerciseFailureState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
-                        {Object.keys(trainingProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                        {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks).map(Number).sort((a,b) => a-b).map(wk => (
                           <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
                             Semana {wk} {wk === 4 ? '(Deload)' : ''}
                           </option>
@@ -10391,7 +10469,7 @@ Equipe Viking Force`);
                         onChange={e => { setSelectedDay(e.target.value); setSessionRpeState({}); setExerciseFailureState({}); }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
-                        {Object.keys(trainingProgram.weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
+                        {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
                           let label = `Treino ${day}`;
                           if (day === 'A') label = 'Treino A (Agachamento Principal)';
                           else if (day === 'B') label = 'Treino B (Supino/Terra)';
@@ -10541,15 +10619,60 @@ Equipe Viking Force`);
                   </div>
                 </div>
 
+                {/* Workout Progress Bar */}
+                {(() => {
+                  const list = (activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek]?.[selectedDay] || [];
+                  if (list.length === 0) return null;
+                  
+                  const completedCount = list.filter(ex => {
+                    const sets = exerciseSetsState[ex.id] || [];
+                    return sets.length > 0 && sets.every(s => s.done);
+                  }).length;
+                  
+                  const progressPct = Math.round((completedCount / list.length) * 100);
+                  const isAllCompleted = progressPct === 100;
+
+                  return (
+                    <div className="space-y-2 p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 relative overflow-hidden transition-all duration-500">
+                      {isAllCompleted && (
+                        <div className="absolute inset-0 bg-green-500/10 mix-blend-screen animate-pulse pointer-events-none" />
+                      )}
+                      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest relative z-10">
+                        <span className="text-viking-silver flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-viking-gold" /> Progresso da Sessão
+                        </span>
+                        <span className={isAllCompleted ? "text-green-400" : "text-viking-gold"}>
+                          {completedCount} / {list.length} Exercícios ({progressPct}%)
+                        </span>
+                      </div>
+                      <div className={`h-2.5 w-full bg-[#140e0c] rounded-full overflow-hidden border ${isAllCompleted ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'border-viking-gold/20'} p-[2px] transition-all duration-500 relative z-10`}>
+                        <div 
+                          className={`h-full rounded-full transition-all duration-700 ${isAllCompleted ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-viking-gold-dark to-viking-gold'}`}
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                      {isAllCompleted && (
+                        <motion.p 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-center text-[11px] text-green-400 font-black mt-3 flex justify-center items-center gap-2 relative z-10"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" /> SESSÃO DESTRUTIVA CONCLUÍDA! <Sparkles className="w-3.5 h-3.5" />
+                        </motion.p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Exercises list in workout */}
                 <div className="space-y-4">
-                  {(trainingProgram.weeks[selectedWeek]?.[selectedDay] || []).length === 0 ? (
+                  {((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek]?.[selectedDay] || []).length === 0 ? (
                     <div className="text-center py-10 text-viking-silver/50 italic">
                       Nenhum exercício prescrito para a Semana {selectedWeek} - Treino {selectedDay} no momento.
                     </div>
                   ) : (
                     (() => {
-                      const list = trainingProgram.weeks[selectedWeek]?.[selectedDay] || [];
+                      const list = (activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek]?.[selectedDay] || [];
                       const filteredList = workoutViewMode === 'list' 
                         ? list 
                         : [list[currentExerciseIndex]].filter(Boolean);
@@ -10582,10 +10705,22 @@ Equipe Viking Force`);
                                   key={(ex.id || 'ex') + '_' + idx}
                                   layout
                                   initial={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? '100%' : '-100%', scale: 0.85, rotateY: slideDirection === 'forward' ? 20 : -20, filter: 'blur(8px)' } : { opacity: 0, y: 30, scale: 0.95 }}
-                                  animate={{ opacity: 1, x: 0, y: 0, scale: 1, rotateY: 0, filter: 'blur(0px)' }}
+                                  animate={{ 
+                                    opacity: 1, x: 0, y: 0, scale: 1, rotateY: 0, filter: 'blur(0px)',
+                                    ...(workoutViewMode === 'slide' ? {
+                                      boxShadow: ['0px 4px 15px rgba(212,175,55,0.1)', '0px 0px 30px rgba(212,175,55,0.3)', '0px 4px 15px rgba(212,175,55,0.1)'],
+                                      borderColor: ['rgba(212,175,55,0.3)', 'rgba(212,175,55,0.8)', 'rgba(212,175,55,0.3)']
+                                    } : {})
+                                  }}
                                   exit={workoutViewMode === 'slide' ? { opacity: 0, x: slideDirection === 'forward' ? '-100%' : '100%', scale: 0.85, rotateY: slideDirection === 'forward' ? -20 : 20, filter: 'blur(8px)' } : { opacity: 0, scale: 0.9 }}
-                                  transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 1, delay: workoutViewMode === 'list' ? idx * 0.05 : 0 }}
-                          className={`p-5 rounded-2xl border w-full ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/95 to-[#120b09]/95 border-viking-gold/40 shadow-[0_8px_30px_rgba(212,175,55,0.12)]' : 'bg-[#0d0908]/80 border-viking-gold/15 shadow-xl'} ${workoutViewMode === 'list' ? (ex.main ? 'border-l-[4px] border-l-viking-gold' : 'border-l-[3px] border-l-viking-silver/30') : ''} select-none`}
+                                  transition={{ 
+                                    type: 'spring', stiffness: 350, damping: 30, mass: 1, delay: workoutViewMode === 'list' ? idx * 0.05 : 0,
+                                    ...(workoutViewMode === 'slide' ? {
+                                      boxShadow: { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
+                                      borderColor: { repeat: Infinity, duration: 2.5, ease: "easeInOut" }
+                                    } : {})
+                                  }}
+                          className={`p-5 rounded-2xl border w-full ${ex.main ? 'bg-gradient-to-br from-[#1a1210]/95 to-[#120b09]/95 border-viking-gold/40 shadow-[0_8px_30px_rgba(212,175,55,0.12)]' : 'bg-[#0d0908]/80 border-viking-gold/15 shadow-xl'} ${workoutViewMode === 'list' ? (ex.main ? 'border-l-[4px] border-l-viking-gold' : 'border-l-[3px] border-l-viking-silver/30') : 'ring-1 ring-viking-gold/20'} select-none`}
                           onTouchStart={(e) => {
                             if (workoutViewMode !== 'slide') return;
                             const tagName = (e.target as HTMLElement).tagName.toLowerCase();
