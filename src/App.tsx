@@ -316,6 +316,7 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState<Partial<CalendarEvent> | null>(null);
   const [editingDbExercise, setEditingDbExercise] = useState<DbExercise | null>(null);
   const [dbExerciseSearch, setDbExerciseSearch] = useState<string>('');
+  const [navSearchQuery, setNavSearchQuery] = useState<string>('');
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
@@ -3257,7 +3258,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
  
       {/* --- RESPONSIVE HEADER --- */}
       <nav className="sticky top-0 z-40 bg-[#0f0a08]/90 backdrop-blur-md border-b border-viking-gold/15 shadow-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center relative z-10">
+        <div 
+          key={activeTab + (drawerOpen ? '1' : '0') + (workoutModalOpen ? '1' : '0') + String(drawerType)}
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center relative z-10 w-full animate-fade-in gap-4"
+        >
           
           {/* Logo */}
           <div className="flex items-center gap-3">
@@ -3297,7 +3301,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
           {/* Desktop Navigation */}
           {isLoggedIn && (
-            <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-20">
+            <div className="hidden xl:flex flex-1 justify-center z-20 mx-4">
               <div className="flex items-center gap-1.5 bg-[#0f0a08] border border-viking-gold/20 p-1 rounded-2xl backdrop-blur-md">
                 <button 
                   onClick={() => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); }}
@@ -3574,6 +3578,86 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
           <div className="flex items-center gap-3">
             {isLoggedIn ? (
               <>
+                {/* Search field */}
+                <div className="hidden lg:flex relative group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-viking-silver/60 group-focus-within:text-viking-gold transition-colors" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar..."
+                    value={navSearchQuery}
+                    onChange={(e) => setNavSearchQuery(e.target.value)}
+                    className="w-48 xl:w-64 bg-[#0a0706]/80 text-viking-silver text-xs px-9 py-2 rounded-xl border border-viking-gold/20 outline-none focus:border-viking-gold/80 focus:bg-[#0f0a08] focus:shadow-[0_0_15px_rgba(212,175,55,0.3)] transition-all"
+                  />
+                  {navSearchQuery && (
+                    <button 
+                      onClick={() => setNavSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-viking-silver/60 hover:text-viking-gold transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <AnimatePresence>
+                    {navSearchQuery.trim() && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-0 top-full mt-2 w-full bg-[#0f0a08]/98 border border-viking-gold/30 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl z-50 flex flex-col gap-1 max-h-64 overflow-y-auto"
+                      >
+                        {[
+                          { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          ...(currentUser?.role === 'student' ? [
+                            { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                          ] : [
+                            { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                          ]),
+                          { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          ...(currentUser?.role === 'trainer' ? [
+                            { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                          ] : [])
+                        ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).length > 0 ? (
+                          [
+                            { title: 'Início', icon: <Activity className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setActiveTab('home'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            ...(currentUser?.role === 'student' ? [
+                              { title: 'Treino Hoje', icon: <Dumbbell className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(true); setDrawerOpen(false); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Histórico', icon: <History className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (isStudentPending || isStudentBlocked) return; setWorkoutModalOpen(false); setDrawerType('history'); setDrawerTitle('Seu Histórico & RPE'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                            ] : [
+                              { title: 'Treinos Concluídos', icon: <CheckCircle className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('recentWorkouts'); setDrawerTitle('Treinos Concluídos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } }
+                            ]),
+                            { title: 'Biblioteca de Exercícios', icon: <BookOpen className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('exerciseLibrary'); setDrawerTitle('Biblioteca de Exercícios'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            { title: 'Ranking do Templo', icon: <Trophy className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { if (currentUser?.role === 'student' && (isStudentPending || isStudentBlocked)) return; setWorkoutModalOpen(false); setDrawerType('ranking'); setDrawerTitle('Ranking do Templo'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            ...(currentUser?.role === 'trainer' ? [
+                              { title: 'Feedback de RPE', icon: <MessageSquare className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('rpeFeedback'); setDrawerTitle('Feedback RPE de Alunos'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Adicionar Aluno', icon: <UserPlus className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('addStudent'); setDrawerTitle('Adicionar Novo Aluno'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                              { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0 text-viking-gold" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); } },
+                            ] : [])
+                          ].filter(item => item.title.toLowerCase().includes(navSearchQuery.toLowerCase())).map((item, idx) => (
+                            <button
+                              key={idx}
+                              onClick={item.action}
+                              className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
+                            >
+                              {item.icon} {item.title}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-4 text-center text-xs text-viking-silver/50">Nenhum atalho encontrado.</div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                </div>
+
                 {/* Sync status button */}
                 <button
                   onClick={handleManualSync}
@@ -3633,7 +3717,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                 <button 
                   onClick={() => setMobileMenuOpen(true)}
-                  className="p-2.5 rounded-xl bg-viking-dark text-viking-silver hover:text-viking-gold md:hidden border border-viking-gold/20 hover:border-viking-gold/40 transition-colors"
+                  className="p-2.5 rounded-xl bg-viking-dark text-viking-silver hover:text-viking-gold xl:hidden border border-viking-gold/20 hover:border-viking-gold/40 transition-colors cursor-pointer"
                 >
                   <Menu className="w-6 h-6" />
                 </button>
