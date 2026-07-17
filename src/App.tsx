@@ -78,6 +78,48 @@ import confetti from 'canvas-confetti';
 import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent , TrainingProtocol } from './types';
 import { ProtocolsDrawer } from './components/ProtocolsDrawer';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
+
+
+function DebouncedInput({ value, onChange, ...props }: any) {
+  const [localValue, setLocalValue] = useState(value);
+  
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  return (
+    <input
+      {...props}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          onChange(localValue);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function DebouncedTextarea({ value, onChange, ...props }: any) {
+  const [localValue, setLocalValue] = useState(value);
+  
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  return (
+    <textarea
+      {...props}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
 import { 
   fetchStudentsFromFirebase, 
   saveStudentToFirebase, 
@@ -11553,11 +11595,7 @@ Equipe Viking Force`);
                 {/* Session observation box */}
                 <div className="space-y-2 pt-2">
                   <label htmlFor="sessionNote" className="block text-xs font-bold text-viking-silver uppercase tracking-wider">Notas de Desempenho (Opcional)</label>
-                  <textarea 
-                    id="sessionNote"
-                    rows={3}
-                    value={sessionNote}
-                    onChange={e => setSessionNote(e.target.value)}
+                  <DebouncedTextarea id="sessionNote" rows={3} value={sessionNote} onChange={(val: string) => setSessionNote(val)}
                     placeholder="Escreva como se sentiu hoje. Destaques, dores articulares ou velocidade das subidas..."
                     className="w-full p-4 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/35 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs font-semibold"
                   />
