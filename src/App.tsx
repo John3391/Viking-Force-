@@ -222,10 +222,12 @@ export default function App() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
   const [slideDirection, setSlideDirection] = useState<'forward' | 'backward'>('forward');
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
-  const [selectedDay, setSelectedDay] = useState<string>('A');
+  const [selectedDay, setSelectedDay] = useState<string>(() => localStorage.getItem('viking_last_day') || 'A');
+  useEffect(() => { localStorage.setItem('viking_last_day', selectedDay); }, [selectedDay]);
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
   const [exerciseFailureState, setExerciseFailureState] = useState<Record<string, { failed: boolean; actualReps: number; setsDone: number }>>({});
   const [exerciseSetsState, setExerciseSetsState] = useState<Record<string, { reps: number; weight: number; done?: boolean }[]>>({});
+  const [exerciseWarmupState, setExerciseWarmupState] = useState<Record<string, boolean[]>>({});
   const [restTimerSeconds, setRestTimerSeconds] = useState<number>(120);
   const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
   const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
@@ -2463,6 +2465,7 @@ export default function App() {
     setSessionRpeState({});
     setExerciseFailureState({});
     setExerciseSetsState({});
+    setExerciseWarmupState({});
     setSessionNote('');
     showToast('Sessão registrada com sucesso!', 'success');
   };
@@ -2586,6 +2589,7 @@ export default function App() {
     setSessionRpeState({});
     setExerciseFailureState({});
     setExerciseSetsState({});
+    setExerciseWarmupState({});
     setRestTimerActive(false);
     setSessionNote('');
 
@@ -10550,7 +10554,15 @@ Equipe Viking Force`);
                       <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
                       <select 
                         value={selectedDay}
-                        onChange={e => { setSelectedDay(e.target.value); setSessionRpeState({}); setExerciseFailureState({}); }}
+                        onChange={e => { 
+                          const newDay = e.target.value;
+                          setSelectedDay(newDay);
+                          setSessionRpeState({}); 
+                          setExerciseFailureState({}); 
+                          setExerciseWarmupState({});
+                          setExerciseSetsState({});
+                          setCurrentExerciseIndex(0);
+                        }}
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
                         {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
@@ -10990,14 +11002,33 @@ Equipe Viking Force`);
                                     <Flame className="w-3.5 h-3.5 animate-pulse text-viking-gold" /> Aquecimento Inteligente Calculado
                                   </span>
                                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-viking-silver">
-                                    {warmupArray.map((w: any, wIdx) => (
-                                      <React.Fragment key={wIdx}>
-                                        <span className={w.isTarget ? 'text-viking-gold font-bold' : ''}>
-                                          {w.reps}r @ <strong className="text-white">{w.weight} kg</strong> ({w.isTarget ? 'Alvo' : `${Math.round(w.percent * 100)}%`})
-                                        </span>
-                                        {wIdx < warmupArray.length - 1 && <span className="text-viking-gold/40">→</span>}
-                                      </React.Fragment>
-                                    ))}
+                                    {warmupArray.map((w: any, wIdx) => {
+                                      const isDone = exerciseWarmupState[ex.id]?.[wIdx];
+                                      return (
+                                        <React.Fragment key={wIdx}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setExerciseWarmupState(prev => {
+                                                const currentExWarmup = prev[ex.id] || [];
+                                                const newExWarmup = [...currentExWarmup];
+                                                newExWarmup[wIdx] = !newExWarmup[wIdx];
+                                                return { ...prev, [ex.id]: newExWarmup };
+                                              });
+                                            }}
+                                            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all cursor-pointer ${isDone ? 'bg-green-950/30 border-green-500/40 text-green-400' : 'bg-black/40 border-viking-gold/20 text-viking-silver hover:border-viking-gold/50'}`}
+                                          >
+                                            <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isDone ? 'bg-green-500 border-green-500 text-black' : 'border-viking-gold/40 text-transparent'}`}>
+                                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                            </div>
+                                            <span className={w.isTarget && !isDone ? 'text-viking-gold font-bold' : ''}>
+                                              {w.reps}r @ <strong className={isDone ? 'text-green-300' : 'text-white'}>{w.weight} kg</strong> ({w.isTarget ? 'Alvo' : `${Math.round(w.percent * 100)}%`})
+                                            </span>
+                                          </button>
+                                          {wIdx < warmupArray.length - 1 && <span className="text-viking-gold/40">→</span>}
+                                        </React.Fragment>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               ) : (
@@ -11451,7 +11482,26 @@ Equipe Viking Force`);
                       </button>
                       
                       <div className="flex flex-col items-center gap-1.5 py-1">
-                        <span className="text-[9px] text-viking-silver uppercase font-black tracking-widest">Navegação Viking</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-viking-silver uppercase font-black tracking-widest">Dia:</span>
+                          <select 
+                            value={selectedDay}
+                            onChange={e => { 
+                              const newDay = e.target.value;
+                              setSelectedDay(newDay);
+                              setSessionRpeState({}); 
+                              setExerciseFailureState({});
+                              setExerciseWarmupState({});
+                              setExerciseSetsState({});
+                              setCurrentExerciseIndex(0); 
+                            }}
+                            className="px-2 py-1 rounded bg-black/40 border border-viking-gold/30 text-viking-gold text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-viking-gold cursor-pointer"
+                          >
+                            {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                              <option key={day} value={day}>Treino {day}</option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="flex gap-2 items-center">
                           {list.map((_, i) => (
                             <button
