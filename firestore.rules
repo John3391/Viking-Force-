@@ -1,60 +1,43 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 1. Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
+    // Função para verificar se o usuário é o dono do documento (através da URL ou path)
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    // Common helper functions
-    function isSignedIn() {
-      return request.auth != null;
+    // Função para verificar se o usuário é o treinador
+    // Ajuste conforme necessário como você armazena o perfil do treinador
+    function isTrainer() {
+      return request.auth != null && request.auth.token.email == 'john.vasquesrodrigues@gmail.com';
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\+\\.\\@]+$');
+    // Restrição geral para todas as coleções: apenas dono ou treinador
+    match /profiles/{userId} {
+      allow read, write: if isOwner(userId) || isTrainer();
     }
 
-    function incoming() {
-      return request.resource.data;
+    match /prs/{userId} {
+      allow read, write: if isOwner(userId) || isTrainer();
     }
 
-    function isValidDbExercise(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() <= 200;
+    match /trainingPrograms/{userId} {
+      allow read, write: if isOwner(userId) || isTrainer();
     }
 
-    // 2. Rules for Students collection
+    match /trainingLogs/{userId}/logs/{logId} {
+      allow read, write: if isOwner(userId) || isTrainer();
+    }
+
+    // Regras existentes mantidas para compatibilidade parcial, se necessário
     match /students/{studentEmail} {
-      allow get, create, update, delete: if isSignedIn() && isValidId(studentEmail);
-      allow list: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // 3. Rules for Config (program & plans)
-    match /config/{configId} {
-      allow read, write: if isSignedIn() && isValidId(configId);
-    }
-
-    // 4. Rules for Exercises collection
     match /exercises/{exerciseId} {
-      allow get, delete: if isSignedIn() && isValidId(exerciseId);
-      allow create, update: if isSignedIn() && isValidId(exerciseId) && isValidDbExercise(incoming());
-      allow list: if isSignedIn();
-    }
-
-    // 5. Rules for Calendar Events collection
-    match /calendar_events/{eventId} {
-      allow get, delete: if isSignedIn() && isValidId(eventId);
-      allow create, update: if isSignedIn() && isValidId(eventId);
-      allow list: if isSignedIn();
-    }
-
-    // 6. Rules for Mobility Exercises collection
-    match /mobility_exercises/{exerciseId} {
-      allow get, delete: if isSignedIn() && isValidId(exerciseId);
-      allow create, update: if isSignedIn() && isValidId(exerciseId);
-      allow list: if isSignedIn();
+      allow read, write: if request.auth != null;
     }
   }
 }
