@@ -1,4 +1,5 @@
 import { CardioView } from './components/CardioView';
+import { PrCalculator } from './components/PrCalculator';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -72,6 +73,7 @@ import {
   List,
   Info
 ,
+  Calculator,
   Folder
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -279,7 +281,7 @@ export default function App() {
 
   // Active UI Navigation state
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks' | 'cardio'>('overview');
+  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks' | 'cardio' | 'calculator'>('overview');
   const [wilksRatios, setWilksRatios] = useState({ squat: 38, bench: 24, deadlift: 38 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   
@@ -3158,10 +3160,24 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   };
 
   const handleEditorLoadWeekDay = (week: number, day: string) => {
+    // 1. Salvar as edições atuais no estado geral em memória ANTES de mudar de dia
+    const currentWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
+    if (!currentWeeks[editorWeek]) {
+      currentWeeks[editorWeek] = {};
+    }
+    currentWeeks[editorWeek][editorDay] = editorExercises;
+    
+    // 2. Mudar para a nova aba
     setEditorWeek(week);
     setEditorDay(day);
-    const currentExercises = editorProgram.weeks[week]?.[day] || [];
-    setEditorExercises(JSON.parse(JSON.stringify(currentExercises)));
+    
+    // 3. Carregar os exercícios da nova aba
+    const nextExercises = currentWeeks[week]?.[day] || [];
+    setEditorExercises(JSON.parse(JSON.stringify(nextExercises)));
+    
+    // 4. Atualizar o programa no estado sem salvar imediatamente no banco
+    setEditorProgram({ weeks: currentWeeks });
+    
     setEditorSearchQuery('');
   };
 
@@ -3169,7 +3185,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const existingWeeks = Object.keys(editorProgram.weeks).map(Number);
     const nextWeek = existingWeeks.length > 0 ? Math.max(...existingWeeks) + 1 : 1;
     
-    const updatedWeeks = { ...editorProgram.weeks };
+    const updatedWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
+    if (!updatedWeeks[editorWeek]) updatedWeeks[editorWeek] = {};
+    updatedWeeks[editorWeek][editorDay] = editorExercises; // Save current day edits
+    
     updatedWeeks[nextWeek] = { A: [], B: [], C: [] };
     
     saveEditorProgramToDB({ weeks: updatedWeeks });
@@ -3182,7 +3201,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       'Excluir Semana',
       `Tem certeza de que deseja excluir permanentemente a Semana ${weekToDelete} e TODOS os treinos dentro dela? Esta ação não pode ser desfeita!`,
       () => {
-        const updatedWeeks = { ...editorProgram.weeks };
+        const updatedWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
+        if (weekToDelete !== editorWeek) {
+          if (!updatedWeeks[editorWeek]) updatedWeeks[editorWeek] = {};
+          updatedWeeks[editorWeek][editorDay] = editorExercises; // Save current day edits
+        }
         delete updatedWeeks[weekToDelete];
         
         const remainingWeeks = Object.keys(updatedWeeks).map(Number).sort((a,b) => a-b);
@@ -3214,10 +3237,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
     const nextDay = letters.find(l => !existingDays.includes(l)) || String.fromCharCode(65 + existingDays.length);
     
-    const updatedWeeks = { ...editorProgram.weeks };
+    const updatedWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
     if (!updatedWeeks[editorWeek]) {
       updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
     }
+    updatedWeeks[editorWeek][editorDay] = editorExercises; // Save current day edits
+    
     updatedWeeks[editorWeek][nextDay] = [];
     
     saveEditorProgramToDB({ weeks: updatedWeeks });
@@ -3238,7 +3263,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       'Excluir Treino',
       `Tem certeza de que deseja excluir permanentemente o Treino ${dayToDelete} da Semana ${week}? Esta ação não pode ser desfeita!`,
       () => {
-        const updatedWeeks = { ...editorProgram.weeks };
+        const updatedWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
+        
+        // Save current day if it's not the one being deleted
+        if (week !== editorWeek || dayToDelete !== editorDay) {
+          if (!updatedWeeks[editorWeek]) updatedWeeks[editorWeek] = {};
+          updatedWeeks[editorWeek][editorDay] = editorExercises;
+        }
+
         if (updatedWeeks[week]) {
           const newWeekWorkout = { ...updatedWeeks[week] };
           delete newWeekWorkout[dayToDelete];
@@ -3378,7 +3410,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   };
 
   const handleEditorSaveProgram = () => {
-    const updatedWeeks = { ...editorProgram.weeks };
+    const updatedWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
     if (!updatedWeeks[editorWeek]) {
       updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
     }
@@ -3514,8 +3546,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
   const handleCloseDrawer = () => {
     if (drawerType === 'editProgram') {
-      const currentExercises = editorProgram.weeks[editorWeek]?.[editorDay] || [];
-      const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
+      const student = studentsData[editingStudentEmail.toLowerCase()];
+      const dbProgram = student?.customProgram || trainingProgram;
+      
+      const currentProgramWithEdits = JSON.parse(JSON.stringify(editorProgram));
+      if (!currentProgramWithEdits.weeks[editorWeek]) {
+        currentProgramWithEdits.weeks[editorWeek] = {};
+      }
+      currentProgramWithEdits.weeks[editorWeek][editorDay] = editorExercises;
+
+      const isModified = JSON.stringify(dbProgram.weeks) !== JSON.stringify(currentProgramWithEdits.weeks);
+      
       if (isModified) {
         triggerConfirm(
           'Aviso de Alterações Não Salvas',
@@ -3536,8 +3577,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (drawerType === 'editProgram' && drawerOpen) {
-        const currentExercises = editorProgram.weeks[editorWeek]?.[editorDay] || [];
-        const isModified = JSON.stringify(currentExercises) !== JSON.stringify(editorExercises);
+        const student = studentsData[editingStudentEmail.toLowerCase()];
+        const dbProgram = student?.customProgram || trainingProgram;
+        
+        const currentProgramWithEdits = JSON.parse(JSON.stringify(editorProgram));
+        if (!currentProgramWithEdits.weeks[editorWeek]) {
+          currentProgramWithEdits.weeks[editorWeek] = {};
+        }
+        currentProgramWithEdits.weeks[editorWeek][editorDay] = editorExercises;
+
+        const isModified = JSON.stringify(dbProgram.weeks) !== JSON.stringify(currentProgramWithEdits.weeks);
+        
         if (isModified) {
           e.preventDefault();
           e.returnValue = '';
@@ -3546,7 +3596,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [drawerType, drawerOpen, editorProgram, editorWeek, editorDay, editorExercises]);
+  }, [drawerType, drawerOpen, editorProgram, editorWeek, editorDay, editorExercises, editingStudentEmail, studentsData, trainingProgram]);
 
   return (
     <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
@@ -4794,7 +4844,21 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               >
                 🏆 Metas Wilks
               </button>
+              <button 
+                onClick={() => setStudentSubTab('calculator')}
+                className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                  studentSubTab === 'calculator' 
+                    ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
+                    : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
+                }`}
+              >
+                <Calculator className="w-4 h-4" /> Calculadora
+              </button>
             </div>
+
+            {studentSubTab === 'calculator' && activeStudentProfile && (
+              <PrCalculator profile={activeStudentProfile} />
+            )}
 
             {studentSubTab === 'cardio' && activeStudentProfile && (
               <CardioView 
