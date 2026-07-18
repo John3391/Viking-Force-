@@ -864,6 +864,10 @@ export default function App() {
           unsubscribeStudents();
           unsubscribeStudents = null;
         }
+        if (unsubscribeProgram) {
+          unsubscribeProgram();
+          unsubscribeProgram = null;
+        }
       }
     });
 
@@ -2645,7 +2649,7 @@ export default function App() {
     const newSession: LoggedSession = {
       id: 'session_' + Date.now().toString() + '_' + Math.random().toString(36).substring(7),
       date: formattedDate,
-      sessionName: `Semana ${selectedWeek} - Treino ${selectedDay}`,
+      sessionName: `Treino ${selectedDay}`,
       exercises: exercisesLog,
       avgRPE,
       note: sessionNote.trim() || null,
@@ -4825,34 +4829,34 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <h3 className="font-viking-display text-[11px] sm:text-sm font-bold tracking-widest text-viking-gold uppercase mb-4 flex items-center gap-2">
                 <Play className="w-4 h-4 text-viking-gold" /> Portões do Combate - Ações Rápidas
               </h3>
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+              <div className="grid grid-cols-5 gap-1 sm:gap-3">
                 
                 <button 
                   onClick={() => setWorkoutModalOpen(true)}
-                  className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
+                  className="p-1.5 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
                 >
-                  <Dumbbell className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Treinar Hoje</span>
+                  <Dumbbell className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Treinar</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('history'); setDrawerTitle('Histórico & RPE de Treinos'); setDrawerOpen(true); }}
-                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
+                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
                 >
-                  <History className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Histórico</span>
+                  <History className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Histórico</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('ranking'); setDrawerTitle('Tabela de Honra Viking'); setDrawerOpen(true); }}
-                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
+                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
                 >
-                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Ranking</span>
+                  <Trophy className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ranking</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('settings'); setDrawerTitle('Configurações de Força'); setDrawerOpen(true); }}
-                  className="p-3 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer"
+                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
                 >
-                  <Settings className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Ajustar 1RM</span>
+                  <Settings className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ajustar</span>
                 </button>
 
                 <button 
@@ -4861,9 +4865,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setDrawerTitle('Feedback com o Treinador'); 
                     setDrawerOpen(true); 
                   }}
-                  className="p-3 sm:p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-[10px] sm:text-sm uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
+                  className="p-1.5 sm:p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
                 >
-                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center">Falar com Coach</span>
+                  <MessageSquare className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Chat</span>
                 </button>
 
               </div>
@@ -4877,12 +4881,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <p className="text-xs text-viking-silver">Desenvolvida pelo Treinador John com foco em técnica de Powerlifting</p>
                 </div>
                 <div className="text-xs bg-viking-darker border border-viking-gold/20 px-3.5 py-1.5 rounded-xl text-viking-gold font-bold">
-                  🏋️ Semana 1 - Treino A (Foco em Agachamento)
+                  🏋️ Treino {selectedDay}
                 </div>
               </div>
 
               <div className="space-y-3">
-                {((activeStudentProfile?.customProgram || trainingProgram).weeks[1]?.A || []).map((ex, idx) => (
+                {((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek]?.[selectedDay as keyof typeof trainingProgram.weeks[1]] || []).map((ex, idx) => (
                   <div key={(ex.id || 'ex') + '_' + idx} className="p-4 rounded-xl bg-black/30 border border-viking-gold/10 flex flex-col sm:flex-row justify-between sm:items-center gap-2 hover:border-viking-gold/40 transition-all">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ex.main ? 'bg-viking-gold/15 text-viking-gold' : 'bg-white/[0.02] text-viking-silver border border-white/5'}`}>
@@ -5672,6 +5676,65 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
 
             </div>
+
+            {/* --- PRÓXIMAS COMPETIÇÕES & TESTES --- */}
+            {(() => {
+              const upcomingEvents = Object.keys(studentsData)
+                .map(email => ({ email, ...studentsData[email] }))
+                .filter(s => s && s.competitionDate)
+                .map(s => {
+                  const days = Math.max(0, Math.ceil((new Date(s.competitionDate!).getTime() - new Date().getTime()) / (1000 * 3600 * 24)));
+                  return { ...s, daysRemaining: days };
+                })
+                .sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+              if (upcomingEvents.length === 0) return null;
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden mb-6">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Calendar className="w-32 h-32" />
+                  </div>
+
+                  <div className="flex items-center gap-2 text-viking-gold mb-4 border-b border-viking-gold/15 pb-3">
+                    <Trophy className="w-5 h-5 text-viking-gold animate-pulse" />
+                    <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Guerreiros em Preparação</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {upcomingEvents.map(s => (
+                      <div key={s.email} className="bg-[#100a09]/70 border border-viking-gold/10 rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-viking-gold/10 text-viking-gold px-2 py-0.5 rounded">
+                              {s.daysRemaining} dias
+                            </span>
+                            <span className="text-[10px] font-bold text-viking-silver">
+                              {s.competitionDate!.split('-').reverse().join('/')}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-sm text-white truncate">{s.name}</h4>
+                          <p className="text-[10px] text-viking-gold font-black uppercase mt-1">
+                            {s.targetEventName || 'Teste de 1RM / Competição'}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setActiveChatStudentEmail(s.email);
+                            setDrawerTitle(`Chat com ${s.name}`);
+                            setDrawerType('chat');
+                            setDrawerOpen(true);
+                          }}
+                          className="mt-3 py-1.5 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-viking-gold text-[10px] font-bold uppercase rounded-lg transition-all"
+                        >
+                          Motivar Atleta
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
             {(() => {
@@ -7016,6 +7079,28 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 {ev.description && (
                                   <p className="text-[11px] text-viking-silver mt-2.5 leading-relaxed whitespace-pre-wrap">{ev.description}</p>
                                 )}
+                                
+                                {(() => {
+                                  const signedUpStudents = Object.values(studentsData).filter(s => s.targetEventId === ev.id);
+                                  if (signedUpStudents.length > 0) {
+                                    return (
+                                      <div className="mt-3 pt-3 border-t border-viking-gold/10">
+                                        <div className="flex items-center gap-1.5 mb-1.5">
+                                          <Shield className="w-3 h-3 text-viking-gold" />
+                                          <span className="text-[10px] font-black uppercase text-viking-gold">Guerreiros Inscritos:</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {signedUpStudents.map(s => (
+                                            <span key={s.email} className="px-2 py-0.5 rounded bg-viking-gold/10 border border-viking-gold/20 text-[9px] font-bold text-[#e0d3a8]">
+                                              {s.name}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                               <div className="flex flex-col items-end gap-2">
                                 {currentUser?.role === 'trainer' && (
@@ -9689,6 +9774,7 @@ Equipe Viking Force`);
                                             </button>
                                             <input 
                                               type="number"
+                                              inputMode="decimal"
                                               value={step.sets || ''}
                                               onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'sets', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
                                               placeholder="Séries"
@@ -9697,6 +9783,7 @@ Equipe Viking Force`);
                                             <span className="text-viking-silver/80">x</span>
                                             <input 
                                               type="number"
+                                              inputMode="decimal"
                                               value={step.reps || ''}
                                               onChange={e => handleEditorUpdateMobilityStep(originalIdx, sIdx, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value, 10))}
                                               placeholder="Reps/Tempo"
@@ -10726,7 +10813,7 @@ Equipe Viking Force`);
               exit={workoutLayout === 'modal' ? { opacity: 0, scale: 0.95 } : { x: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
               className={workoutLayout === 'modal' 
-                ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[92vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+                ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[88vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
                 : "fixed top-0 right-0 h-screen w-full sm:w-[480px] md:w-[540px] lg:w-[600px] bg-[#140e0c]/98 border-l-2 border-viking-gold/30 z-50 flex flex-col overflow-hidden text-[#e0d3a8] shadow-[-15px_0_50px_rgba(0,0,0,0.85)] backdrop-blur-xl rounded-l-3xl"
               }
             >
@@ -10795,7 +10882,7 @@ Equipe Viking Force`);
                       >
                         {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks).map(Number).sort((a,b) => a-b).map(wk => (
                           <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
-                            Semana {wk} {wk === 4 ? '(Deload)' : ''}
+                            Semana {wk}
                           </option>
                         ))}
                       </select>
@@ -10816,13 +10903,9 @@ Equipe Viking Force`);
                         className="w-full px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                       >
                         {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => {
-                          let label = `Treino ${day}`;
-                          if (day === 'A') label = 'Treino A (Agachamento Principal)';
-                          else if (day === 'B') label = 'Treino B (Supino/Terra)';
-                          else if (day === 'C') label = 'Treino C (GPP/Acessórios)';
                           return (
                             <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
-                              {label}
+                              Treino {day}
                             </option>
                           );
                         })}
@@ -11884,16 +11967,16 @@ Equipe Viking Force`);
               </div>
 
               {/* Submit panel */}
-              <div className="p-6 border-t border-viking-gold/15 bg-[#140e0c]/90 flex flex-col sm:flex-row gap-3 shrink-0">
+              <div className="p-4 sm:p-6 border-t border-viking-gold/15 bg-[#140e0c]/90 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0 mb-safe">
                 <button 
                   onClick={handleWorkoutSubmit}
-                  className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-[10px] sm:text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Check className="w-4 h-4 shrink-0" /> Guardar Sessão de Treino
+                  <Check className="w-4 h-4 shrink-0" /> Guardar Sessão
                 </button>
                 <button 
                   onClick={() => setWorkoutModalOpen(false)}
-                  className="w-full sm:w-auto sm:px-8 py-3.5 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center"
+                  className="w-full sm:w-auto sm:px-8 py-3 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-[10px] sm:text-xs font-bold transition-all cursor-pointer flex items-center justify-center"
                 >
                   Cancelar
                 </button>

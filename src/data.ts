@@ -249,7 +249,7 @@ export const DEFAULT_PROGRAM: TrainingProgram = {
       A: [
         {
           id: 'squat_w4a',
-          name: 'Agachamento Livre (Deload)',
+          name: 'Agachamento Livre',
           sets: 3,
           reps: 5,
           intensity: 0.60,
@@ -262,7 +262,7 @@ export const DEFAULT_PROGRAM: TrainingProgram = {
         },
         {
           id: 'bench_w4a',
-          name: 'Supino Reto (Deload)',
+          name: 'Supino Reto',
           sets: 3,
           reps: 5,
           intensity: 0.60,
@@ -298,7 +298,7 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     sessions: [
       {
         date: '08/07/2026',
-        sessionName: 'Semana 1 - Treino A',
+        sessionName: 'Treino A',
         exercises: [
           { name: 'Agachamento Livre', rpe: 8 },
           { name: 'Supino Reto', rpe: 7.5 },
@@ -310,7 +310,7 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
       },
       {
         date: '01/07/2026',
-        sessionName: 'Semana 4 (Ciclo Anterior) - Treino A',
+        sessionName: 'Treino A',
         exercises: [
           { name: 'Agachamento Livre', rpe: 6 },
           { name: 'Supino Reto', rpe: 6 },
@@ -338,7 +338,7 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     sessions: [
       {
         date: '07/07/2026',
-        sessionName: 'Semana 1 - Treino A',
+        sessionName: 'Treino A',
         exercises: [
           { name: 'Agachamento Livre', rpe: 9 },
           { name: 'Supino Reto', rpe: 9 },
@@ -366,7 +366,7 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
     sessions: [
       {
         date: '06/07/2026',
-        sessionName: 'Semana 1 - Treino A',
+        sessionName: 'Treino A',
         exercises: [
           { name: 'Agachamento Livre', rpe: 7 },
           { name: 'Supino Reto', rpe: 6.5 },

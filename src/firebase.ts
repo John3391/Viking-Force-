@@ -123,9 +123,11 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
       errMessage.includes('network') || 
       errMessage.includes('token') || 
       errMessage.includes('Could not reach') ||
-      errMessage.includes('Backend didn\'t respond')
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
     ) {
-      console.warn("Firestore offline ou instável, usando DEFAULT_STUDENTS:", error);
+      console.warn("Firestore offline, instável ou sem permissão, usando DEFAULT_STUDENTS:", error);
       return DEFAULT_STUDENTS;
     }
     handleFirestoreError(error, OperationType.LIST, 'students');
@@ -155,9 +157,11 @@ export function subscribeStudents(
         errMessage.includes('network') || 
         errMessage.includes('token') || 
         errMessage.includes('Could not reach') ||
-        errMessage.includes('Backend didn\'t respond')
+        errMessage.includes('Backend didn\'t respond') ||
+        errMessage.includes('permission-denied') ||
+        errMessage.includes('Missing or insufficient permissions')
       ) {
-        console.warn("Inscrição em tempo real offline/instável:", error);
+        console.warn("Inscrição em tempo real (students) interrompida ou instável:", error);
         return;
       }
       handleFirestoreError(error, OperationType.GET, 'students');
@@ -208,9 +212,11 @@ export function subscribeProgram(
         errMessage.includes('network') || 
         errMessage.includes('token') || 
         errMessage.includes('Could not reach') ||
-        errMessage.includes('Backend didn\'t respond')
+        errMessage.includes('Backend didn\'t respond') ||
+        errMessage.includes('permission-denied') ||
+        errMessage.includes('Missing or insufficient permissions')
       ) {
-        console.warn("Inscrição em tempo real offline/instável:", error);
+        console.warn("Inscrição em tempo real (config/program) interrompida ou instável:", error);
         return;
       }
       handleFirestoreError(error, OperationType.GET, 'config/program');
@@ -251,9 +257,11 @@ export async function fetchProgramFromFirebase(): Promise<TrainingProgram> {
       errMessage.includes('network') || 
       errMessage.includes('token') || 
       errMessage.includes('Could not reach') ||
-      errMessage.includes('Backend didn\'t respond')
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
     ) {
-      console.warn("Firestore offline ou instável, usando DEFAULT_PROGRAM:", error);
+      console.warn("Firestore offline, instável ou sem permissão, usando DEFAULT_PROGRAM:", error);
       return DEFAULT_PROGRAM;
     }
     handleFirestoreError(error, OperationType.GET, 'config/program');
@@ -296,9 +304,11 @@ export async function fetchPlansFromFirebase(): Promise<VikingPlan[] | null> {
       errMessage.includes('network') || 
       errMessage.includes('token') || 
       errMessage.includes('Could not reach') ||
-      errMessage.includes('Backend didn\'t respond')
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
     ) {
-      console.warn("Firestore offline ou instável, retornando array vazio de planos:", error);
+      console.warn("Firestore offline, instável ou sem permissão, retornando array vazio de planos:", error);
       return [];
     }
     handleFirestoreError(error, OperationType.GET, 'config/plans');
@@ -661,9 +671,11 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
       errMessage.includes('network') || 
       errMessage.includes('token') || 
       errMessage.includes('Could not reach') ||
-      errMessage.includes('Backend didn\'t respond')
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
     ) {
-      console.warn("Firestore offline ou instável, gerando exercícios padrão:", error);
+      console.warn("Firestore offline, instável ou sem permissão, gerando exercícios padrão:", error);
       return generate500Exercises();
     }
     handleFirestoreError(error, OperationType.LIST, 'exercises');
@@ -721,6 +733,19 @@ export async function fetchDbMobilityExercisesFromFirebase(): Promise<DbMobility
 
     return exercises;
   } catch (error) {
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
+    ) {
+      console.warn("Firestore offline, instável ou sem permissão para mobilidade, retornando array vazio:", error);
+      return [];
+    }
     handleFirestoreError(error, OperationType.LIST, 'mobility_exercises');
   }
 }
@@ -764,6 +789,19 @@ export async function fetchCalendarEventsFromFirebase(): Promise<CalendarEvent[]
     });
     return events;
   } catch (error) {
+    const errMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errMessage.includes('offline') || 
+      errMessage.includes('network') || 
+      errMessage.includes('token') || 
+      errMessage.includes('Could not reach') ||
+      errMessage.includes('Backend didn\'t respond') ||
+      errMessage.includes('permission-denied') ||
+      errMessage.includes('Missing or insufficient permissions')
+    ) {
+      console.warn("Firestore offline, instável ou sem permissão para eventos, retornando array vazio:", error);
+      return [];
+    }
     handleFirestoreError(error, OperationType.LIST, 'calendar_events');
   }
 }
