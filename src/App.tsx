@@ -4829,34 +4829,34 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <h3 className="font-viking-display text-[11px] sm:text-sm font-bold tracking-widest text-viking-gold uppercase mb-4 flex items-center gap-2">
                 <Play className="w-4 h-4 text-viking-gold" /> Portões do Combate - Ações Rápidas
               </h3>
-              <div className="grid grid-cols-5 gap-1 sm:gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
                 
                 <button 
                   onClick={() => setWorkoutModalOpen(true)}
-                  className="p-1.5 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
+                  className="p-2 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
                 >
-                  <Dumbbell className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Treinar</span>
+                  <Dumbbell className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Treinar</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('history'); setDrawerTitle('Histórico & RPE de Treinos'); setDrawerOpen(true); }}
-                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
+                  className="p-2 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer"
                 >
-                  <History className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Histórico</span>
+                  <History className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Histórico</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('ranking'); setDrawerTitle('Tabela de Honra Viking'); setDrawerOpen(true); }}
-                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
+                  className="p-2 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer"
                 >
-                  <Trophy className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ranking</span>
+                  <Trophy className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ranking</span>
                 </button>
 
                 <button 
                   onClick={() => { setDrawerType('settings'); setDrawerTitle('Configurações de Força'); setDrawerOpen(true); }}
-                  className="p-1.5 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer"
+                  className="p-2 sm:p-4 rounded-xl bg-viking-dark border border-viking-gold/20 text-viking-gold hover:bg-viking-gold/10 font-bold text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer"
                 >
-                  <Settings className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ajustar</span>
+                  <Settings className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Ajustar</span>
                 </button>
 
                 <button 
@@ -4865,9 +4865,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setDrawerTitle('Feedback com o Treinador'); 
                     setDrawerOpen(true); 
                   }}
-                  className="p-1.5 sm:p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-[8px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 sm:gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
+                  className="p-2 sm:p-4 rounded-xl bg-viking-gold/10 border border-viking-gold hover:bg-viking-gold/20 font-black text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer text-viking-gold animate-pulse shadow-md shadow-viking-gold/5"
                 >
-                  <MessageSquare className="w-3 h-3 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Chat</span>
+                  <MessageSquare className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Chat</span>
                 </button>
 
               </div>
@@ -11967,7 +11967,7 @@ Equipe Viking Force`);
               </div>
 
               {/* Submit panel */}
-              <div className="p-4 sm:p-6 border-t border-viking-gold/15 bg-[#140e0c]/90 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0 mb-safe">
+              <div className="p-4 sm:p-6 border-t border-viking-gold/15 bg-[#140e0c]/95 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
                 <button 
                   onClick={handleWorkoutSubmit}
                   className="w-full sm:flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black uppercase text-[10px] sm:text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
