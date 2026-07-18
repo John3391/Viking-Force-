@@ -76,7 +76,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent , TrainingProtocol } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent, TrainingProtocol, CardioSession, CardioGoal, CardioPrescription } from './types';
 import { ProtocolsDrawer } from './components/ProtocolsDrawer';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 
@@ -346,6 +346,28 @@ export default function App() {
 
   // Toast notification stack
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Reusable helper to update a student's cardio and target logs
+  const handleUpdateStudentCardio = (studentEmail: string, updater: (profile: StudentProfile) => Partial<StudentProfile>) => {
+    const email = studentEmail.toLowerCase();
+    const currentStudent = studentsData[email];
+    if (!currentStudent) return;
+
+    const updatedProfile = {
+      ...currentStudent,
+      ...updater(currentStudent)
+    };
+
+    setStudentsData(prev => {
+      const newStudents = { ...prev, [email]: updatedProfile };
+      localStorage.setItem('viking_students', JSON.stringify(newStudents));
+      return newStudents;
+    });
+
+    saveStudentToFirebase(email, updatedProfile).catch(err => {
+      console.error("Firebase save athlete error:", err);
+    });
+  };
 
   // Search filter state for Trainer dashboard
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -743,7 +765,7 @@ export default function App() {
         
         // Ensure state and localstorage match current authenticated user
         const storedUserObj = localStorage.getItem('viking_current_user');
-        let name = isTrainer ? 'John Vasques' : (email.split('@')[0]);
+        let name = isTrainer ? 'John Rodrigues' : (email.split('@')[0]);
         if (storedUserObj) {
           try {
             const parsed = JSON.parse(storedUserObj);
@@ -1708,8 +1730,14 @@ export default function App() {
       return;
     }
 
-    // MAP TRAINER LOGINS (As requested: name "john", password "3636")
-    const isTrainerLogin = email === 'john' || email === TRAINER_EMAIL;
+    // MAP TRAINER LOGINS (As requested: name "John Rodrigues", password "3636")
+    const isTrainerLogin = 
+      email === 'john' || 
+      email === 'john rodrigues' || 
+      email === 'john.rodrigues' || 
+      email === 'john.rodrigues@gmail.com' || 
+      email === TRAINER_EMAIL;
+
     if (isTrainerLogin) {
       if (password !== '3636') {
         showToast('Senha do Treinador incorreta!', 'error');
@@ -1752,7 +1780,7 @@ export default function App() {
             console.error("Error loading students on trainer login:", fetchErr);
           }
           
-          handleLoginSuccess({ name: 'John Vasques', email, role: 'trainer' });
+          handleLoginSuccess({ name: 'John Rodrigues', email, role: 'trainer' });
         } else {
           // If it's a student, let's check if their profile exists in Firestore / local state
           const student = studentsData[email];
@@ -4665,32 +4693,47 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </button>
             </div>
 
-            {studentSubTab === 'cardio' && (
+            {studentSubTab === 'cardio' && activeStudentProfile && (
               <CardioView 
                 profile={activeStudentProfile}
                 role={currentUser?.role || 'student'}
                 onAddSession={(session) => {
-                  const email = currentUser?.email.toLowerCase() || '';
-                  const updatedStudent = {
-                    ...activeStudentProfile,
-                    cardioSessions: [...(activeStudentProfile.cardioSessions || []), session]
-                  };
-                  // Logic to update student data in state and firebase
-                  const updatedStudents = { ...studentsData, [email]: updatedStudent };
-                  setStudentsData(updatedStudents);
-                  localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
-                  saveStudentToFirebase(email, updatedStudent);
+                  handleUpdateStudentCardio(currentUser?.email || '', (p) => ({
+                    cardioSessions: [...(p.cardioSessions || []), session]
+                  }));
+                  showToast('Sessão de cardio registrada com glória!', 'success');
                 }}
                 onAddGoal={(goal) => {
-                  const email = currentUser?.email.toLowerCase() || '';
-                  const updatedStudent = {
-                    ...activeStudentProfile,
-                    cardioGoals: [...(activeStudentProfile.cardioGoals || []), goal]
-                  };
-                  const updatedStudents = { ...studentsData, [email]: updatedStudent };
-                  setStudentsData(updatedStudents);
-                  localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
-                  saveStudentToFirebase(email, updatedStudent);
+                  handleUpdateStudentCardio(currentUser?.email || '', (p) => ({
+                    cardioGoals: [...(p.cardioGoals || []), goal]
+                  }));
+                  showToast('Novo objetivo de cardio definido!', 'success');
+                }}
+                onDeleteSession={(sessionId) => {
+                  handleUpdateStudentCardio(currentUser?.email || '', (p) => ({
+                    cardioSessions: (p.cardioSessions || []).filter(s => s.id !== sessionId)
+                  }));
+                  showToast('Registro de cardio removido.', 'info');
+                }}
+                onDeleteGoal={(goalId) => {
+                  handleUpdateStudentCardio(currentUser?.email || '', (p) => ({
+                    cardioGoals: (p.cardioGoals || []).filter(g => g.id !== goalId)
+                  }));
+                  showToast('Objetivo removido.', 'info');
+                }}
+                onUpdateGoalStatus={(goalId, completed) => {
+                  handleUpdateStudentCardio(currentUser?.email || '', (p) => {
+                    const updatedGoals = (p.cardioGoals || []).map(g => 
+                      g.id === goalId 
+                        ? { ...g, completed, achievedDate: completed ? new Date().toISOString().split('T')[0] : undefined } 
+                        : g
+                    );
+                    if (completed) {
+                      confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
+                    }
+                    return { cardioGoals: updatedGoals };
+                  });
+                  showToast(completed ? 'Meta alcançada! Glória aos deuses!' : 'Meta reaberta.', completed ? 'success' : 'info');
                 }}
               />
             )}
@@ -8999,6 +9042,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                         <button 
                           onClick={() => {
+                            setDrawerTitle(`Cardio & Corridas: ${s.name}`);
+                            setDrawerType('studentCardio');
+                          }}
+                          className="p-3 rounded-xl bg-[#0d0908] border border-viking-gold/25 hover:border-viking-gold hover:bg-viking-gold/10 text-viking-silver transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <Zap className="w-4 h-4 text-viking-gold animate-pulse" /> <span className="text-xs font-bold uppercase tracking-wider">Prescrever Cardio</span>
+                        </button>
+
+                        <button 
+                          onClick={() => {
                             sendWorkoutPlanEmail(editingStudentEmail, s);
                           }}
                           className="p-3 rounded-xl bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 text-viking-gold transition-all flex items-center gap-2 cursor-pointer"
@@ -9017,6 +9070,66 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         </button>
                       </div>
                     </div>
+                  );
+                })()}
+
+                {/* 5.6 Trainer's Student Cardio Prescription & Tracking */}
+                {drawerType === 'studentCardio' && (() => {
+                  const s = studentsData[editingStudentEmail];
+                  if (!s) return <p className="text-viking-silver">Atleta não encontrado.</p>;
+
+                  return (
+                    <CardioView 
+                      profile={s}
+                      role="trainer"
+                      onAddSession={(session) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioSessions: [...(p.cardioSessions || []), session]
+                        }));
+                        showToast('Sessão de cardio registrada para o atleta!', 'success');
+                      }}
+                      onAddGoal={(goal) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioGoals: [...(p.cardioGoals || []), goal]
+                        }));
+                        showToast('Novo objetivo de cardio definido para o atleta!', 'success');
+                      }}
+                      onAddPrescription={(prescription) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioPrescriptions: [...(p.cardioPrescriptions || []), prescription]
+                        }));
+                        showToast('Prescrição de cardio adicionada com sucesso!', 'success');
+                      }}
+                      onDeleteSession={(sessionId) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioSessions: (p.cardioSessions || []).filter(sess => sess.id !== sessionId)
+                        }));
+                        showToast('Registro de cardio removido.', 'info');
+                      }}
+                      onDeleteGoal={(goalId) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioGoals: (p.cardioGoals || []).filter(g => g.id !== goalId)
+                        }));
+                        showToast('Objetivo removido.', 'info');
+                      }}
+                      onDeletePrescription={(prescriptionId) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => ({
+                          cardioPrescriptions: (p.cardioPrescriptions || []).filter(pr => pr.id !== prescriptionId)
+                        }));
+                        showToast('Prescrição de cardio removida.', 'info');
+                      }}
+                      onUpdateGoalStatus={(goalId, completed) => {
+                        handleUpdateStudentCardio(editingStudentEmail, (p) => {
+                          const updatedGoals = (p.cardioGoals || []).map(g => 
+                            g.id === goalId 
+                              ? { ...g, completed, achievedDate: completed ? new Date().toISOString().split('T')[0] : undefined } 
+                              : g
+                          );
+                          return { cardioGoals: updatedGoals };
+                        });
+                        showToast(completed ? 'Meta marcada como concluída!' : 'Meta reaberta.', 'success');
+                      }}
+                    />
                   );
                 })()}
 

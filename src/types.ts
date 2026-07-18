@@ -113,18 +113,37 @@ export interface ChatMessage {
 export interface CardioSession {
   id: string;
   date: string;
-  type: 'running' | 'cycling' | 'other';
+  type: 'running' | 'cycling' | 'rowing' | 'sprints' | 'other';
   durationMinutes: number;
   distanceKm?: number;
   intensity?: 'low' | 'moderate' | 'high';
+  sprintSpeedKmh?: number;
+  sprintTimeSeconds?: number;
+  paceMinPerKm?: string;
   note?: string;
 }
 
 export interface CardioGoal {
-  type: 'running' | 'cycling' | 'other';
+  id: string;
+  type: 'running' | 'cycling' | 'rowing' | 'sprints' | 'other';
+  title: string;
   targetDistanceKm?: number;
   targetDurationMinutes?: number;
+  targetSprintSpeedKmh?: number;
   deadline?: string;
+  completed?: boolean;
+  achievedDate?: string;
+}
+
+export interface CardioPrescription {
+  id: string;
+  type: 'running' | 'cycling' | 'rowing' | 'sprints' | 'other';
+  frequency: string; // e.g. "2x por semana"
+  instructions: string; // e.g. "Sprint 10x 100m Z5"
+  targetDistanceKm?: number;
+  targetDurationMinutes?: number;
+  targetIntensity?: 'low' | 'moderate' | 'high';
+  datePrescribed: string;
 }
 
 export interface StudentProfile {
@@ -146,6 +165,7 @@ export interface StudentProfile {
   sessions: LoggedSession[];
   cardioSessions?: CardioSession[];
   cardioGoals?: CardioGoal[];
+  cardioPrescriptions?: CardioPrescription[];
   gender?: 'male' | 'female';
   age?: number;
   bodyWeight?: number;
