@@ -49,5 +49,12 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && isValidId(eventId);
       allow list: if isSignedIn();
     }
+
+    // 6. Rules for Mobility Exercises collection
+    match /mobility_exercises/{exerciseId} {
+      allow get, delete: if isSignedIn() && isValidId(exerciseId);
+      allow create, update: if isSignedIn() && isValidId(exerciseId);
+      allow list: if isSignedIn();
+    }
   }
 }

@@ -1,3 +1,4 @@
+import { CardioView } from './components/CardioView';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -63,7 +64,7 @@ import {
   Columns,
   Lock,
   Calendar,
-  Users,
+  Users, Target,
   Camera,
   Image as ImageIcon,
   Bell,
@@ -277,7 +278,7 @@ export default function App() {
 
   // Active UI Navigation state
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks'>('overview');
+  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks' | 'cardio'>('overview');
   const [wilksRatios, setWilksRatios] = useState({ squat: 38, bench: 24, deadlift: 38 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   
@@ -291,6 +292,7 @@ export default function App() {
   
   const hasCheckedDueDatesRef = useRef<boolean>(false);
   const previousStudentsRef = useRef<Record<string, StudentProfile>>({});
+  const lastOpenedWorkoutRef = useRef<{ open: boolean; week: number; day: string }>({ open: false, week: 1, day: 'A' });
   const [chatMessageInput, setChatMessageInput] = useState<string>('');
   const [chatImageFile, setChatImageFile] = useState<File | null>(null);
   const [isUploadingChatImage, setIsUploadingChatImage] = useState<boolean>(false);
@@ -601,60 +603,78 @@ export default function App() {
   // Reset workout panel view configuration, initialize sets and rest timer
   useEffect(() => {
     if (workoutModalOpen) {
-      setWorkoutLayout('sidebar');
-      setWorkoutViewMode('slide');
-      setCurrentExerciseIndex(0);
-      setRestTimerActive(false);
-      setRestTimerRemaining(restTimerSeconds);
+      const wasClosed = !lastOpenedWorkoutRef.current.open;
+      const dayChanged = lastOpenedWorkoutRef.current.week !== selectedWeek || lastOpenedWorkoutRef.current.day !== selectedDay;
+      
+      lastOpenedWorkoutRef.current = { open: true, week: selectedWeek, day: selectedDay };
+
+      if (wasClosed || dayChanged) {
+        setWorkoutLayout('sidebar');
+        setWorkoutViewMode('slide');
+        setCurrentExerciseIndex(0);
+        setRestTimerActive(false);
+        setRestTimerRemaining(restTimerSeconds);
+      }
 
       // Initialize sets state for the exercises in the current selected training day
       const activeProg = activeStudentProfile?.customProgram || trainingProgram;
       const currentExercises = activeProg.weeks[selectedWeek]?.[selectedDay] || [];
-      const initialSets: Record<string, { reps: number; weight: number }[]> = {};
       
-      currentExercises.forEach(ex => {
-        let defaultWeight = 0;
-        if (ex.main) {
-          const exNameLower = ex.name.toLowerCase();
-          let pr = ex.baseWeight || null;
-          if (!pr && activeStudentProfile) {
-            if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-              pr = activeStudentProfile.prs.squat;
-            } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-              pr = activeStudentProfile.prs.bench;
-            } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-              pr = activeStudentProfile.prs.deadlift;
-            }
-          }
-          let intensityRatio = 0;
-          if (typeof ex.intensity === 'number') {
-            intensityRatio = ex.intensity;
-          } else if (typeof ex.intensity === 'string') {
-            const parsed = parseFloat(ex.intensity.replace('%', ''));
-            if (!isNaN(parsed)) {
-              intensityRatio = parsed > 1 ? parsed / 100 : parsed;
-            }
+      setExerciseSetsState(prevSets => {
+        const initialSets: Record<string, { reps: number; weight: number; done?: boolean; note?: string }[]> = {};
+        
+        currentExercises.forEach(ex => {
+          // If the student already has set progress logged in prevSets, preserve it!
+          if (!wasClosed && !dayChanged && prevSets[ex.id] && prevSets[ex.id].length > 0) {
+            initialSets[ex.id] = prevSets[ex.id];
+            return;
           }
 
-          if (pr && intensityRatio > 0) {
-            defaultWeight = Math.round(pr * intensityRatio);
-          } else if (pr) {
-            defaultWeight = pr;
+          let defaultWeight = 0;
+          if (ex.main) {
+            const exNameLower = ex.name.toLowerCase();
+            let pr = ex.baseWeight || null;
+            if (!pr && activeStudentProfile) {
+              if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                pr = activeStudentProfile.prs.squat;
+              } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                pr = activeStudentProfile.prs.bench;
+              } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                pr = activeStudentProfile.prs.deadlift;
+              }
+            }
+            let intensityRatio = 0;
+            if (typeof ex.intensity === 'number') {
+              intensityRatio = ex.intensity;
+            } else if (typeof ex.intensity === 'string') {
+              const parsed = parseFloat(ex.intensity.replace('%', ''));
+              if (!isNaN(parsed)) {
+                intensityRatio = parsed > 1 ? parsed / 100 : parsed;
+              }
+            }
+
+            if (pr && intensityRatio > 0) {
+              defaultWeight = Math.round(pr * intensityRatio);
+            } else if (pr) {
+              defaultWeight = pr;
+            }
+          } else {
+            defaultWeight = ex.baseWeight || 0;
           }
-        } else {
-          defaultWeight = ex.baseWeight || 0;
-        }
-        
-        // Populate sets with ex.sets count
-        const setsCount = ex.sets || 3;
-        initialSets[ex.id] = Array.from({ length: setsCount }, () => ({
-          reps: ex.reps || 8,
-          weight: defaultWeight,
-          done: false
-        }));
+          
+          // Populate sets with ex.sets count
+          const setsCount = ex.sets || 3;
+          initialSets[ex.id] = Array.from({ length: setsCount }, () => ({
+            reps: ex.reps || 8,
+            weight: defaultWeight,
+            done: false
+          }));
+        });
+
+        return initialSets;
       });
-      
-      setExerciseSetsState(initialSets);
+    } else {
+      lastOpenedWorkoutRef.current.open = false;
     }
   }, [workoutModalOpen, selectedWeek, selectedDay, activeStudentProfile?.customProgram, activeStudentProfile?.prs, trainingProgram]);
 
@@ -1074,6 +1094,7 @@ export default function App() {
         customProgram: newProg
       };
       setStudentsData(updatedStudents);
+      localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
       saveStudentToFirebase(email, updatedStudents[email]);
     }
   };
@@ -3277,28 +3298,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       updatedWeeks[editorWeek] = { A: [], B: [], C: [] };
     }
     updatedWeeks[editorWeek][editorDay] = editorExercises;
-    saveEditorProgramToDB({ weeks: updatedWeeks });
+    const newProg = { weeks: updatedWeeks };
     
-    // Add notification to THIS student only
+    setEditorProgram(newProg);
+
     const email = editingStudentEmail.toLowerCase();
-    const updatedStudents = { ...studentsData };
-    const notification = {
-      id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
-      message: `Novo treino disponível! Semana ${editorWeek} - Treino ${editorDay}`,
-      date: new Date().toISOString(),
-      read: false,
-      type: 'info' as const
-    };
-    
-    if (updatedStudents[email]) {
-      updatedStudents[email] = {
-        ...updatedStudents[email],
-        notifications: [notification, ...(updatedStudents[email].notifications || [])]
+    const student = studentsData[email];
+    if (student) {
+      const updatedStudents = { ...studentsData };
+      
+      const notification = {
+        id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
+        message: `Novo treino disponível! Semana ${editorWeek} - Treino ${editorDay}`,
+        date: new Date().toISOString(),
+        read: false,
+        type: 'info' as const
       };
+
+      updatedStudents[email] = {
+        ...student,
+        customProgram: newProg,
+        notifications: [notification, ...(student.notifications || [])]
+      };
+
+      setStudentsData(updatedStudents);
+      localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
       saveStudentToFirebase(email, updatedStudents[email]);
     }
-    
-    setStudentsData(updatedStudents);
 
     showToast(`Prescrição da Semana ${editorWeek} - Treino ${editorDay} salva para o guerreiro!`, 'success');
     
@@ -3524,6 +3550,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   }`}
                 >
                   <Activity className="w-4 h-4" /> Início
+                </button>
+                
+                <button 
+                  onClick={() => { setActiveTab('cardio'); closeAllDrawers(); setWorkoutModalOpen(false); setNavDropdownOpen(false); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeTab === 'cardio' && !drawerOpen && !workoutModalOpen 
+                      ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
+                      : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" /> Cardio
                 </button>
                 
                 {currentUser?.role === 'student' ? (
@@ -4607,6 +4644,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 ⚔️ Treinos
               </button>
               <button 
+                onClick={() => setStudentSubTab('cardio')}
+                className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                  studentSubTab === 'cardio' 
+                    ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
+                    : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
+                }`}
+              >
+                🏃 Cardio
+              </button>
+              <button 
                 onClick={() => setStudentSubTab('wilks')}
                 className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
                   studentSubTab === 'wilks' 
@@ -4618,8 +4665,136 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </button>
             </div>
 
+            {studentSubTab === 'cardio' && (
+              <CardioView 
+                profile={activeStudentProfile}
+                role={currentUser?.role || 'student'}
+                onAddSession={(session) => {
+                  const email = currentUser?.email.toLowerCase() || '';
+                  const updatedStudent = {
+                    ...activeStudentProfile,
+                    cardioSessions: [...(activeStudentProfile.cardioSessions || []), session]
+                  };
+                  // Logic to update student data in state and firebase
+                  const updatedStudents = { ...studentsData, [email]: updatedStudent };
+                  setStudentsData(updatedStudents);
+                  localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
+                  saveStudentToFirebase(email, updatedStudent);
+                }}
+                onAddGoal={(goal) => {
+                  const email = currentUser?.email.toLowerCase() || '';
+                  const updatedStudent = {
+                    ...activeStudentProfile,
+                    cardioGoals: [...(activeStudentProfile.cardioGoals || []), goal]
+                  };
+                  const updatedStudents = { ...studentsData, [email]: updatedStudent };
+                  setStudentsData(updatedStudents);
+                  localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
+                  saveStudentToFirebase(email, updatedStudent);
+                }}
+              />
+            )}
+
             {studentSubTab === 'overview' && (
               <>
+                {/* DYNAMIC TARGET EVENT CARD - MARCAÇÃO DO ALVO DO ALUNO */}
+                {activeStudentProfile.competitionDate && (() => {
+                  const targetEvent = calendarEvents.find(ev => ev.id === activeStudentProfile.targetEventId);
+                  const days = Math.max(0, Math.ceil((new Date(activeStudentProfile.competitionDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)));
+                  const wks = Math.floor(days / 7);
+                  const remDays = days % 7;
+                  const eventTitle = targetEvent?.title || activeStudentProfile.targetEventName || 'Dia de Teste / Competição';
+                  const eventDesc = targetEvent?.description || 'Seu treinador marcou esta data especial no seu pergaminho. Prepare seu espírito, refine sua técnica e treine firme para superar seus limites no salão de ferro!';
+                  const eventType = targetEvent?.type || 'other';
+
+                  return (
+                    <motion.div
+                      initial={{ scale: 0.98, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="bg-gradient-to-r from-viking-gold/10 via-[#1d1412]/95 to-viking-gold/5 border-2 border-viking-gold/45 rounded-3xl p-5 sm:p-6 shadow-[0_4px_30px_rgba(212,175,55,0.15)] relative overflow-hidden text-left mb-6"
+                    >
+                      {/* Animated gold particle background or visual glow */}
+                      <div className="absolute right-0 top-0 w-32 h-32 bg-viking-gold/10 rounded-full blur-3xl pointer-events-none" />
+                      
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
+                        <div className="space-y-2.5 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded bg-viking-gold text-viking-dark flex items-center gap-1">
+                              <Target className="w-3 h-3" /> Alvo de Combate Designado
+                            </span>
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded border ${
+                              eventType === 'competition' 
+                                ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                                : eventType === 'test' 
+                                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' 
+                                  : 'bg-viking-gold/15 text-viking-gold border-viking-gold/25'
+                            }`}>
+                              {eventType === 'competition' ? 'Campeonato Oficial 🏆' : eventType === 'test' ? 'Teste de 1RM / Carga MÁX ⚔️' : 'Evento Especial 📅'}
+                            </span>
+                          </div>
+
+                          <h2 className="font-viking-display text-xl sm:text-2xl font-black text-[#e0d3a8] tracking-wide">
+                            {eventTitle}
+                          </h2>
+
+                          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-viking-silver/95">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-4 h-4 text-viking-gold" />
+                              Data: <span className="text-[#e0d3a8]">{activeStudentProfile.competitionDate.split('-').reverse().join('/')}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-4 h-4 text-viking-gold animate-pulse" />
+                              Contagem Regressiva: <span className="text-viking-gold uppercase font-black">
+                                {days === 0 ? 'HOJE É O GRANDE DIA! 🔥' : wks > 0 ? `${wks} sem e ${remDays} dias restantes` : `${days} dias restantes`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-viking-silver text-xs sm:text-sm leading-relaxed max-w-3xl italic">
+                            "{eventDesc}"
+                          </p>
+                        </div>
+
+                        <div className="flex flex-row md:flex-col gap-2.5 shrink-0 self-stretch md:self-center justify-end">
+                          <button
+                            onClick={() => {
+                              setDrawerType('calendar');
+                              setDrawerTitle('Calendário Competitivo');
+                              setDrawerOpen(true);
+                            }}
+                            className="flex-1 md:flex-none py-2 px-4 bg-viking-gold hover:bg-viking-gold-dark text-viking-dark font-black uppercase text-xs tracking-wider rounded-xl transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Calendar className="w-4 h-4" /> Ver no Calendário
+                          </button>
+                          
+                          <a
+                            href={`https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle)}&dates=${activeStudentProfile.competitionDate.replace(/-/g, '')}/${activeStudentProfile.competitionDate.replace(/-/g, '')}&details=${encodeURIComponent(eventDesc)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 md:flex-none py-2 px-4 bg-viking-dark hover:bg-[#231a18] border border-viking-gold/30 hover:border-viking-gold text-viking-gold font-black uppercase text-xs tracking-wider rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            Add ao Google
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Cool Strength Tip Banner inside target event card */}
+                      <div className="mt-4 pt-3 border-t border-viking-gold/15 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-viking-silver/60">
+                        <span className="flex items-center gap-1.5 font-semibold">
+                          <Flame className="w-3.5 h-3.5 text-viking-gold" />
+                          <span>Dica Viking de Preparação:</span>
+                          <span className="text-viking-silver italic">
+                            {eventType === 'test' 
+                              ? "Foque na velocidade da barra e use o RPE como guia para não queimar o sistema nervoso antes da hora."
+                              : "Mantenha a dieta regulada, faça a pesagem com antecedência e garanta uma noite perfeita de sono."}
+                          </span>
+                        </span>
+                        <span className="text-viking-gold/70 font-bold self-end sm:self-auto">Que Odin guie seus levantamentos!</span>
+                      </div>
+                    </motion.div>
+                  );
+                })()}
+
                 {/* SENTINELA VIKING - SIMULATED NOTIFICATION ALERT & CONTROLS */}
             {(() => {
               const todayString = new Date().toLocaleDateString('pt-BR');
@@ -4875,13 +5050,52 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
             {/* Core Workout Prescribed Preview */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-viking-gold/15">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-viking-gold/15">
                 <div>
                   <h3 className="font-viking-display text-lg font-bold text-viking-gold">PROVA ATUAL PROGRAMADA</h3>
                   <p className="text-xs text-viking-silver">Desenvolvida pelo Treinador John com foco em técnica de Powerlifting</p>
                 </div>
-                <div className="text-xs bg-viking-darker border border-viking-gold/20 px-3.5 py-1.5 rounded-xl text-viking-gold font-bold">
-                  🏋️ Treino {selectedDay}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-viking-darker border border-viking-gold/20 px-3 py-1.5 rounded-xl">
+                    <span className="text-[10px] text-viking-silver uppercase font-bold">Semana:</span>
+                    <select
+                      value={selectedWeek}
+                      onChange={e => {
+                        setSelectedWeek(parseInt(e.target.value));
+                        setSessionRpeState({});
+                        setExerciseFailureState({});
+                      }}
+                      className="bg-transparent text-viking-gold text-xs font-bold focus:outline-none cursor-pointer"
+                    >
+                      {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks).map(Number).sort((a,b) => a-b).map(wk => (
+                        <option key={wk} value={wk} className="bg-[#140e0c] text-viking-gold">
+                          Semana {wk}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-viking-darker border border-viking-gold/20 px-3 py-1.5 rounded-xl">
+                    <span className="text-[10px] text-viking-silver uppercase font-bold">Treino:</span>
+                    <select
+                      value={selectedDay}
+                      onChange={e => {
+                        const newDay = e.target.value;
+                        setSelectedDay(newDay);
+                        setSessionRpeState({});
+                        setExerciseFailureState({});
+                        setExerciseWarmupState({});
+                        setExerciseSetsState({});
+                        setCurrentExerciseIndex(0);
+                      }}
+                      className="bg-transparent text-viking-gold text-xs font-bold focus:outline-none cursor-pointer"
+                    >
+                      {Object.keys((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek] || { A: [], B: [], C: [] }).sort().map(day => (
+                        <option key={day} value={day} className="bg-[#140e0c] text-viking-gold">
+                          Treino {day}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -7014,44 +7228,85 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <option value="other">Outro</option>
                           </select>
                         </div>
-                          <textarea 
-                            id="newEventDesc"
-                            placeholder="Descrição do evento..."
-                            className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold min-h-[60px]"
-                          ></textarea>
-                          <button
-                            onClick={() => {
-                              const title = (document.getElementById('newEventTitle') as HTMLInputElement).value;
-                              const date = (document.getElementById('newEventDate') as HTMLInputElement).value;
-                              const type = (document.getElementById('newEventType') as HTMLSelectElement).value as any;
-                              const desc = (document.getElementById('newEventDesc') as HTMLTextAreaElement).value;
-                              if (!title || !date) {
-                                showToast('Título e data são obrigatórios!', 'error');
-                                return;
-                              }
-                              const newEvent: CalendarEvent = {
-                                id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
-                                title,
-                                date,
-                                type,
-                                description: desc
+
+                        {currentUser?.role === 'trainer' && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-viking-gold tracking-wider">Enviar data de teste/competição para o guerreiro:</label>
+                            <select 
+                              id="newEventStudentTarget"
+                              className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                            >
+                              <option value="">-- Evento Geral (Sem designar atleta específico) --</option>
+                              {(Object.entries(studentsData) as [string, StudentProfile][]).map(([email, s]) => (
+                                <option key={email} value={email}>
+                                  {s.name} ({email})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <textarea 
+                          id="newEventDesc"
+                          placeholder="Descrição do evento..."
+                          className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold min-h-[60px]"
+                        ></textarea>
+                        <button
+                          onClick={() => {
+                            const title = (document.getElementById('newEventTitle') as HTMLInputElement).value;
+                            const date = (document.getElementById('newEventDate') as HTMLInputElement).value;
+                            const type = (document.getElementById('newEventType') as HTMLSelectElement).value as any;
+                            const desc = (document.getElementById('newEventDesc') as HTMLTextAreaElement).value;
+                            const targetStudentEmail = (document.getElementById('newEventStudentTarget') as HTMLSelectElement)?.value || '';
+
+                            if (!title || !date) {
+                              showToast('Título e data são obrigatórios!', 'error');
+                              return;
+                            }
+                            const newEventId = Date.now().toString() + '_' + Math.random().toString(36).substring(7);
+                            const newEvent: CalendarEvent = {
+                              id: newEventId,
+                              title,
+                              date,
+                              type,
+                              description: desc
+                            };
+                            const updated = [...calendarEvents, newEvent].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                            setCalendarEvents(updated);
+                            saveCalendarEventToFirebase(newEvent);
+                            
+                            if (targetStudentEmail && studentsData[targetStudentEmail]) {
+                              const originalStudent = studentsData[targetStudentEmail];
+                              const updatedStudent = {
+                                ...originalStudent,
+                                competitionDate: date,
+                                targetEventId: newEventId,
+                                targetEventName: title
                               };
-                              const updated = [...calendarEvents, newEvent].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                              setCalendarEvents(updated);
-                              saveCalendarEventToFirebase(newEvent);
+                              const updatedStudents = {
+                                ...studentsData,
+                                [targetStudentEmail]: updatedStudent
+                              };
+                              saveStudentsToDB(updatedStudents);
+                              showToast(`Evento criado e enviado para o guerreiro ${originalStudent.name}!`, 'success');
+                            } else {
                               showToast('Evento adicionado ao calendário!', 'success');
-                              
-                              // Clear fields
-                              (document.getElementById('newEventTitle') as HTMLInputElement).value = '';
-                              (document.getElementById('newEventDate') as HTMLInputElement).value = '';
-                              (document.getElementById('newEventDesc') as HTMLTextAreaElement).value = '';
-                            }}
-                            className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase rounded-lg transition-all"
-                          >
-                            Forjar Evento
-                          </button>
-                        </div>
+                            }
+                            
+                            // Clear fields
+                            (document.getElementById('newEventTitle') as HTMLInputElement).value = '';
+                            (document.getElementById('newEventDate') as HTMLInputElement).value = '';
+                            (document.getElementById('newEventDesc') as HTMLTextAreaElement).value = '';
+                            if (document.getElementById('newEventStudentTarget')) {
+                              (document.getElementById('newEventStudentTarget') as HTMLSelectElement).value = '';
+                            }
+                          }}
+                          className="w-full py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase rounded-lg transition-all cursor-pointer"
+                        >
+                          Forjar Evento
+                        </button>
                       </div>
+                    </div>
 
                     <div className="space-y-3">
                       {calendarEvents.length === 0 ? (
@@ -7059,11 +7314,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                            Nenhum evento profetizado ainda. O horizonte está calmo.
                          </div>
                       ) : (
-                        calendarEvents.map(ev => (
-                          <div key={ev.id} className="bg-[#1a1210]/95 border border-viking-gold/30 p-4 rounded-xl relative overflow-hidden group shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
-                            <div className={`absolute top-0 left-0 w-1.5 h-full ${ev.type === 'competition' ? 'bg-red-500' : ev.type === 'test' ? 'bg-blue-500' : 'bg-viking-gold'}`}></div>
-                            <div className="flex justify-between items-start pl-3">
-                              <div>
+                        calendarEvents.map(ev => {
+                          const isMyTargetEvent = currentUser?.role === 'student' && activeStudentProfile?.targetEventId === ev.id;
+                          return (
+                            <div 
+                              key={ev.id} 
+                              className={`p-4 rounded-xl relative overflow-hidden group shadow-[0_4px_15px_rgba(0,0,0,0.3)] transition-all ${
+                                isMyTargetEvent 
+                                  ? 'bg-[#231714]/95 border-2 border-viking-gold shadow-[0_0_20px_rgba(212,175,55,0.25)]' 
+                                  : 'bg-[#1a1210]/95 border border-viking-gold/30'
+                              }`}
+                            >
+                              {isMyTargetEvent && (
+                                <span className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-viking-gold text-viking-dark flex items-center gap-1 animate-pulse shadow-md z-10">
+                                  <Target className="w-2.5 h-2.5" /> SEU COMBATE DESIGNADO ⚔️
+                                </span>
+                              )}
+                              <div className={`absolute top-0 left-0 w-1.5 h-full ${ev.type === 'competition' ? 'bg-red-500' : ev.type === 'test' ? 'bg-blue-500' : 'bg-viking-gold'}`}></div>
+                              <div className="flex justify-between items-start pl-3">
+                              <div className="flex-1 min-w-0">
                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${ev.type === 'competition' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : ev.type === 'test' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-viking-gold/10 text-viking-gold border border-viking-gold/30'}`}>
                                   {ev.type === 'competition' ? 'Torneio' : ev.type === 'test' ? 'Dia de Teste' : 'Evento'}
                                 </span>
@@ -7081,7 +7350,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 )}
                                 
                                 {(() => {
-                                  const signedUpStudents = Object.values(studentsData).filter(s => s.targetEventId === ev.id);
+                                  const signedUpStudents = (Object.entries(studentsData) as [string, StudentProfile][])
+                                    .map(([email, s]) => ({ email, ...s }))
+                                    .filter(s => s.targetEventId === ev.id);
                                   if (signedUpStudents.length > 0) {
                                     return (
                                       <div className="mt-3 pt-3 border-t border-viking-gold/10">
@@ -7091,8 +7362,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         </div>
                                         <div className="flex flex-wrap gap-1">
                                           {signedUpStudents.map(s => (
-                                            <span key={s.email} className="px-2 py-0.5 rounded bg-viking-gold/10 border border-viking-gold/20 text-[9px] font-bold text-[#e0d3a8]">
+                                            <span key={s.email} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-viking-gold/10 border border-viking-gold/20 text-[9px] font-bold text-[#e0d3a8]">
                                               {s.name}
+                                              {currentUser?.role === 'trainer' && (
+                                                <button
+                                                  onClick={() => {
+                                                    if (confirm(`Remover ${s.name} deste evento?`)) {
+                                                      const updatedStudent = {
+                                                        ...s,
+                                                        competitionDate: '',
+                                                        targetEventId: '',
+                                                        targetEventName: ''
+                                                      };
+                                                      // Remove non-serializable elements or temporary ones if any
+                                                      delete (updatedStudent as any).email;
+                                                      delete (updatedStudent as any).daysRemaining;
+                                                      
+                                                      const updatedData = { ...studentsData, [s.email]: updatedStudent };
+                                                      saveStudentsToDB(updatedData);
+                                                      showToast(`Removido ${s.name} do evento.`, 'info');
+                                                    }
+                                                  }}
+                                                  className="hover:text-red-500 font-bold ml-1 text-viking-gold/60 transition-colors cursor-pointer"
+                                                  title="Remover guerreiro"
+                                                >
+                                                  ×
+                                                </button>
+                                              )}
                                             </span>
                                           ))}
                                         </div>
@@ -7101,8 +7397,54 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   }
                                   return null;
                                 })()}
+
+                                {currentUser?.role === 'trainer' && (
+                                  <div className="mt-3 pt-3 border-t border-viking-gold/10 flex flex-col gap-1.5">
+                                    <span className="text-[9px] font-black uppercase text-viking-silver/60">Designar Atleta para este Evento:</span>
+                                    <div className="flex gap-1.5">
+                                      <select
+                                        id={`assign-student-${ev.id}`}
+                                        className="bg-[#140e0c] border border-viking-gold/20 rounded-lg px-2 py-1.5 text-[10px] font-bold text-[#e0d3a8] focus:outline-none focus:border-viking-gold flex-1 min-w-0"
+                                        defaultValue=""
+                                      >
+                                        <option value="" disabled>-- Selecionar Aluno --</option>
+                                        {(Object.entries(studentsData) as [string, StudentProfile][]).map(([email, s]) => (
+                                          <option key={email} value={email}>
+                                            {s.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={() => {
+                                          const selectEl = document.getElementById(`assign-student-${ev.id}`) as HTMLSelectElement;
+                                          const email = selectEl?.value;
+                                          if (!email) {
+                                            showToast('Selecione um aluno primeiro!', 'warning');
+                                            return;
+                                          }
+                                          const student = studentsData[email];
+                                          if (student) {
+                                            const updatedStudent = {
+                                              ...student,
+                                              competitionDate: ev.date,
+                                              targetEventId: ev.id,
+                                              targetEventName: ev.title
+                                            };
+                                            const updatedData = { ...studentsData, [email]: updatedStudent };
+                                            saveStudentsToDB(updatedData);
+                                            showToast(`Evento enviado para ${student.name}!`, 'success');
+                                            selectEl.value = ""; // Reset
+                                          }
+                                        }}
+                                        className="bg-viking-gold hover:bg-viking-gold/80 text-viking-dark px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all cursor-pointer"
+                                      >
+                                        Enviar
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <div className="flex flex-col items-end gap-2">
+                              <div className="flex flex-col items-end gap-2 ml-2">
                                 {currentUser?.role === 'trainer' && (
                                   <button
                                     onClick={() => {
@@ -7113,7 +7455,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         showToast('Evento removido.', 'info');
                                       }
                                     }}
-                                    className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                                    className="p-1.5 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 cursor-pointer"
                                     title="Remover Evento"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -7134,7 +7476,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       showToast('Evento definido como alvo!', 'success');
                                       setDrawerOpen(false);
                                     }}
-                                    className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                    className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                                       activeStudentProfile.targetEventId === ev.id
                                         ? 'bg-viking-gold text-viking-dark'
                                         : 'bg-viking-gold/10 text-viking-gold hover:bg-viking-gold/20 border border-viking-gold/30'
@@ -7146,7 +7488,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               </div>
                             </div>
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
