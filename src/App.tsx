@@ -4723,6 +4723,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 <div className="flex gap-2 w-full sm:w-auto relative z-10 shrink-0">
                   <button 
                     onClick={() => {
+                      if (activeStudentProfile.notifications && activeStudentProfile.notifications.length > 0) {
+                        const latestPrescription = activeStudentProfile.notifications.find(n => n.message.includes('Novo treino') && n.actionData);
+                        if (latestPrescription && latestPrescription.actionData) {
+                          setSelectedWeek(latestPrescription.actionData.week);
+                          setSelectedDay(latestPrescription.actionData.day);
+                          setSessionRpeState({});
+                          setExerciseFailureState({});
+                        }
+                      }
                       setWorkoutModalOpen(true);
                     }}
                     className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
@@ -5831,6 +5840,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 
                                 const isUnlocked = currentWilks >= lvl.target;
                                 const isCurrentGoal = !isUnlocked && (index === 0 || currentWilks >= [0, 150, 250, 325, 400][index]);
+                                const isCurrentTier = isUnlocked && (index === 4 || currentWilks < [250, 325, 400, 475][index]);
 
                                 const neededDiff = targetTotal - total;
 
@@ -5838,24 +5848,30 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   <tr 
                                     key={lvl.id} 
                                     className={`transition-all hover:bg-viking-gold/5 ${
-                                      isUnlocked 
-                                        ? 'bg-emerald-950/10 hover:bg-emerald-950/15' 
-                                        : isCurrentGoal 
-                                          ? 'bg-viking-gold/10 hover:bg-viking-gold/15 shadow-inner' 
-                                          : 'opacity-70 hover:opacity-100'
+                                      isCurrentTier
+                                        ? 'bg-viking-gold/15 outline outline-1 outline-viking-gold/40 shadow-[0_0_15px_rgba(212,175,55,0.15)] relative z-10'
+                                        : isUnlocked 
+                                          ? 'bg-emerald-950/10 hover:bg-emerald-950/15' 
+                                          : isCurrentGoal 
+                                            ? 'bg-viking-gold/5 hover:bg-viking-gold/10 shadow-inner' 
+                                            : 'opacity-70 hover:opacity-100'
                                     }`}
                                   >
                                     {/* Name and Status */}
                                     <td className="py-4 px-4 font-extrabold flex items-center gap-2">
                                       <span className="text-lg shrink-0">{lvl.badge}</span>
                                       <div>
-                                        <p className="text-white text-xs sm:text-sm font-black flex items-center gap-1.5">
+                                        <p className="text-white text-xs sm:text-sm font-black flex items-center gap-1.5 flex-wrap">
                                           {lvl.name}
-                                          {isUnlocked && (
+                                          {isCurrentTier ? (
+                                            <span className="text-[8px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 font-black px-1.5 py-0.5 rounded tracking-wider uppercase animate-pulse shadow-[0_0_8px_rgba(212,175,55,0.4)]">
+                                              Sua Patente
+                                            </span>
+                                          ) : isUnlocked ? (
                                             <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black px-1.5 py-0.5 rounded tracking-wider uppercase">
                                               Conquistado
                                             </span>
-                                          )}
+                                          ) : null}
                                           {isCurrentGoal && (
                                             <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded tracking-wider uppercase animate-pulse">
                                               Alvo Atual
@@ -9934,7 +9950,14 @@ Equipe Viking Force`);
                                 <span className="text-[10px] text-viking-silver">{sess.date}</span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <p className="text-xs text-viking-gold font-bold">{sess.sessionName}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs text-viking-gold font-bold">{sess.sessionName}</p>
+                                  {sess.exercises?.some(ex => ex.failed) && (
+                                    <span className="inline-flex items-center gap-1 bg-red-950/40 border border-red-500/30 px-1.5 py-0.5 rounded text-[9px] text-red-400 uppercase font-bold" title="Houve falha em um ou mais exercícios">
+                                      <AlertTriangle className="w-3 h-3" /> Falha Registrada
+                                    </span>
+                                  )}
+                                </div>
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                   sess.avgRPE >= 9 
                                     ? 'bg-red-950/40 text-red-400 border border-red-800/30' 
@@ -10710,8 +10733,11 @@ Equipe Viking Force`);
                                          (currentUser?.role === 'student' && msg.sender === 'student');
 
                             return (
-                              <div 
+                              <motion.div 
                                 key={msg.id + '_' + mIdx} 
+                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                                 className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}
                               >
                                 {/* Sender Tag */}
@@ -10734,7 +10760,7 @@ Equipe Viking Force`);
                                   )}
                                   {msg.text}
                                 </div>
-                              </div>
+                              </motion.div>
                             );
                           })
                         )}
@@ -10778,13 +10804,14 @@ Equipe Viking Force`);
                             placeholder="Digite um conselho de ferro ou feedback..."
                             className="flex-1 px-4 py-2.5 rounded-xl bg-black/60 border border-viking-gold/25 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30"
                           />
-                          <button 
+                          <motion.button 
+                            whileTap={{ scale: 0.85 }}
                             type="submit"
                             disabled={isUploadingChatImage || (!chatMessageInput.trim() && !chatImageFile)}
                             className="p-3 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 disabled:opacity-50 text-viking-dark font-black transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-viking-gold/10"
                           >
                             {isUploadingChatImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          </button>
+                          </motion.button>
                         </form>
                       </div>
                     </div>
@@ -11080,7 +11107,7 @@ Equipe Viking Force`);
                                     setSessionRpeState({});
                                     setExerciseFailureState({});
                                     setDrawerOpen(false);
-                                    setActiveTab('workout');
+                                    setWorkoutModalOpen(true);
                                   }}
                                   className="mt-2 px-3 py-1.5 bg-viking-gold/20 hover:bg-viking-gold/30 text-viking-gold border border-viking-gold/30 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                                 >
@@ -11409,7 +11436,21 @@ Equipe Viking Force`);
                               <div className="flex justify-between items-start gap-2">
                                 <div className="space-y-1">
                                   <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                                    <Dumbbell className="w-4 h-4 text-viking-gold" /> {ex.name}
+                                    <Dumbbell className="w-4 h-4 text-viking-gold shrink-0" /> {ex.name}
+                                    {(() => {
+                                      const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
+                                      const tips = ex.techniqueTips || matchedDbEx?.techniqueTips || '';
+                                      return tips ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveTipsModal({ name: ex.name, tips })}
+                                          className="w-5 h-5 ml-1 rounded-full bg-viking-gold/20 border border-viking-gold/40 text-viking-gold flex items-center justify-center text-[10px] font-black hover:bg-viking-gold hover:text-black transition-all cursor-pointer shrink-0"
+                                          title="Dicas Técnicas"
+                                        >
+                                          ?
+                                        </button>
+                                      ) : null;
+                                    })()}
                                   </h4>
                                   {ex.techniqueTips && (
                                     <p className="text-[11px] text-[#e0d3a8]/80 leading-relaxed">
@@ -12175,8 +12216,11 @@ Equipe Viking Force`);
                                 return sets.map((set, setIdx) => {
                                   const isActive = setIdx === firstIncompleteIdx;
                                   return (
-                                <div 
+                                <motion.div 
                                   key={setIdx} 
+                                  initial={false}
+                                  animate={isActive ? { scale: [1, 1.03, 1], borderColor: ['#d4af37', '#ffffff', '#d4af37'] } : { scale: 1 }}
+                                  transition={{ duration: 0.4 }}
                                   className={`flex flex-col gap-2 p-2 rounded-lg transition-all duration-500 border ${
                                     set.done 
                                       ? 'bg-green-950/20 border-green-500/30' 
@@ -12425,7 +12469,7 @@ Equipe Viking Force`);
                                       className="w-full bg-black/50 border border-viking-gold/20 rounded px-2 py-1.5 text-[11px] text-viking-silver focus:outline-none focus:border-viking-gold/50 disabled:opacity-50"
                                     />
                                   </div>
-                                </div>
+                                </motion.div>
                               );
                             });
                           })()}
