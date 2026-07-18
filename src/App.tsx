@@ -452,6 +452,7 @@ export default function App() {
   const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState<boolean>(false);
   const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
+  const [activeTipsModal, setActiveTipsModal] = useState<{ name: string; tips: string } | null>(null);
 
   // Viking Plans configuration
   const [vikingPlans, setVikingPlans] = useState<VikingPlan[]>(() => {
@@ -1951,6 +1952,29 @@ export default function App() {
     setCustomLogo('');
     localStorage.removeItem('viking_custom_logo');
     showToast('Logotipo original restaurado.', 'info');
+  };
+
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && currentUser?.email && activeStudentProfile) {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Escolha uma imagem de até 2MB.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          const updatedProfile = {
+            ...activeStudentProfile,
+            photoUrl: result
+          };
+          saveStudentsToDB({ ...studentsData, [currentUser.email.toLowerCase()]: updatedProfile });
+          showToast('Sua foto de perfil foi atualizada!', 'success');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleLogout = () => {
@@ -4139,8 +4163,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                 <div className="hidden sm:flex items-center gap-3 bg-viking-dark py-1.5 pl-3 pr-4 rounded-xl border border-viking-gold/20">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-viking-gold-dark to-viking-gold p-[2px] shadow-[0_0_10px_rgba(212,175,55,0.2)]">
-                    <div className="w-full h-full rounded-full bg-viking-darker flex items-center justify-center">
-                      <User className="w-4 h-4 text-viking-gold" />
+                    <div className="w-full h-full rounded-full bg-viking-darker flex items-center justify-center overflow-hidden">
+                      {currentUser?.role === 'student' && activeStudentProfile?.photoUrl ? (
+                         <img src={activeStudentProfile.photoUrl} alt="Perfil" className="w-full h-full object-cover" />
+                      ) : (
+                         <User className="w-4 h-4 text-viking-gold" />
+                      )}
                     </div>
                   </div>
                   <div className="text-left">
@@ -6884,14 +6912,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 </div>
                               ) : null}
 
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="text-sm font-bold text-[#e0d3a8] hover:text-viking-gold transition-colors truncate">{s.name}</h4>
-                                  <span className="text-[10px] text-viking-silver/50 hidden sm:inline">•</span>
-                                  <span className="text-[10px] text-viking-silver/60 truncate hidden sm:inline">{email}</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-[10px] text-viking-silver/50 sm:hidden">
-                                  <span>{email}</span>
+                              <div className="min-w-0 flex-1 flex items-center gap-3">
+                                {s.photoUrl ? (
+                                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-viking-gold/30">
+                                    <img src={s.photoUrl} alt={s.name} className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0">
+                                    <User className="w-4 h-4 text-viking-gold" />
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-bold text-[#e0d3a8] hover:text-viking-gold transition-colors truncate">{s.name}</h4>
+                                    <span className="text-[10px] text-viking-silver/50 hidden sm:inline">•</span>
+                                    <span className="text-[10px] text-viking-silver/60 truncate hidden sm:inline">{email}</span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-0.5 text-[10px] text-viking-silver/50 sm:hidden">
+                                    <span>{email}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -7005,9 +7044,20 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           )}
 
                           <div className="flex justify-between items-start">
-                            <div className="flex flex-col gap-1 pr-6">
-                              <h4 className="text-base font-bold text-[#e0d3a8]">{s.name}</h4>
-                              <p className="text-[10px] text-viking-silver truncate">{email}</p>
+                            <div className="flex items-center gap-3 pr-6">
+                              {s.photoUrl ? (
+                                <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-viking-gold/30">
+                                  <img src={s.photoUrl} alt={s.name} className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0">
+                                  <User className="w-5 h-5 text-viking-gold" />
+                                </div>
+                              )}
+                              <div className="flex flex-col min-w-0">
+                                <h4 className="text-base font-bold text-[#e0d3a8] truncate">{s.name}</h4>
+                                <p className="text-[10px] text-viking-silver truncate">{email}</p>
+                              </div>
                             </div>
                             {!isBatchMode && s.phone && (
                               <button
@@ -8401,6 +8451,32 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <div className="space-y-4">
                     <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                       <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-viking-gold" /> Perfil do Atleta
+                      </h4>
+                      <p className="text-[11px] text-viking-silver leading-relaxed">
+                        Adicione ou altere sua foto de perfil para ser reconhecido no salão de powerlifting.
+                      </p>
+                      <div className="flex items-center gap-4 pt-2">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-viking-gold-dark to-viking-gold p-[2px] shadow-[0_0_10px_rgba(212,175,55,0.2)]">
+                          <div className="w-full h-full rounded-full bg-viking-darker flex items-center justify-center overflow-hidden">
+                            {activeStudentProfile.photoUrl ? (
+                              <img src={activeStudentProfile.photoUrl} alt="Perfil" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-8 h-8 text-viking-gold" />
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-2 px-4 py-2 bg-viking-dark hover:bg-viking-gold/10 text-viking-gold border border-viking-gold/30 hover:border-viking-gold/50 rounded-xl transition-all cursor-pointer font-bold text-xs uppercase tracking-wider">
+                            <Camera className="w-4 h-4" /> Alterar Foto
+                            <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="hidden" />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
                         <Flame className="w-4 h-4 text-viking-gold" /> Calibragem de 1 Repetição Máxima (1RM)
                       </h4>
                       <p className="text-[11px] text-viking-silver leading-relaxed">
@@ -9741,14 +9817,24 @@ Equipe Viking Force`);
                           return <p className="text-sm text-viking-silver">Nenhum treino concluído ainda.</p>;
                         }
 
-                        return allSessions.map(sess => (
-                          <div key={`${sess.studentEmail}-${sess.id}`} className="bg-[#0d0908]/90 p-4 rounded-xl border border-viking-gold/20 shadow-md">
+                        return allSessions.map(sess => {
+                          const hasFailedExercise = sess.exercises?.some(ex => ex.failed);
+                          
+                          return (
+                          <div key={`${sess.studentEmail}-${sess.id}`} className={`bg-[#0d0908]/90 p-4 rounded-xl border shadow-md ${hasFailedExercise ? 'border-red-500/40' : 'border-viking-gold/20'}`}>
                             <div className="flex justify-between items-start mb-2">
                               <div>
                                 <p className="text-sm font-bold text-white flex items-center gap-2">
                                   <User className="w-4 h-4 text-viking-gold" /> {sess.studentName}
                                 </p>
-                                <p className="text-xs text-viking-gold/80">{sess.sessionName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <p className="text-xs text-viking-gold/80">{sess.sessionName}</p>
+                                  {hasFailedExercise && (
+                                    <span className="inline-flex items-center gap-1 bg-red-950/40 border border-red-500/30 px-1.5 py-0.5 rounded text-[9px] text-red-400 uppercase font-bold" title="Houve falha em um ou mais exercícios">
+                                      <AlertTriangle className="w-3 h-3" /> Falha Registrada
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <div className="text-right">
                                 <p className="text-[10px] text-viking-silver/60 uppercase tracking-wider">{sess.date}</p>
@@ -9772,7 +9858,7 @@ Equipe Viking Force`);
                               </div>
                             )}
                           </div>
-                        ));
+                        )});
                       })()}
                     </div>
                   </div>
@@ -11876,25 +11962,45 @@ Equipe Viking Force`);
                                     </button>
                                   </div>
                                 )}
-                                {(() => {
-                                  const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
-                                  const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;
-                                  if (!hasVideo) return null;
-                                  return (
-                                    <button 
-                                      type="button"
-                                      onClick={() => setActiveVideoModal({
-                                        name: ex.name,
-                                        videoUrl: ex.videoUrl || matchedDbEx?.videoUrl,
-                                        videoBase64: matchedDbEx?.videoBase64
-                                      })}
-                                      className="inline-flex items-center gap-1.5 text-[10px] font-bold text-viking-gold hover:text-white bg-viking-gold/10 border border-viking-gold/25 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-viking-gold/10"
-                                      title="Assistir execução no Templo"
-                                    >
-                                      <Video className="w-3.5 h-3.5 text-viking-gold" /> Ver Execução
-                                    </button>
-                                  );
-                                })()}
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const matchedDbEx = dbExercises.find(d => d.name.toLowerCase().trim() === ex.name.toLowerCase().trim());
+                                    const hasVideo = !!ex.videoUrl || !!matchedDbEx?.videoUrl || !!matchedDbEx?.videoBase64;
+                                    const hasTips = !!ex.techniqueTips || !!matchedDbEx?.techniqueTips;
+                                    
+                                    return (
+                                      <>
+                                        {hasVideo && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => setActiveVideoModal({
+                                              name: ex.name,
+                                              videoUrl: ex.videoUrl || matchedDbEx?.videoUrl,
+                                              videoBase64: matchedDbEx?.videoBase64
+                                            })}
+                                            className="inline-flex items-center gap-1.5 text-[10px] font-bold text-viking-gold hover:text-white bg-viking-gold/10 border border-viking-gold/25 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-viking-gold/10"
+                                            title="Assistir execução no Templo"
+                                          >
+                                            <Video className="w-3.5 h-3.5 text-viking-gold" /> Ver Execução
+                                          </button>
+                                        )}
+                                        {hasTips && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => setActiveTipsModal({
+                                              name: ex.name,
+                                              tips: ex.techniqueTips || matchedDbEx?.techniqueTips || ''
+                                            })}
+                                            className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 hover:text-white bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-emerald-500/10"
+                                            title="Dicas Técnicas"
+                                          >
+                                            <Info className="w-3.5 h-3.5 text-emerald-400" /> Dicas
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </div>
                             </div>
                             <span className="text-xs text-viking-silver">
@@ -12025,15 +12131,25 @@ Equipe Viking Force`);
                             </div>
 
                             <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-                              {(exerciseSetsState[ex.id] || []).map((set, setIdx) => (
+                              {(() => {
+                                const sets = exerciseSetsState[ex.id] || [];
+                                const firstIncompleteIdx = sets.findIndex(s => !s.done);
+                                return sets.map((set, setIdx) => {
+                                  const isActive = setIdx === firstIncompleteIdx;
+                                  return (
                                 <div 
                                   key={setIdx} 
-                                  className={`flex flex-col gap-2 p-2 rounded-lg transition-all border ${
+                                  className={`flex flex-col gap-2 p-2 rounded-lg transition-all duration-500 border ${
                                     set.done 
                                       ? 'bg-green-950/20 border-green-500/30' 
-                                      : 'bg-black/40 border-viking-gold/5 hover:border-viking-gold/10'
+                                      : isActive
+                                        ? 'bg-viking-gold/10 border-viking-gold shadow-[0_0_12px_rgba(212,175,55,0.25)] relative overflow-hidden'
+                                        : 'bg-black/40 border-viking-gold/5 hover:border-viking-gold/10'
                                   }`}
                                 >
+                                  {isActive && (
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-viking-gold animate-pulse"></div>
+                                  )}
                                                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
                                     {/* Mobile Header Row / Desktop Left Side */}
                                     <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
@@ -12272,7 +12388,9 @@ Equipe Viking Force`);
                                     />
                                   </div>
                                 </div>
-                              ))}
+                              );
+                            });
+                          })()}
                             </div>
 
                             <div className="flex gap-2">
@@ -13233,6 +13351,48 @@ Equipe Viking Force`);
                   >
                     Retornar ao Templo
                   </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* --- IN-APP TECHNIQUE TIPS POPUP MODAL --- */}
+      <AnimatePresence>
+        {activeTipsModal && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveTipsModal(null)}
+              className="fixed inset-0 bg-black/90 backdrop-blur-md z-[80]"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: '-48%', x: '-50%' }}
+              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
+              exit={{ opacity: 0, scale: 0.9, y: '-48%', x: '-50%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg bg-[#140e0c]/98 border-2 border-emerald-500/30 rounded-3xl shadow-[0_0_80px_rgba(52,211,153,0.15)] z-[85] overflow-hidden text-[#e0d3a8] flex flex-col"
+            >
+              <div className="p-5 border-b border-emerald-500/15 bg-emerald-950/20 flex justify-between items-center">
+                <h4 className="font-viking-display text-xs sm:text-sm font-black tracking-wider text-emerald-400 flex items-center gap-2 uppercase">
+                  <Info className="w-5 h-5 text-emerald-400" /> Dicas: {activeTipsModal.name}
+                </h4>
+                <button 
+                  onClick={() => setActiveTipsModal(null)}
+                  className="p-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-viking-silver hover:text-emerald-400 cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 bg-black/40 space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/20">
+                  <p className="text-sm text-[#e0d3a8] leading-relaxed whitespace-pre-wrap">
+                    {activeTipsModal.tips}
+                  </p>
                 </div>
               </div>
             </motion.div>

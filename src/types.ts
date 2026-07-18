@@ -150,6 +150,7 @@ export interface StudentProfile {
   name: string;
   plan: 'Mensal' | 'Trimestral' | 'Semestral' | 'Anual';
   status: 'Ativo' | 'Pendente' | 'Atrasado' | 'Pago';
+  photoUrl?: string;
   prs: {
     squat: number | null;
     bench: number | null;
