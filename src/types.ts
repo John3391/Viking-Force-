@@ -193,6 +193,7 @@ export interface StudentProfile {
     type: 'info' | 'success' | 'warning';
   }[];
   customProgram?: TrainingProgram;
+  workoutReady?: boolean;
 }
 
 export interface VikingPlan {

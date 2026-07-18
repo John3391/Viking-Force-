@@ -3403,6 +3403,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       updatedStudents[email] = {
         ...student,
         customProgram: newProg,
+        workoutReady: true,
         notifications: [notification, ...(student.notifications || [])]
       };
 
@@ -4599,6 +4600,51 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             animate={{ opacity: 1 }}
             className="space-y-6 relative z-10"
           >
+            {/* NEW WORKOUT READY ALERT BANNER */}
+            {activeStudentProfile.workoutReady && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="bg-[#1e1411]/95 border-2 border-viking-gold p-5 rounded-3xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_30px_rgba(212,175,55,0.25)] relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-viking-gold/5 via-transparent to-viking-gold/5 opacity-50 pointer-events-none" />
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className="p-3 rounded-2xl bg-viking-gold text-viking-dark shrink-0">
+                    <Bell className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-viking-gold font-black text-sm tracking-wider uppercase font-viking-display">⚔️ SEU TREINO ESTÁ PRONTO, GUERREIRO!</h4>
+                    <p className="text-viking-silver text-xs mt-1">
+                      O Treinador John Rodrigues atualizou sua planilha e prescreveu novos combates com o ferro. Prepare sua mente e corpo!
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto relative z-10 shrink-0">
+                  <button 
+                    onClick={() => {
+                      setWorkoutModalOpen(true);
+                    }}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                  >
+                    Iniciar Treino
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      const updatedProfile = { ...activeStudentProfile, workoutReady: false };
+                      setStudentsData(prev => ({
+                        ...prev,
+                        [currentUser!.email]: updatedProfile
+                      }));
+                      saveStudentToFirebase(currentUser!.email, updatedProfile);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-black/40 text-viking-silver hover:text-white border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Ciente
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* Header Greeting */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl backdrop-blur-md relative overflow-hidden">
               <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
@@ -10901,9 +10947,18 @@ Equipe Viking Force`);
                       // Apply protocol to student
                       const student = studentsData[studentEmail];
                       if (student) {
+                         const notification = {
+                           id: Date.now().toString() + '_' + Math.random().toString(36).substring(7),
+                           message: `Novo protocolo de treino aplicado: ${protocol.name}!`,
+                           date: new Date().toISOString(),
+                           read: false,
+                           type: 'info' as const
+                         };
                          const updatedStudent = {
                            ...student,
-                           customProgram: JSON.parse(JSON.stringify(protocol.program))
+                           customProgram: JSON.parse(JSON.stringify(protocol.program)),
+                           workoutReady: true,
+                           notifications: [notification, ...(student.notifications || [])]
                          };
                          setStudentsData(prev => ({
                            ...prev,
@@ -10911,6 +10966,7 @@ Equipe Viking Force`);
                          }));
                          // Also update Firebase
                          saveStudentToFirebase(studentEmail, updatedStudent);
+                         showToast(`Protocolo "${protocol.name}" aplicado com sucesso!`, 'success');
                       }
                     }}
                   />
@@ -10953,6 +11009,14 @@ Equipe Viking Force`);
                           <Plus className="w-4 h-4" /> Incluir Exercício
                         </button>
                       )}
+                    </div>
+
+                    {/* Database Size Banner */}
+                    <div className="flex justify-between items-center bg-viking-gold/5 border border-viking-gold/25 rounded-2xl px-4 py-2.5 text-xs text-viking-silver">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <Library className="w-4 h-4 text-viking-gold" /> Biblioteca do Templo:
+                      </span>
+                      <strong className="text-viking-gold font-black font-mono tracking-wide">{dbExercises.length} Exercícios Prescritivos</strong>
                     </div>
 
                     {/* Unified Form (Add or Edit) */}

@@ -4,6 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Viking Force - Treinador &amp; Aluno</title>
+    <script>
+      // Intercept and swallow benign Vite HMR WebSocket errors in sandboxed preview environments
+      window.addEventListener('error', function(e) {
+        var msg = e.message || '';
+        if (
+          msg.indexOf('WebSocket') !== -1 || 
+          msg.indexOf('websocket') !== -1 ||
+          msg.indexOf('vite') !== -1
+        ) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason;
+        if (reason) {
+          var str = typeof reason === 'string' ? reason : (reason.message || reason.toString() || '');
+          if (
+            str.indexOf('WebSocket') !== -1 || 
+            str.indexOf('websocket') !== -1 ||
+            str.indexOf('vite') !== -1 ||
+            str.indexOf('WebSocket closed') !== -1
+          ) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+        }
+      }, true);
+    </script>
     <!-- Google Fonts: Plus Jakarta Sans for UI, Cinzel Decorative & MedievalSharp for Viking theme -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
