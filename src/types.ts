@@ -192,6 +192,7 @@ export interface StudentProfile {
     date: string;
     read: boolean;
     type: 'info' | 'success' | 'warning';
+    actionData?: { week: number; day: string };
   }[];
   customProgram?: TrainingProgram;
   workoutReady?: boolean;

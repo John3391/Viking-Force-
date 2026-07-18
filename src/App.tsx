@@ -615,6 +615,28 @@ export default function App() {
     localStorage.setItem('viking_protocols', JSON.stringify(trainingProtocols));
   }, [trainingProtocols]);
 
+  // Auto-select the correct week and day if the currently selected one is empty
+  useEffect(() => {
+    const activeProg = activeStudentProfile?.customProgram || trainingProgram;
+    if (!activeProg || !activeProg.weeks) return;
+    
+    const currentExercises = activeProg.weeks[selectedWeek]?.[selectedDay] || [];
+    if (currentExercises.length === 0) {
+      // Find the first week and day that has exercises
+      const weeks = Object.keys(activeProg.weeks).map(Number).sort((a,b) => a-b);
+      for (const w of weeks) {
+        const days = Object.keys(activeProg.weeks[w] || {}).sort();
+        for (const d of days) {
+          if (activeProg.weeks[w][d] && activeProg.weeks[w][d].length > 0) {
+            setSelectedWeek(w);
+            setSelectedDay(d);
+            return;
+          }
+        }
+      }
+    }
+  }, [activeStudentProfile?.customProgram, trainingProgram]);
+
   // Auto-scroll chat container to the bottom when chat is active or new messages arrive
   useEffect(() => {
     if (drawerType === 'chat' && chatMessagesContainerRef.current) {
@@ -3453,7 +3475,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
         message: `Novo treino disponível! Semana ${editorWeek} - Treino ${editorDay}`,
         date: new Date().toISOString(),
         read: false,
-        type: 'info' as const
+        type: 'info' as const,
+        actionData: { week: editorWeek, day: editorDay }
       };
 
       updatedStudents[email] = {
@@ -11049,6 +11072,21 @@ Equipe Viking Force`);
                               <p className="text-[10px] text-viking-silver/50 mt-1 uppercase font-mono tracking-wider">
                                 {new Date(notification.date).toLocaleDateString()} {new Date(notification.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                               </p>
+                              {notification.actionData && (
+                                <button 
+                                  onClick={() => {
+                                    setSelectedWeek(notification.actionData!.week);
+                                    setSelectedDay(notification.actionData!.day);
+                                    setSessionRpeState({});
+                                    setExerciseFailureState({});
+                                    setDrawerOpen(false);
+                                    setActiveTab('workout');
+                                  }}
+                                  className="mt-2 px-3 py-1.5 bg-viking-gold/20 hover:bg-viking-gold/30 text-viking-gold border border-viking-gold/30 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  Ver Treino <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                             {!notification.read && (
                               <button 
