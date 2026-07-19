@@ -11090,6 +11090,37 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         return filtered.map(({ ex, originalIdx }) => {
                           const isExpanded = expandedExerciseIdx === originalIdx;
                           const isDragged = draggedExerciseIdx === originalIdx;
+
+                          // Calculate the estimated target weight for the trainer
+                          const s = editingStudentEmail ? studentsData[editingStudentEmail.toLowerCase()] : null;
+                          let prValue = ex.baseWeight || null;
+                          let prSource = '1RM definido';
+                          const exNameLower = (ex.name || '').toLowerCase();
+                          if (!prValue && s && s.prs) {
+                            if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                              prValue = s.prs.squat;
+                              prSource = `PR Agachamento (${s.prs.squat} kg)`;
+                            } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                              prValue = s.prs.bench;
+                              prSource = `PR Supino (${s.prs.bench} kg)`;
+                            } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                              prValue = s.prs.deadlift;
+                              prSource = `PR Terra (${s.prs.deadlift} kg)`;
+                            }
+                          }
+
+                          let intensityRatio = 0;
+                          if (typeof ex.intensity === 'number') {
+                            intensityRatio = ex.intensity;
+                          } else if (typeof ex.intensity === 'string') {
+                            const parsed = parseFloat(ex.intensity.replace('%', ''));
+                            if (!isNaN(parsed)) {
+                              intensityRatio = parsed > 1 ? parsed / 100 : parsed;
+                            }
+                          }
+
+                          const finalCalculatedWeight = (prValue && intensityRatio > 0) ? Math.round(prValue * intensityRatio) : null;
+
                           return (
                             <div 
                               key={(ex.id || 'ex') + '_' + originalIdx} 
@@ -11108,14 +11139,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             >
                               
                               <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <GripVertical 
                                     className="w-3.5 h-3.5 text-viking-gold/40 hover:text-viking-gold shrink-0 transition-colors cursor-grab active:cursor-grabbing" 
                                     onMouseEnter={() => setDragEnabledIdx(originalIdx)}
                                     onMouseLeave={() => setDragEnabledIdx(null)}
                                   />
                                   <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} {ex.name || 'Novo Exercício'}</span>
-                                  {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold" /> : <ChevronDown className="w-3 h-3 text-viking-gold" />}
+                                  {finalCalculatedWeight !== null && (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                      ⚔️ {finalCalculatedWeight} kg
+                                    </span>
+                                  )}
+                                  {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold shrink-0" /> : <ChevronDown className="w-3 h-3 text-viking-gold shrink-0" />}
                                 </div>
                                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                   <button onClick={() => handleEditorDuplicateExercise(originalIdx)} className="p-1 rounded hover:bg-viking-gold/10 text-viking-gold cursor-pointer" title="Duplicar Exercício"><Copy className="w-3.5 h-3.5" /></button>
@@ -11230,11 +11266,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                         title={ex.main ? "Carga do Lift / 1RM (kg)" : "Carga Alvo Prescrita (kg)"}
                                       />
                                     </div>
-                                    {ex.main && typeof ex.intensity === 'number' && (
-                                      <div className="text-xs bg-viking-gold/5 border border-viking-gold/15 p-2.5 rounded-lg flex justify-between items-center text-viking-silver">
-                                        <span className="font-semibold flex items-center gap-1">⚔️ Peso Estimado Calculado:</span>
-                                        <strong className="text-viking-gold text-xs font-black font-mono">{ex.baseWeight ? `${Math.round(ex.baseWeight * ex.intensity)} kg (${Math.round(ex.intensity * 100)}%)` : `(Depende do PR cadastrado do aluno x ${Math.round(ex.intensity * 100)}%)`}</strong>
+                                    
+                                    {finalCalculatedWeight !== null ? (
+                                      <div className="text-xs bg-emerald-500/5 border border-emerald-500/25 p-3 rounded-xl flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-viking-silver">
+                                        <span className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                                          ⚔️ Peso Calculado Estipulado:
+                                        </span>
+                                        <strong className="text-emerald-400 text-xs font-black font-mono bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                                          {finalCalculatedWeight} kg <span className="text-[10px] font-medium text-viking-silver/80">({Math.round(intensityRatio * 100)}% de {prSource})</span>
+                                        </strong>
                                       </div>
+                                    ) : (
+                                      ex.main && (
+                                        <div className="text-xs bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl flex flex-col gap-1 text-viking-silver">
+                                          <span className="font-semibold flex items-center gap-1.5 text-amber-400">
+                                            ⚠️ Falta informação de PR ou Carga Base:
+                                          </span>
+                                          <p className="text-[10px] text-viking-silver/70">
+                                            Não foi possível calcular o peso. Insira uma <span className="text-viking-gold font-bold">Carga de Lift / 1RM (kg)</span> acima ou certifique-se de que o nome do exercício contenha <span className="text-white font-bold">"Agachamento"</span>, <span className="text-white font-bold">"Supino"</span> ou <span className="text-white font-bold">"Terra"</span> e o aluno possua o respectivo PR cadastrado.
+                                          </p>
+                                        </div>
+                                      )
                                     )}
                                     <div className="flex items-center gap-2">
                                       <input type="checkbox" id={`chk-main-${originalIdx}`} checked={ex.main} onChange={e => handleEditorUpdateField(originalIdx, 'main', e.target.checked)} className="rounded border-viking-gold/30 text-viking-gold focus:ring-viking-gold bg-black/40 cursor-pointer" />
