@@ -137,6 +137,39 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
 /**
  * Subscribe to the 'students' collection in real-time.
  */
+export function subscribeStudentProfile(
+  email: string,
+  onUpdate: (student: StudentProfile | null) => void
+): () => void {
+  const docRef = doc(db, 'students', email);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onUpdate(snapshot.data() as StudentProfile);
+      } else {
+        onUpdate(null);
+      }
+    },
+    (error) => {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      if (
+        errMessage.includes('offline') || 
+        errMessage.includes('network') || 
+        errMessage.includes('token') || 
+        errMessage.includes('Could not reach') ||
+        errMessage.includes('Backend didn\'t respond') ||
+        errMessage.includes('permission-denied') ||
+        errMessage.includes('Missing or insufficient permissions')
+      ) {
+        console.warn(`Inscrição em tempo real (student ${email}) interrompida ou instável:`, error);
+        return;
+      }
+      handleFirestoreError(error, OperationType.GET, `students/${email}`);
+    }
+  );
+}
+
 export function subscribeStudents(
   onUpdate: (students: Record<string, StudentProfile>) => void
 ): () => void {

@@ -74,24 +74,46 @@ export default function OneRepMaxChart({ profile }: OneRepMaxChartProps) {
       // Determine label name
       let name = `Treino ${i + 1}`;
       let date = '';
+      let squat = squatVal;
+      let bench = benchVal;
+      let deadlift = deadliftVal;
+
       if (sessions.length > 0) {
         // Map to actual session list in reverse chron order (first session logged = index 0 in progression)
         const sessIndex = sessions.length - 1 - i;
         if (sessIndex >= 0 && sessions[sessIndex]) {
-          name = sessions[sessIndex].sessionName.replace('Semana ', 'S').replace(' - Treino ', 'T');
-          date = sessions[sessIndex].date;
+          const sObj = sessions[sessIndex];
+          name = sObj.sessionName.replace('Semana ', 'S').replace(' - Treino ', 'T');
+          date = sObj.date;
+
+          if (sObj.prsAtSession) {
+            if (sObj.prsAtSession.squat !== null && sObj.prsAtSession.squat !== undefined && sObj.prsAtSession.squat > 0) {
+              squat = sObj.prsAtSession.squat;
+            }
+            if (sObj.prsAtSession.bench !== null && sObj.prsAtSession.bench !== undefined && sObj.prsAtSession.bench > 0) {
+              bench = sObj.prsAtSession.bench;
+            }
+            if (sObj.prsAtSession.deadlift !== null && sObj.prsAtSession.deadlift !== undefined && sObj.prsAtSession.deadlift > 0) {
+              deadlift = sObj.prsAtSession.deadlift;
+            }
+          }
         }
+      }
+
+      // Ensure the absolute last point is always pinned to current profile PRs
+      if (i === pointsCount - 1) {
+        squat = currentSquat;
+        bench = currentBench;
+        deadlift = currentDeadlift;
       }
 
       data.push({
         name,
         date,
-        squat: i === pointsCount - 1 ? currentSquat : squatVal,
-        bench: i === pointsCount - 1 ? currentBench : benchVal,
-        deadlift: i === pointsCount - 1 ? currentDeadlift : deadliftVal,
-        total: (i === pointsCount - 1 ? currentSquat : squatVal) + 
-               (i === pointsCount - 1 ? currentBench : benchVal) + 
-               (i === pointsCount - 1 ? currentDeadlift : deadliftVal)
+        squat,
+        bench,
+        deadlift,
+        total: squat + bench + deadlift
       });
     }
     return data;

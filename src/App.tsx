@@ -194,6 +194,7 @@ import {
   deleteCalendarEventFromFirebase,
   auth,
   subscribeStudents,
+  subscribeStudentProfile,
   storage
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -839,12 +840,26 @@ export default function App() {
             unsubscribeStudents();
             unsubscribeStudents = null;
           }
-          unsubscribeStudents = subscribeStudents((remoteStudents) => {
-            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
-              setStudentsData(remoteStudents);
-              localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
-            }
-          });
+          
+          if (role === 'trainer') {
+            unsubscribeStudents = subscribeStudents((remoteStudents) => {
+              if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+                setStudentsData(remoteStudents);
+                localStorage.setItem('viking_students', JSON.stringify(remoteStudents));
+              }
+            });
+          } else {
+            // Se for aluno, inscreve apenas no próprio perfil
+            unsubscribeStudents = subscribeStudentProfile(email, (remoteStudent) => {
+              if (remoteStudent) {
+                setStudentsData(prev => {
+                  const newData = { ...prev, [email]: remoteStudent };
+                  localStorage.setItem('viking_students', JSON.stringify(newData));
+                  return newData;
+                });
+              }
+            });
+          }
         } catch (e) {
           console.warn("Error subscribing to athletes real-time feed:", e);
           syncSuccess = false;
@@ -2955,7 +2970,7 @@ export default function App() {
     // Collect everyone (default + active student) and calculate dynamic rank
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData)
       .map(email => ({ email, profile: studentsData[email] }))
-      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null)
+      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null && !item.profile.isDeleted)
       .map(({ email, profile }) => {
         const squat = profile.prs?.squat || 0;
         const bench = profile.prs?.bench || 0;
@@ -3018,7 +3033,7 @@ export default function App() {
   const absoluteLeader = React.useMemo((): GymLeaderboardEntry | null => {
     const entries: GymLeaderboardEntry[] = Object.keys(studentsData)
       .map(email => ({ email, profile: studentsData[email] }))
-      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null)
+      .filter((item): item is { email: string; profile: NonNullable<typeof item.profile> } => item.profile !== undefined && item.profile !== null && !item.profile.isDeleted)
       .map(({ email, profile }) => {
         const squat = profile.prs?.squat || 0;
         const bench = profile.prs?.bench || 0;
@@ -3583,6 +3598,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   const filteredStudentEmails = Object.keys(studentsData).filter(email => {
     const s = studentsData[email];
     if (!s) return false;
+    if (s.isDeleted) return false;
     if (paymentFilter === 'pending_or_overdue' && s.status === 'Pago') {
       return false;
     }
@@ -3748,7 +3764,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 
                 {currentUser?.role === 'student' ? (
                   <>
-                    <button 
+                    <motion.button 
                       onClick={() => { 
                         if (isStudentPending) {
                           showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
@@ -3762,14 +3778,33 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         setDrawerOpen(false); 
                         setNavDropdownOpen(false); 
                       }}
-                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer relative overflow-hidden ${
                         workoutModalOpen 
                           ? 'text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold' 
-                          : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                          : activeStudentProfile?.workoutReady
+                            ? 'text-viking-gold bg-[#1a1210]/60 border border-viking-gold/40'
+                            : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
                       }`}
+                      animate={activeStudentProfile?.workoutReady && !workoutModalOpen ? {
+                        boxShadow: [
+                          "0 0 0px rgba(212, 175, 55, 0)",
+                          "0 0 15px rgba(212, 175, 55, 0.6)",
+                          "0 0 0px rgba(212, 175, 55, 0)"
+                        ],
+                        scale: [1, 1.02, 1]
+                      } : {}}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 2.2,
+                        ease: "easeInOut"
+                      }}
                     >
-                      <Dumbbell className="w-4 h-4" /> Treino Hoje
-                    </button>
+                      <Dumbbell className={`w-4 h-4 ${activeStudentProfile?.workoutReady && !workoutModalOpen ? 'text-viking-gold animate-bounce' : ''}`} /> 
+                      Treino Hoje
+                      {activeStudentProfile?.workoutReady && !workoutModalOpen && (
+                        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-viking-gold shadow-[0_0_6px_#d4af37]" />
+                      )}
+                    </motion.button>
                     <button 
                       onClick={() => { 
                         if (isStudentPending) {
@@ -5276,12 +5311,31 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </h3>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
                 
-                <button 
+                <motion.button 
                   onClick={() => setWorkoutModalOpen(true)}
-                  className="p-2 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 shadow-lg shadow-viking-gold/20 cursor-pointer"
+                  className={`p-2 sm:p-4 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[9px] sm:text-sm uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 shadow-lg cursor-pointer relative overflow-hidden ${
+                    activeStudentProfile?.workoutReady && !workoutModalOpen ? 'shadow-[0_0_20px_rgba(212,175,55,0.6)]' : 'shadow-viking-gold/20'
+                  }`}
+                  animate={activeStudentProfile?.workoutReady && !workoutModalOpen ? {
+                    boxShadow: [
+                      "0 0 10px rgba(212, 175, 55, 0.3)",
+                      "0 0 25px rgba(212, 175, 55, 0.8)",
+                      "0 0 10px rgba(212, 175, 55, 0.3)"
+                    ],
+                    scale: [1, 1.02, 1]
+                  } : {}}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 1.8,
+                    ease: "easeInOut"
+                  }}
                 >
-                  <Dumbbell className="w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0" /> <span className="text-center leading-tight">Treinar</span>
-                </button>
+                  <Dumbbell className={`w-3.5 h-3.5 sm:w-5 sm:h-5 shrink-0 ${activeStudentProfile?.workoutReady && !workoutModalOpen ? 'animate-bounce' : ''}`} /> 
+                  <span className="text-center leading-tight">Treinar</span>
+                  {activeStudentProfile?.workoutReady && !workoutModalOpen && (
+                    <span className="absolute top-1 right-1 w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-viking-gold shadow-[0_0_8px_#d4af37]" />
+                  )}
+                </motion.button>
 
                 <button 
                   onClick={() => { setDrawerType('history'); setDrawerTitle('Histórico & RPE de Treinos'); setDrawerOpen(true); }}
@@ -6140,14 +6194,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <User className="w-8 h-8 text-viking-gold mx-auto mb-2" />
-                <p className="text-2xl font-black text-white">{Object.keys(studentsData).length}</p>
+                <p className="text-2xl font-black text-white">{(Object.values(studentsData) as StudentProfile[]).filter(s => !s.isDeleted).length}</p>
                 <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Atletas Ativos</p>
               </div>
 
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <Coins className="w-8 h-8 text-viking-gold mx-auto mb-2" />
                 <p className="text-2xl font-black text-white">
-                  R$ {Object.keys(studentsData).reduce((sum, email) => { const s = studentsData[email]; return s ? sum + getPlanMonthlyEquivalent(s.plan) : sum; }, 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  R$ {(Object.values(studentsData) as StudentProfile[]).filter(s => !s.isDeleted).reduce((sum, s) => sum + getPlanMonthlyEquivalent(s.plan), 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </p>
                 <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Faturamento Est. / mês</p>
               </div>
@@ -6155,7 +6209,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <Clock className="w-8 h-8 text-viking-red mx-auto mb-2" />
                 <p className="text-2xl font-black text-white">
-                  {Object.keys(studentsData).map(email => studentsData[email]).filter(s => s && s.status !== 'Pago').length}
+                  {(Object.values(studentsData) as StudentProfile[]).filter(s => s && !s.isDeleted && s.status !== 'Pago').length}
                 </p>
                 <p className="text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Atrasos/Pendências</p>
               </div>
@@ -7168,7 +7222,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               })()}
 
               {/* Quick actions for Trainer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
                 <button 
                   onClick={() => { setDrawerType('whatsapp'); setDrawerTitle('Painel de Cobranças'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -7199,6 +7253,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <Save className="w-4 h-4 shrink-0" /> Fazer Backup (JSON)
                 </button>
+                <button 
+                  onClick={() => { setDrawerType('trash'); setDrawerTitle('Lixeira Virtual'); setDrawerOpen(true); }}
+                  className="p-4 rounded-2xl bg-viking-dark hover:bg-red-950/20 border border-viking-gold/20 hover:border-viking-red/40 text-viking-silver hover:text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0 text-red-400 animate-pulse" /> Lixeira Virtual
+                </button>
               </div>
 
             </div>
@@ -7227,7 +7287,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               exit={{ opacity: 0, scale: 0.85, x: '-50%', y: '-48%' }}
               transition={{ type: 'spring', damping: 20, stiffness: 280 }}
               className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] ${
-                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp'].includes(drawerType)
+                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp', 'trash', 'studentPanel'].includes(drawerType)
                   ? 'max-w-4xl' 
                   : 'max-w-2xl'
               } bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] overflow-hidden text-[#e0d3a8]`}
@@ -7247,6 +7307,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   {drawerType === 'editProgram' && <Settings className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'chat' && <MessageSquare className="w-5 h-5 text-viking-gold animate-pulse" />}
                   {drawerType === 'gmail' && <Mail className="w-5 h-5 text-viking-gold" />}
+                  {drawerType === 'trash' && <Trash2 className="w-5 h-5 text-red-400" />}
                   {drawerTitle}
                 </h3>
                 <button 
@@ -7536,7 +7597,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               className="w-full px-3 py-2.5 rounded-lg bg-[#140e0c] border border-viking-gold/20 text-[#e0d3a8] text-xs font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                             >
                               <option value="">-- Evento Geral (Sem designar atleta específico) --</option>
-                              {(Object.entries(studentsData) as [string, StudentProfile][]).map(([email, s]) => (
+                              {(Object.entries(studentsData) as [string, StudentProfile][]).filter(([_, s]) => !s.isDeleted).map(([email, s]) => (
                                 <option key={email} value={email}>
                                   {s.name} ({email})
                                 </option>
@@ -7707,7 +7768,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         defaultValue=""
                                       >
                                         <option value="" disabled>-- Selecionar Aluno --</option>
-                                        {(Object.entries(studentsData) as [string, StudentProfile][]).map(([email, s]) => (
+                                        {(Object.entries(studentsData) as [string, StudentProfile][]).filter(([_, s]) => !s.isDeleted).map(([email, s]) => (
                                           <option key={email} value={email}>
                                             {s.name}
                                           </option>
@@ -9351,6 +9412,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           <Trash2 className="w-4 h-4" /> <span className="text-xs font-bold uppercase tracking-wider">Remover Guerreiro</span>
                         </button>
                       </div>
+
+                      {/* 1RM Progress Chart (Evolução de PRs) */}
+                      <div className="pt-4 border-t border-viking-gold/15">
+                        <OneRepMaxChart profile={s} />
+                      </div>
                     </div>
                   );
                 })()}
@@ -10147,7 +10213,7 @@ Equipe Viking Force`);
                         >
                           <option value="" disabled className="bg-[#140e0c] text-viking-silver/50">Selecione a origem...</option>
                           <option value="global" className="bg-[#140e0c] text-viking-gold font-bold">Treino Base (Global)</option>
-                          {Object.entries(studentsData).map(([email, s]: [string, StudentProfile]) => (
+                          {(Object.entries(studentsData) as [string, StudentProfile][]).filter(([_, s]) => !s.isDeleted).map(([email, s]) => (
                             email.toLowerCase() !== editingStudentEmail.toLowerCase() && (
                               <option key={email} value={email} className="bg-[#140e0c] text-[#e0d3a8]">
                                 {s.name} ({s.plan})
@@ -11558,6 +11624,97 @@ Equipe Viking Force`);
                     </div>
                   </div>
                 )}
+
+                {/* 13. Lixeira Virtual Drawer */}
+                {drawerType === 'trash' && (
+                  <div className="space-y-4">
+                    <div className="bg-red-950/20 border border-red-500/20 rounded-2xl p-4 flex items-center gap-3">
+                      <Trash2 className="w-8 h-8 text-red-400 shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-black text-red-400 uppercase tracking-widest mb-0.5">Lixeira Virtual (Cemitério de Guerreiros)</h4>
+                        <p className="text-xs text-viking-silver/85">
+                          Aqui estão os atletas excluídos do templo. Você pode restaurar o cadastro e os treinos deles a qualquer momento ou bani-los permanentemente.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 overflow-y-auto max-h-[50vh] pr-1">
+                      {(() => {
+                        const trashStudents = (Object.entries(studentsData) as [string, StudentProfile][]).filter(([_, s]) => s.isDeleted === true);
+
+                        if (trashStudents.length === 0) {
+                          return (
+                            <div className="text-center py-12 text-viking-silver/50 bg-[#0d0908]/30 rounded-2xl border border-dashed border-viking-gold/10 space-y-2">
+                              <Trash2 className="w-12 h-12 mx-auto text-viking-gold/10" />
+                              <p className="text-xs font-bold uppercase tracking-wider">A lixeira está vazia.</p>
+                              <p className="text-[11px] text-viking-silver/40">Nenhum atleta foi excluído ou movido para cá recentemente.</p>
+                            </div>
+                          );
+                        }
+
+                        return trashStudents.map(([email, s]) => (
+                          <div 
+                            key={email} 
+                            className="p-4 rounded-2xl bg-[#0d0908]/55 border border-viking-gold/10 hover:border-red-500/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                          >
+                            <div className="space-y-1 text-left">
+                              <h5 className="font-bold text-white text-sm">{s.name}</h5>
+                              <p className="text-xs text-viking-silver/60 flex items-center gap-1.5">
+                                <span className="bg-viking-gold/10 text-viking-gold text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">{s.plan}</span>
+                                <span>{email}</span>
+                              </p>
+                              {s.deletedAt && (
+                                <p className="text-[10px] text-viking-silver/40 italic">
+                                  Excluído em: {new Date(s.deletedAt).toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2 shrink-0">
+                              <button
+                                onClick={() => {
+                                  const copy = { ...studentsData };
+                                  if (copy[email]) {
+                                    copy[email] = {
+                                      ...copy[email],
+                                      isDeleted: false
+                                    };
+                                    saveStudentsToDB(copy);
+                                    showToast(`Guerreiro ${s.name} restaurado com sucesso!`, 'success');
+                                  }
+                                }}
+                                className="px-3 py-2 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/20 hover:border-viking-gold text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> Restaurar
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  triggerConfirm(
+                                    'Excluir Permanentemente?',
+                                    `Tem certeza que deseja apagar permanentemente ${s.name}? Esta ação não pode ser desfeita!`,
+                                    () => {
+                                      const copy = { ...studentsData };
+                                      delete copy[email];
+                                      saveStudentsToDB(copy);
+                                      deleteStudentFromFirebase(email).catch(err => console.error("Firebase delete permanent error:", err));
+                                      showToast(`Guerreiro ${s.name} banido definitivamente!`, 'success');
+                                    },
+                                    true,
+                                    'Sim, Banir Definitivamente'
+                                  );
+                                }}
+                                className="px-3 py-2 rounded-xl bg-[#611c1c]/15 hover:bg-red-950/40 border border-viking-red/20 hover:border-viking-red/40 text-red-400 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Banir
+                              </button>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
@@ -12855,7 +13012,7 @@ Equipe Viking Force`);
                   
                   {currentUser?.role === 'student' ? (
                     <>
-                      <button 
+                      <motion.button 
                         onClick={() => { 
                           if (isStudentPending) {
                             showToast('Sua conta está aguardando liberação do plano pelo Treinador John.', 'warning');
@@ -12868,10 +13025,35 @@ Equipe Viking Force`);
                           setMobileMenuOpen(false); 
                           setWorkoutModalOpen(true); 
                         }}
-                        className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                        className={`p-3 text-left rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer relative overflow-hidden ${
+                          activeStudentProfile?.workoutReady && !workoutModalOpen
+                            ? 'text-viking-gold bg-[#1a1210]/60 border border-viking-gold/40 shadow-[0_0_12px_rgba(212,175,55,0.4)]'
+                            : 'text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5'
+                        }`}
+                        animate={activeStudentProfile?.workoutReady && !workoutModalOpen ? {
+                          boxShadow: [
+                            "0 0 0px rgba(212, 175, 55, 0)",
+                            "0 0 10px rgba(212, 175, 55, 0.5)",
+                            "0 0 0px rgba(212, 175, 55, 0)"
+                          ],
+                          borderColor: [
+                            "rgba(212, 175, 55, 0.2)",
+                            "rgba(212, 175, 55, 0.6)",
+                            "rgba(212, 175, 55, 0.2)"
+                          ]
+                        } : {}}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 2,
+                          ease: "easeInOut"
+                        }}
                       >
-                        <Dumbbell className="w-4 h-4" /> Treino de Hoje
-                      </button>
+                        <Dumbbell className={`w-4 h-4 ${activeStudentProfile?.workoutReady && !workoutModalOpen ? 'animate-bounce text-viking-gold' : ''}`} /> 
+                        Treino de Hoje
+                        {activeStudentProfile?.workoutReady && !workoutModalOpen && (
+                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-viking-gold shadow-[0_0_6px_#d4af37]" />
+                        )}
+                      </motion.button>
                       <button 
                         onClick={() => { 
                           if (isStudentPending) {
@@ -13253,11 +13435,11 @@ Equipe Viking Force`);
               </div>
               
               <h3 className="font-viking-display text-lg font-black tracking-wider text-viking-gold mb-2 uppercase">
-                BANIR GUERREIRO?
+                MOVER PARA A LIXEIRA?
               </h3>
               
               <p className="text-xs text-viking-silver mb-6 leading-relaxed">
-                Tem certeza que deseja excluir o guerreiro <span className="text-white font-extrabold">{studentsData[deletingStudentEmail]?.name || deletingStudentEmail}</span> do templo? Todos os seus registros e treinos prescritos serão perdidos para sempre!
+                Tem certeza que deseja mover o guerreiro <span className="text-white font-extrabold">{studentsData[deletingStudentEmail]?.name || deletingStudentEmail}</span> para a <span className="text-viking-gold font-bold">Lixeira Virtual</span>? Seus registros e treinos prescritos serão preservados e você poderá restaurá-lo quando desejar!
               </p>
               
               <div className="grid grid-cols-2 gap-3">
@@ -13269,15 +13451,25 @@ Equipe Viking Force`);
                 </button>
                 <button
                   onClick={() => {
-                    const copy = { ...studentsData };
-                    delete copy[deletingStudentEmail];
-                    saveStudentsToDB(copy);
-                    setDeletingStudentEmail(null);
-                    showToast("Atleta excluído com sucesso!", "success");
+                    const email = deletingStudentEmail.toLowerCase();
+                    const student = studentsData[email];
+                    if (student) {
+                      const copy = { ...studentsData };
+                      copy[email] = {
+                        ...student,
+                        isDeleted: true,
+                        deletedAt: new Date().toISOString()
+                      };
+                      saveStudentsToDB(copy);
+                      setDeletingStudentEmail(null);
+                      showToast("Atleta movido para a Lixeira Virtual!", "success");
+                    } else {
+                      setDeletingStudentEmail(null);
+                    }
                   }}
                   className="py-3 rounded-xl bg-viking-red/20 hover:bg-viking-red/40 border border-viking-red/40 text-red-400 font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer"
                 >
-                  Confirmar Exclusão
+                  Mover para Lixeira
                 </button>
               </div>
             </motion.div>

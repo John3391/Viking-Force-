@@ -196,6 +196,8 @@ export interface StudentProfile {
   }[];
   customProgram?: TrainingProgram;
   workoutReady?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export interface VikingPlan {
