@@ -537,6 +537,28 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     return price; // Mensal
   };
 
+  const getNextDueDate = (dueDate: string | undefined, plan: string) => {
+    let nextDueDate = dueDate;
+    if (dueDate) {
+      const [year, month, day] = dueDate.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+      if (plan === 'Mensal') date.setMonth(date.getMonth() + 1);
+      else if (plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
+      else if (plan === 'Semestral') date.setMonth(date.getMonth() + 6);
+      else if (plan === 'Anual') date.setFullYear(date.getFullYear() + 1);
+      nextDueDate = date.toISOString().split('T')[0];
+    } else {
+      const date = new Date();
+      date.setHours(12, 0, 0, 0);
+      if (plan === 'Mensal') date.setMonth(date.getMonth() + 1);
+      else if (plan === 'Trimestral') date.setMonth(date.getMonth() + 3);
+      else if (plan === 'Semestral') date.setMonth(date.getMonth() + 6);
+      else if (plan === 'Anual') date.setFullYear(date.getFullYear() + 1);
+      nextDueDate = date.toISOString().split('T')[0];
+    }
+    return nextDueDate || 'N/A';
+  };
+
   const handleRegisterPayment = (studentEmail: string) => {
     const s = studentsData[studentEmail];
     if (!s) return;
@@ -7713,10 +7735,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               exit={{ opacity: 0, scale: 0.85, x: '-50%', y: '-48%' }}
               transition={{ type: 'spring', damping: 20, stiffness: 280 }}
               className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] ${
-                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp', 'trash', 'studentPanel', 'whatsappSettings'].includes(drawerType)
-                  ? 'max-w-4xl' 
-                  : 'max-w-2xl'
-              } bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] overflow-hidden text-[#e0d3a8]`}
+                drawerType === 'editProgram'
+                  ? 'max-w-2xl lg:max-w-6xl'
+                  : ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp', 'trash', 'studentPanel', 'whatsappSettings'].includes(drawerType)
+                    ? 'max-w-4xl' 
+                    : 'max-w-2xl'
+              } bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] lg:max-h-[90vh] overflow-hidden text-[#e0d3a8]`}
             >
               <div className="p-6 border-b border-viking-gold/15 bg-[#140e0c]/90 flex justify-between items-center shrink-0">
                 <h3 className="font-viking-display text-sm sm:text-base font-black tracking-wider text-viking-gold flex items-center gap-2 uppercase">
@@ -10536,8 +10560,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               <div className="flex flex-col gap-2 mt-1">
                                 <button
                                   onClick={() => {
-                                    handleRegisterPayment(selectedPaymentStudent);
-                                    setSelectedPaymentStudent(null);
+                                    const nextDate = getNextDueDate(s.dueDate, s.plan);
+                                    const formattedNextDate = nextDate ? nextDate.split('-').reverse().join('/') : 'N/A';
+                                    const formattedCurrentDate = s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A';
+                                    const formattedPrice = price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                                    
+                                    triggerConfirm(
+                                      "Confirmar Registro de Pagamento",
+                                      `Você está prestes a registrar o pagamento para o atleta: ${s.name}.\n\n` +
+                                      `• Plano: ${s.plan}\n` +
+                                      `• Valor: ${formattedPrice}\n` +
+                                      `• Vencimento Anterior: ${formattedCurrentDate}\n` +
+                                      `• Novo Vencimento: ${formattedNextDate}\n\n` +
+                                      `Deseja confirmar este recebimento no sistema financeiro?`,
+                                      () => {
+                                        handleRegisterPayment(selectedPaymentStudent);
+                                        setSelectedPaymentStudent(null);
+                                      },
+                                      false,
+                                      "Confirmar e Registrar",
+                                      "Voltar"
+                                    );
                                   }}
                                   className="w-full py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                                 >
@@ -10814,8 +10857,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                 {/* 9. Edit Program (Trainer) */}
                 {drawerType === 'editProgram' && (
-                  <div className="space-y-4">
-                    {/* Controls to load specific Week and Day */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left Column: Period Selection and Templates */}
+                    <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-0">
+                      {/* Controls to load specific Week and Day */}
                     <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">🗓️ Carregar Período</p>
@@ -10975,8 +11020,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         <Copy className="w-4 h-4 text-viking-gold" /> Clonar Exercícios para Este Treino
                       </button>
                     </div>
+                  </div>
 
-                    <div className="space-y-4 pt-2">
+                    {/* Right Column: Prescribed Exercises */}
+                    <div className="lg:col-span-8 space-y-4 pt-2 lg:pt-0">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-black uppercase text-viking-gold tracking-wider">Exercícios Prescritos ({editorExercises.length})</span>
                         <div className="flex gap-2">
@@ -11358,20 +11405,20 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         })
                       })()}
                         <div className="sticky bottom-0 pt-4 pb-2 bg-[#140e0c]/95 border-t border-viking-gold/15 flex gap-3">
-                        <button 
-                          onClick={handleEditorSaveProgram}
-                          className="flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Save className="w-4 h-4 shrink-0" /> Salvar Prescrição
-                        </button>
-                        <button 
-                          onClick={() => handleCloseDrawer()}
-                          className="px-5 py-3 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
-                        >
-                          Fechar
-                        </button>
+                          <button 
+                            onClick={handleEditorSaveProgram}
+                            className="flex-1 py-3 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-viking-gold/20 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Save className="w-4 h-4 shrink-0" /> Salvar Prescrição
+                          </button>
+                          <button 
+                            onClick={() => handleCloseDrawer()}
+                            className="px-5 py-3 rounded-xl bg-[#0d0908]/60 text-viking-silver hover:text-viking-gold border border-viking-gold/20 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Fechar
+                          </button>
+                        </div>
                       </div>
-                  </div>
                   
                     {/* Exercise Picker Modal */}
                     <AnimatePresence>
@@ -14275,7 +14322,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setConfirmModal(null)}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-60"
+              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100]"
             />
             
             {/* Modal */}
@@ -14284,7 +14331,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
               exit={{ opacity: 0, scale: 0.9, x: '-50%', y: '-48%' }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md bg-[#140e0c]/98 border-2 rounded-3xl shadow-[inset_0_0_20px_rgba(0,0,0,0.9)] backdrop-blur-xl z-60 p-6 text-[#e0d3a8] text-center ${
+              className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md bg-[#140e0c]/98 border-2 rounded-3xl shadow-[inset_0_0_20px_rgba(0,0,0,0.9)] backdrop-blur-xl z-[100] p-6 text-[#e0d3a8] text-center ${
                 confirmModal.isDanger 
                   ? 'border-viking-red/45 shadow-[0_0_50px_rgba(239,68,68,0.15)]' 
                   : 'border-viking-gold/45 shadow-[0_0_50px_rgba(212,175,55,0.15)]'
