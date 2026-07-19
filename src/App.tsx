@@ -2997,14 +2997,78 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const finalizeSession = (session: LoggedSession) => {
     if (!currentUser || !activeStudentProfile) return;
 
+    const currentPrs = activeStudentProfile.prs || { squat: null, bench: null, deadlift: null };
+    let newSquat = currentPrs.squat;
+    let newBench = currentPrs.bench;
+    let newDeadlift = currentPrs.deadlift;
+
+    let improvedSquat = false;
+    let improvedBench = false;
+    let improvedDeadlift = false;
+
+    session.exercises.forEach(ex => {
+      const nameLower = ex.name.toLowerCase();
+      // Check completed sets in this session exercise
+      const doneSets = ex.sets ? ex.sets.filter(s => s.done) : [];
+      if (doneSets.length === 0) return;
+
+      const maxWeight = Math.max(...doneSets.map(s => s.weight || 0));
+      if (maxWeight <= 0) return;
+
+      if (nameLower.includes('agachamento') || nameLower.includes('squat')) {
+        if (currentPrs.squat === null || maxWeight > currentPrs.squat) {
+          newSquat = maxWeight;
+          improvedSquat = true;
+        }
+      } else if (nameLower.includes('supino') || nameLower.includes('bench')) {
+        if (currentPrs.bench === null || maxWeight > currentPrs.bench) {
+          newBench = maxWeight;
+          improvedBench = true;
+        }
+      } else if (nameLower.includes('terra') || nameLower.includes('deadlift')) {
+        if (currentPrs.deadlift === null || maxWeight > currentPrs.deadlift) {
+          newDeadlift = maxWeight;
+          improvedDeadlift = true;
+        }
+      }
+    });
+
+    const improvedLifts: string[] = [];
+    const prevPrs = {
+      squat: activeStudentProfile.prevPrs?.squat !== undefined ? activeStudentProfile.prevPrs.squat : (currentPrs.squat ?? null),
+      bench: activeStudentProfile.prevPrs?.bench !== undefined ? activeStudentProfile.prevPrs.bench : (currentPrs.bench ?? null),
+      deadlift: activeStudentProfile.prevPrs?.deadlift !== undefined ? activeStudentProfile.prevPrs.deadlift : (currentPrs.deadlift ?? null),
+    };
+
+    if (improvedSquat && newSquat !== null) {
+      const diff = currentPrs.squat ? newSquat - currentPrs.squat : 0;
+      improvedLifts.push(`Agachamento: ${newSquat}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+      prevPrs.squat = currentPrs.squat;
+    }
+    if (improvedBench && newBench !== null) {
+      const diff = currentPrs.bench ? newBench - currentPrs.bench : 0;
+      improvedLifts.push(`Supino: ${newBench}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+      prevPrs.bench = currentPrs.bench;
+    }
+    if (improvedDeadlift && newDeadlift !== null) {
+      const diff = currentPrs.deadlift ? newDeadlift - currentPrs.deadlift : 0;
+      improvedLifts.push(`Levantamento Terra: ${newDeadlift}kg ${diff > 0 ? `(+${diff}kg)` : ''}`);
+      prevPrs.deadlift = currentPrs.deadlift;
+    }
+
     const updatedProfile: StudentProfile = {
       ...activeStudentProfile,
       sessions: [session, ...(activeStudentProfile.sessions || [])]
     };
 
+    if (improvedLifts.length > 0) {
+      updatedProfile.prs = { squat: newSquat, bench: newBench, deadlift: newDeadlift };
+      updatedProfile.prevPrs = prevPrs;
+    }
+
     const updatedStudents = {
       ...studentsData,
-      [currentUser.email]: updatedProfile
+      [currentUser.email.toLowerCase()]: updatedProfile
     };
 
     saveStudentsToDB(updatedStudents);
@@ -3030,13 +3094,23 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     const newTierIdx = getTierIdx(newWilks);
 
     if (newTierIdx > oldTierIdx) {
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#d4af37', '#e0d3a8', '#ffffff']
-      });
-      showToast(`🏆 Parabéns! Você atingiu a meta Wilks: ${WILKS_LEVELS[newTierIdx].name}!`, 'success');
+      setTimeout(() => {
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#d4af37', '#e0d3a8', '#ffffff']
+        });
+        showToast(`🏆 Parabéns! Você atingiu a meta Wilks: ${WILKS_LEVELS[newTierIdx].name}!`, 'success');
+      }, 500);
+    }
+
+    if (improvedLifts.length > 0) {
+      setTimeout(() => {
+        triggerPrConfetti();
+        setPrCelebration({ lifts: improvedLifts });
+        showToast('¡NOVO RECORDE PESSOAL REGISTRADO! Os deuses do ferro celebram!', 'success');
+      }, 200);
     }
 
     setWorkoutModalOpen(false);
@@ -3047,7 +3121,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     setExerciseSetsState({});
     setExerciseWarmupState({});
     setSessionNote('');
-    showToast('Sessão registrada com sucesso!', 'success');
+    if (improvedLifts.length === 0) {
+      showToast('Sessão registrada com sucesso!', 'success');
+    }
   };
 
   const handleWorkoutSubmit = () => {
@@ -9634,9 +9710,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold text-[#e0d3a8] uppercase tracking-wider">Sua Mensagem de Destaque / Parabéns</label>
-                        <textarea
+                        <DebouncedTextarea
                           value={publicNoteInput}
-                          onChange={(e) => setPublicNoteInput(e.target.value)}
+                          onChange={(val: string) => setPublicNoteInput(val)}
                           placeholder="Digite aqui palavras de honra, conquistas ou um novo recorde que merece celebração no feed..."
                           className="w-full h-32 px-4 py-3 rounded-xl bg-[#0d0908]/60 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/40 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold font-medium text-sm leading-relaxed"
                         />
@@ -10030,12 +10106,12 @@ Equipe Viking Force`);
                             <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
                               Modelo da Mensagem (Template)
                             </label>
-                            <textarea
+                            <DebouncedTextarea
                               id="whatsappTemplateInput"
                               value={whatsappWorkoutTemplate}
-                              onChange={(e) => {
-                                setWhatsappWorkoutTemplate(e.target.value);
-                                localStorage.setItem('viking_whatsapp_workout_template', e.target.value);
+                              onChange={(val: string) => {
+                                setWhatsappWorkoutTemplate(val);
+                                localStorage.setItem('viking_whatsapp_workout_template', val);
                               }}
                               className="w-full h-80 px-4 py-3 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/30 outline-none transition-all font-mono leading-relaxed resize-none"
                               placeholder="Digite o modelo de mensagem aqui..."
@@ -11119,19 +11195,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Dicas de Técnica / Orientações</label>
-                                      <textarea value={ex.techniqueTips || ''} onChange={e => handleEditorUpdateField(originalIdx, 'techniqueTips', e.target.value)} placeholder="Ex: Controlar a descida..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                      <DebouncedTextarea value={ex.techniqueTips || ''} onChange={(val: string) => handleEditorUpdateField(originalIdx, 'techniqueTips', val)} placeholder="Ex: Controlar a descida..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">Observações do Treinador</label>
-                                      <textarea value={ex.trainerNote || ''} onChange={e => handleEditorUpdateField(originalIdx, 'trainerNote', e.target.value)} placeholder="Ex: Fazer com band..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none" />
+                                      <DebouncedTextarea value={ex.trainerNote || ''} onChange={(val: string) => handleEditorUpdateField(originalIdx, 'trainerNote', val)} placeholder="Ex: Fazer com band..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none" />
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Lembretes de Mobilidade</label>
-                                      <textarea value={ex.mobilityReminders || ''} onChange={e => handleEditorUpdateField(originalIdx, 'mobilityReminders', e.target.value)} placeholder="Ex: Focar em liberar glúteo..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
+                                      <DebouncedTextarea value={ex.mobilityReminders || ''} onChange={(val: string) => handleEditorUpdateField(originalIdx, 'mobilityReminders', val)} placeholder="Ex: Focar em liberar glúteo..." rows={2} className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none" />
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1 flex items-center gap-1"><Youtube className="w-3 h-3 text-red-500 animate-pulse" /> Link do YouTube</label>
-                                      <input value={ex.videoUrl || ''} onChange={e => handleEditorUpdateField(originalIdx, 'videoUrl', e.target.value)} placeholder="Ex: https://www..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                      <DebouncedInput value={ex.videoUrl || ''} onChange={(val: string) => handleEditorUpdateField(originalIdx, 'videoUrl', val)} placeholder="Ex: https://www..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
                                     </div>
                                     <div className="pt-2 border-t border-viking-gold/10 mt-1">
                                       <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1 tracking-wider">⚡ Metodologia de Treino</label>
@@ -11146,7 +11222,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                           </select>
                                         </div>
                                         <div>
-                                          <input type="text" value={ex.methodologyDetails || ''} onChange={e => handleEditorUpdateField(originalIdx, 'methodologyDetails', e.target.value)} placeholder="Opcional: Detalhes da metodologia..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
+                                          <DebouncedInput type="text" value={ex.methodologyDetails || ''} onChange={(val: string) => handleEditorUpdateField(originalIdx, 'methodologyDetails', val)} placeholder="Opcional: Detalhes da metodologia..." className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30" />
                                         </div>
                                       </div>
                                     </div>
@@ -12035,22 +12111,22 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         <div className="space-y-3">
                           <div>
                             <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Nome do Exercício *</label>
-                            <input 
+                            <DebouncedInput 
                               type="text" 
                               placeholder="Ex: Agachamento Livre Back Squat"
                               value={editingDbExercise.name}
-                              onChange={(e) => setEditingDbExercise({ ...editingDbExercise, name: e.target.value })}
+                              onChange={(val: string) => setEditingDbExercise({ ...editingDbExercise, name: val })}
                               className="w-full px-3 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
                             />
                           </div>
 
                           <div>
                             <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Dicas de Técnica / Instruções de Movimento</label>
-                            <textarea 
+                            <DebouncedTextarea 
                               rows={2}
                               placeholder="Ex: Mantenha os joelhos alinhados com as pontas dos pés, descendo abaixo do paralelo mantendo o tronco firme."
                               value={editingDbExercise.techniqueTips}
-                              onChange={(e) => setEditingDbExercise({ ...editingDbExercise, techniqueTips: e.target.value })}
+                              onChange={(val: string) => setEditingDbExercise({ ...editingDbExercise, techniqueTips: val })}
                               className="w-full p-3 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/30 text-xs font-semibold focus:outline-none focus:border-viking-gold"
                             />
                           </div>
@@ -12058,11 +12134,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Link de Vídeo (YouTube)</label>
-                              <input 
+                              <DebouncedInput 
                                 type="text" 
                                 placeholder="https://www.youtube.com/watch?v=..."
                                 value={editingDbExercise.videoUrl || ''}
-                                onChange={(e) => setEditingDbExercise({ ...editingDbExercise, videoUrl: e.target.value })}
+                                onChange={(val: string) => setEditingDbExercise({ ...editingDbExercise, videoUrl: val })}
                                 className="w-full px-3 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold"
                               />
                             </div>
