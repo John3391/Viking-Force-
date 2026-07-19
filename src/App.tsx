@@ -75,7 +75,8 @@ import {
   GripVertical
 ,
   Calculator,
-  Folder
+  Folder,
+  Share2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -362,6 +363,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [restTimerRemaining, setRestTimerRemaining] = useState<number>(120);
   const [timerShake, setTimerShake] = useState<boolean>(false);
   const [sessionNote, setSessionNote] = useState<string>('');
+  const [exportModalOpen, setExportModalOpen] = useState<boolean>(false);
+  const [exportText, setExportText] = useState<string>('');
 
   // Touch swiping states for mobile exercise card slide navigation
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -1737,6 +1740,103 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     setTimeout(() => {
       window.open(waUrl, '_blank');
     }, 1500);
+  };
+
+  const handleExportSessionSummary = () => {
+    if (!activeStudentProfile) {
+      showToast('Nenhum guerreiro selecionado!', 'error');
+      return;
+    }
+    const activeProg = activeStudentProfile.customProgram || trainingProgram;
+    const currentExercises = activeProg.weeks[selectedWeek]?.[selectedDay] || [];
+    if (currentExercises.length === 0) {
+      showToast('Nenhum exercício encontrado para hoje!', 'warning');
+      return;
+    }
+
+    const today = new Date();
+    const formattedDate = today.toLocaleDateString('pt-BR');
+
+    let text = `⚔️ *RESUMO DE TREINO - VIKING FORCE* ⚔️\n`;
+    text += `👤 *Guerreiro:* ${activeStudentProfile.name}\n`;
+    text += `🗓️ *Data:* ${formattedDate}\n`;
+    text += `🔥 *Período:* Semana ${selectedWeek + 1}, Dia ${selectedDay}\n\n`;
+
+    text += `📋 *Exercícios Realizados:*\n`;
+    
+    let completedCount = 0;
+    let totalRpe = 0;
+    let rpeCount = 0;
+
+    currentExercises.forEach((ex, idx) => {
+      const sets = exerciseSetsState[ex.id] || [];
+      const rpe = sessionRpeState[ex.id];
+      const isFailed = !!exerciseFailureState[ex.id]?.failed;
+      
+      const doneSets = sets.filter(s => s.done);
+      const isDone = doneSets.length > 0;
+      
+      if (isDone) {
+        completedCount++;
+      }
+
+      if (typeof rpe === 'number') {
+        totalRpe += rpe;
+        rpeCount++;
+      }
+
+      // Format exercise details
+      text += `*#${idx + 1} ${ex.name}*\n`;
+      
+      // Target/planned values
+      text += `  • Prescrito: ${ex.sets}x${ex.reps}`;
+      if (ex.intensity) {
+        text += ` @ ${ex.intensity}`;
+      }
+      text += `\n`;
+
+      if (sets.length > 0) {
+        const setsStr = sets.map((s, sIdx) => {
+          return `${sIdx + 1}ª: ${s.reps}x${s.weight}kg${s.done ? ' (OK)' : ' (Pendente)'}`;
+        }).join(', ');
+        text += `  • Séries: ${setsStr}\n`;
+      } else if (isFailed) {
+        const failure = exerciseFailureState[ex.id] || { setsDone: 1, actualReps: 1 };
+        text += `  • Falhou após ${failure.setsDone} série(s) (${failure.actualReps} reps feitas)\n`;
+      } else {
+        text += `  • Séries: Sem registro\n`;
+      }
+
+      if (typeof rpe === 'number') {
+        text += `  • Esforço: RPE ${rpe}\n`;
+      }
+      text += `\n`;
+    });
+
+    if (sessionNote.trim()) {
+      text += `📝 *Notas de Desempenho:*\n"${sessionNote.trim()}"\n\n`;
+    }
+
+    const avgRpe = rpeCount > 0 ? (totalRpe / rpeCount).toFixed(1) : null;
+    text += `📊 *Estatísticas da Sessão:*\n`;
+    text += `• Exercícios Concluídos: ${completedCount}/${currentExercises.length}\n`;
+    if (avgRpe) {
+      text += `• Média de RPE: ${avgRpe}\n`;
+    }
+    
+    // Add a signature
+    text += `\n🛡️ *Força e Honra!* 🛡️`;
+
+    setExportText(text);
+    setExportModalOpen(true);
+    
+    // Copy to clipboard automatically
+    try {
+      navigator.clipboard.writeText(text);
+      showToast('Resumo copiado para a área de transferência! 📋', 'success');
+    } catch (err) {
+      showToast('Resumo gerado com sucesso!', 'success');
+    }
   };
 
   const handleDownloadMonthlySummaryPDF = (profile: StudentProfile) => {
@@ -12609,6 +12709,75 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       </AnimatePresence>
 
 
+      {/* Export Session Summary Modal */}
+      <AnimatePresence>
+        {exportModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-[#140e0c]/98 border border-viking-gold/25 p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.9)] max-w-xl w-full text-[#e0d3a8] flex flex-col max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between border-b border-viking-gold/15 pb-4 mb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                    <Share2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-viking-gold uppercase tracking-wider font-viking-display">Resumo Exportável</h2>
+                    <p className="text-[10px] text-viking-silver uppercase font-viking-medieval mt-0.5">Pronto para compartilhar via WhatsApp ou salvar</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setExportModalOpen(false)}
+                  className="p-1.5 rounded-xl bg-viking-gold/5 border border-viking-gold/20 text-viking-silver hover:text-viking-gold cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 mb-5 text-xs font-semibold pr-1">
+                <p className="text-viking-silver text-xs">
+                  O resumo abaixo foi copiado automaticamente para a sua área de transferência. Você pode usá-lo para enviar ao seu treinador, salvar em notas pessoais ou colar no WhatsApp!
+                </p>
+                <textarea
+                  readOnly
+                  value={exportText}
+                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                  rows={14}
+                  className="w-full p-4 rounded-xl bg-black/50 border border-viking-gold/15 text-[#e0d3a8] font-mono text-[11px] focus:outline-none focus:border-viking-gold/40 resize-none h-80"
+                />
+              </div>
+
+              <div className="flex gap-3 shrink-0">
+                <button 
+                  onClick={() => setExportModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/60 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer"
+                >
+                  Fechar
+                </button>
+                <button 
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(exportText);
+                      showToast('Resumo copiado com sucesso! 📋', 'success');
+                    } catch (err) {
+                      showToast('Falha ao copiar para a área de transferência', 'error');
+                    }
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-viking-gold text-[#140e0c] font-bold hover:brightness-110 transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copiar Novamente
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
       {/* Confirm Session Modal (Moved to root level) */}
       <AnimatePresence>
         {confirmSessionModalOpen && pendingSession && (
@@ -12663,7 +12832,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               exit={workoutLayout === 'modal' ? { opacity: 0, scale: 0.95 } : { x: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
               className={workoutLayout === 'modal' 
-                ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[88vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+                ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-5xl bg-[#140e0c]/98 border border-viking-gold/25 rounded-3xl z-50 flex flex-col max-h-[88vh] overflow-hidden text-[#e0d3a8] shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-xl"
                 : "fixed top-0 right-0 h-screen w-full sm:w-[480px] md:w-[540px] lg:w-[600px] bg-[#140e0c]/98 border-l-2 border-viking-gold/30 z-50 flex flex-col overflow-hidden text-[#e0d3a8] shadow-[-15px_0_50px_rgba(0,0,0,0.85)] backdrop-blur-xl rounded-l-3xl"
               }
             >
@@ -12679,6 +12848,17 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Export Session Button */}
+                  <button 
+                    type="button"
+                    onClick={handleExportSessionSummary}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                    title="Exportar Resumo da Sessão"
+                  >
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">Exportar Sessão</span>
+                  </button>
+
                   {/* Layout Toggle Button */}
                   {workoutLayout === 'modal' ? (
                     <button 
@@ -12717,9 +12897,12 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 md:pb-6 space-y-4 sm:space-y-6">
+              <div className="flex-1 overflow-y-auto md:overflow-hidden px-4 py-6 sm:px-6 sm:py-8 pb-36 md:p-0 space-y-5 md:space-y-0 md:flex md:flex-row">
                 
-                {/* Workout Selector */}
+                {/* Left Column (Settings, timer, progress, notes) */}
+                <div className="flex flex-col space-y-5 md:space-y-6 w-full md:w-[360px] md:min-w-[360px] md:border-r md:border-viking-gold/15 md:p-6 md:overflow-y-auto h-full scrollbar-thin scrollbar-thumb-viking-gold/25 scrollbar-track-transparent">
+                  
+                  {/* Workout Selector */}
                 <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                   <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">🗓️ Período de Treino Ativo</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -12947,6 +13130,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                   );
                 })()}
 
+                {/* Session observation box inside Left Column */}
+                <div className="space-y-2 pt-2">
+                  <label htmlFor="sessionNote" className="block text-xs font-bold text-viking-silver uppercase tracking-wider">Notas de Desempenho (Opcional)</label>
+                  <DebouncedTextarea id="sessionNote" rows={3} value={sessionNote} onChange={(val: string) => setSessionNote(val)}
+                    placeholder="Escreva como se sentiu hoje. Destaques, dores articulares ou velocidade das subidas..."
+                    className="w-full p-4 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/35 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs font-semibold"
+                  />
+                </div>
+              </div> {/* Close Left Column */}
+
+              {/* Right Column (Exercises List) */}
+              <div className="flex-1 flex flex-col md:p-6 md:overflow-y-auto h-full min-w-0 scrollbar-thin scrollbar-thumb-viking-gold/25 scrollbar-track-transparent">
+                
                 {/* Exercises list in workout */}
                 <div className="space-y-4">
                   {((activeStudentProfile?.customProgram || trainingProgram).weeks[selectedWeek]?.[selectedDay] || []).length === 0 ? (
@@ -13831,16 +14027,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           )}
         </div>
 
-                {/* Session observation box */}
-                <div className="space-y-2 pt-2">
-                  <label htmlFor="sessionNote" className="block text-xs font-bold text-viking-silver uppercase tracking-wider">Notas de Desempenho (Opcional)</label>
-                  <DebouncedTextarea id="sessionNote" rows={3} value={sessionNote} onChange={(val: string) => setSessionNote(val)}
-                    placeholder="Escreva como se sentiu hoje. Destaques, dores articulares ou velocidade das subidas..."
-                    className="w-full p-4 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/35 focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs font-semibold"
-                  />
-                </div>
-
-              </div>
+              </div> {/* Close Right Column */}
+            </div> {/* Close Main Body Div */}
 
               {/* Submit panel */}
               <div className="p-4 sm:p-6 border-t border-viking-gold/15 bg-[#140e0c]/95 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
