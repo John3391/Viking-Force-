@@ -305,6 +305,16 @@ export default function App() {
   const [activeNoteStudentEmail, setActiveNoteStudentEmail] = useState<string>('');
   const [publicNoteInput, setPublicNoteInput] = useState<string>('');
 
+  // Controlled inputs for student Settings (PRs)
+  const [settingsSquat, setSettingsSquat] = useState<number>(0);
+  const [settingsBench, setSettingsBench] = useState<number>(0);
+  const [settingsDeadlift, setSettingsDeadlift] = useState<number>(0);
+
+  // Controlled inputs for trainer's Edit Student (PRs)
+  const [editStudentSquat, setEditStudentSquat] = useState<number>(0);
+  const [editStudentBench, setEditStudentBench] = useState<number>(0);
+  const [editStudentDeadlift, setEditStudentDeadlift] = useState<number>(0);
+
   // Gmail states
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(null);
@@ -615,6 +625,27 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('viking_protocols', JSON.stringify(trainingProtocols));
   }, [trainingProtocols]);
+
+  // Synchronize Settings PR states on open
+  useEffect(() => {
+    if (drawerOpen && drawerType === 'settings' && activeStudentProfile) {
+      setSettingsSquat(activeStudentProfile.prs?.squat || 0);
+      setSettingsBench(activeStudentProfile.prs?.bench || 0);
+      setSettingsDeadlift(activeStudentProfile.prs?.deadlift || 0);
+    }
+  }, [drawerOpen, drawerType, activeStudentProfile]);
+
+  // Synchronize Edit Student PR states on open
+  useEffect(() => {
+    if (drawerOpen && drawerType === 'editStudent' && editingStudentEmail) {
+      const student = studentsData[editingStudentEmail.toLowerCase()];
+      if (student) {
+        setEditStudentSquat(student.prs?.squat || 0);
+        setEditStudentBench(student.prs?.bench || 0);
+        setEditStudentDeadlift(student.prs?.deadlift || 0);
+      }
+    }
+  }, [drawerOpen, drawerType, editingStudentEmail, studentsData]);
 
   // Auto-select the correct week and day if the currently selected one is empty
   useEffect(() => {
@@ -8587,8 +8618,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Agachamento Máximo (kg)</label>
                           <WeightControl 
-                            value={activeStudentProfile.prs.squat || 0}
+                            value={settingsSquat}
                             onChange={(val: number) => {
+                              setSettingsSquat(val);
                               const input = document.getElementById('cfgSquat') as HTMLInputElement;
                               if (input) input.value = val.toString();
                             }}
@@ -8596,35 +8628,37 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             title="Agachamento Máximo (kg)"
                           />
                           {/* Hidden input to maintain compatibility with existing save logic that uses getElementById */}
-                          <input type="hidden" id="cfgSquat" defaultValue={activeStudentProfile.prs.squat || ''} />
+                          <input type="hidden" id="cfgSquat" value={settingsSquat} onChange={(e) => setSettingsSquat(parseFloat(e.target.value) || 0)} />
                         </div>
 
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Supino Máximo (kg)</label>
                           <WeightControl 
-                            value={activeStudentProfile.prs.bench || 0}
+                            value={settingsBench}
                             onChange={(val: number) => {
+                              setSettingsBench(val);
                               const input = document.getElementById('cfgBench') as HTMLInputElement;
                               if (input) input.value = val.toString();
                             }}
                             placeholder="Ex: 110"
                             title="Supino Máximo (kg)"
                           />
-                          <input type="hidden" id="cfgBench" defaultValue={activeStudentProfile.prs.bench || ''} />
+                          <input type="hidden" id="cfgBench" value={settingsBench} onChange={(e) => setSettingsBench(parseFloat(e.target.value) || 0)} />
                         </div>
 
                         <div>
                           <label className="block text-xs font-bold text-viking-silver mb-1">Levantamento Terra Máximo (kg)</label>
                           <WeightControl 
-                            value={activeStudentProfile.prs.deadlift || 0}
+                            value={settingsDeadlift}
                             onChange={(val: number) => {
+                              setSettingsDeadlift(val);
                               const input = document.getElementById('cfgDeadlift') as HTMLInputElement;
                               if (input) input.value = val.toString();
                             }}
                             placeholder="Ex: 190"
                             title="Levantamento Terra Máximo (kg)"
                           />
-                          <input type="hidden" id="cfgDeadlift" defaultValue={activeStudentProfile.prs.deadlift || ''} />
+                          <input type="hidden" id="cfgDeadlift" value={settingsDeadlift} onChange={(e) => setSettingsDeadlift(parseFloat(e.target.value) || 0)} />
                         </div>
                       </div>
 
@@ -8965,43 +8999,46 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Agachamento Máximo (kg)</label>
                               <WeightControl 
-                                value={s.prs?.squat || 0}
+                                value={editStudentSquat}
                                 onChange={(val: number) => {
+                                  setEditStudentSquat(val);
                                   const input = document.getElementById('editStudentSquat') as HTMLInputElement;
                                   if (input) input.value = val.toString();
                                 }}
                                 placeholder="Ex: 150"
                                 title="Agachamento Máximo (kg)"
                               />
-                              <input type="hidden" id="editStudentSquat" defaultValue={s.prs?.squat || ''} />
+                              <input type="hidden" id="editStudentSquat" value={editStudentSquat} onChange={(e) => setEditStudentSquat(parseFloat(e.target.value) || 0)} />
                             </div>
 
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Supino Máximo (kg)</label>
                               <WeightControl 
-                                value={s.prs?.bench || 0}
+                                value={editStudentBench}
                                 onChange={(val: number) => {
+                                  setEditStudentBench(val);
                                   const input = document.getElementById('editStudentBench') as HTMLInputElement;
                                   if (input) input.value = val.toString();
                                 }}
                                 placeholder="Ex: 110"
                                 title="Supino Máximo (kg)"
                               />
-                              <input type="hidden" id="editStudentBench" defaultValue={s.prs?.bench || ''} />
+                              <input type="hidden" id="editStudentBench" value={editStudentBench} onChange={(e) => setEditStudentBench(parseFloat(e.target.value) || 0)} />
                             </div>
 
                             <div>
                               <label className="block text-xs font-bold text-viking-silver mb-1">Levantamento Terra Máximo (kg)</label>
                               <WeightControl 
-                                value={s.prs?.deadlift || 0}
+                                value={editStudentDeadlift}
                                 onChange={(val: number) => {
+                                  setEditStudentDeadlift(val);
                                   const input = document.getElementById('editStudentDeadlift') as HTMLInputElement;
                                   if (input) input.value = val.toString();
                                 }}
                                 placeholder="Ex: 190"
                                 title="Levantamento Terra Máximo (kg)"
                               />
-                              <input type="hidden" id="editStudentDeadlift" defaultValue={s.prs?.deadlift || ''} />
+                              <input type="hidden" id="editStudentDeadlift" value={editStudentDeadlift} onChange={(e) => setEditStudentDeadlift(parseFloat(e.target.value) || 0)} />
                             </div>
                           </div>
                         </div>
