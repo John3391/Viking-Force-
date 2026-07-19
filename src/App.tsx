@@ -482,6 +482,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
   const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
+  const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState<boolean>(false);
   const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
   const [activeTipsModal, setActiveTipsModal] = useState<{ name: string; tips: string } | null>(null);
@@ -3513,13 +3514,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     setDrawerOpen(true);
   };
 
-  const handleEditorLoadWeekDay = (week: number, day: string) => {
+  const handleEditorLoadWeekDay = (week: number, day: string, customWeeks?: any) => {
     // 1. Salvar as edições atuais no estado geral em memória ANTES de mudar de dia
-    const currentWeeks = JSON.parse(JSON.stringify(editorProgram.weeks));
-    if (!currentWeeks[editorWeek]) {
-      currentWeeks[editorWeek] = {};
+    const currentWeeks = customWeeks ? JSON.parse(JSON.stringify(customWeeks)) : JSON.parse(JSON.stringify(editorProgram.weeks));
+    if (!customWeeks) {
+      if (!currentWeeks[editorWeek]) {
+        currentWeeks[editorWeek] = {};
+      }
+      currentWeeks[editorWeek][editorDay] = editorExercises;
     }
-    currentWeeks[editorWeek][editorDay] = editorExercises;
     
     // 2. Mudar para a nova aba
     setEditorWeek(week);
@@ -3546,7 +3549,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     updatedWeeks[nextWeek] = { A: [], B: [], C: [] };
     
     saveEditorProgramToDB({ weeks: updatedWeeks });
-    handleEditorLoadWeekDay(nextWeek, 'A');
+    handleEditorLoadWeekDay(nextWeek, 'A', updatedWeeks);
     showToast(`Semana ${nextWeek} adicionada com sucesso ao cronograma de treinos!`, 'success');
   };
 
@@ -3575,7 +3578,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
         
         const remainingDays = Object.keys(updatedWeeks[nextWeek] || {}).sort();
         const nextDay = remainingDays[0] || 'A';
-        handleEditorLoadWeekDay(nextWeek, nextDay);
+        handleEditorLoadWeekDay(nextWeek, nextDay, updatedWeeks);
         showToast(`Semana ${weekToDelete} excluída com sucesso!`, 'success');
       },
       true,
@@ -3600,7 +3603,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
     updatedWeeks[editorWeek][nextDay] = [];
     
     saveEditorProgramToDB({ weeks: updatedWeeks });
-    handleEditorLoadWeekDay(editorWeek, nextDay);
+    handleEditorLoadWeekDay(editorWeek, nextDay, updatedWeeks);
     showToast(`Treino ${nextDay} adicionado com sucesso à Semana ${editorWeek}!`, 'success');
   };
 
@@ -3635,7 +3638,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
         const remainingDays = Object.keys(updatedWeeks[week] || {}).sort();
         const nextDay = remainingDays.includes(editorDay) ? (editorDay === dayToDelete ? remainingDays[0] : editorDay) : remainingDays[0] || 'A';
-        handleEditorLoadWeekDay(week, nextDay);
+        handleEditorLoadWeekDay(week, nextDay, updatedWeeks);
         showToast(`Treino ${dayToDelete} da Semana ${week} excluído com sucesso!`, 'success');
       },
       true,
@@ -10756,11 +10759,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Semana</label>
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-1.5 items-center">
                             <select 
                               value={editorWeek}
                               onChange={e => handleEditorLoadWeekDay(parseInt(e.target.value), editorDay)}
-                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              className="flex-1 min-w-0 h-10 px-3 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold cursor-pointer"
                             >
                               {Object.keys(editorProgram.weeks).map(Number).sort((a,b) => a-b).map(wk => (
                                 <option key={wk} value={wk} className="bg-[#140e0c] text-[#e0d3a8]">
@@ -10771,7 +10774,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             <button
                               type="button"
                               onClick={() => handleEditorDeleteWeek(editorWeek)}
-                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              className="w-10 h-10 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
                               title="Excluir esta semana"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -10780,11 +10783,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Treino</label>
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-1.5 items-center">
                             <select 
                               value={editorDay}
                               onChange={e => handleEditorLoadWeekDay(editorWeek, e.target.value)}
-                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                              className="flex-1 min-w-0 h-10 px-3 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold cursor-pointer"
                             >
                               {Object.keys(editorProgram.weeks[editorWeek] || { A: [], B: [], C: [] }).sort().map(day => (
                                 <option key={day} value={day} className="bg-[#140e0c] text-[#e0d3a8]">
@@ -10795,7 +10798,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             <button
                               type="button"
                               onClick={() => handleEditorDeleteDay(editorWeek, editorDay)}
-                              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                              className="w-10 h-10 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
                               title="Excluir este treino"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -10808,14 +10811,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         <button
                           type="button"
                           onClick={handleEditorAddWeek}
-                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                          className="w-full h-10 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
                         >
                           <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Semanas
                         </button>
                         <button
                           type="button"
                           onClick={handleEditorAddWorkoutDay}
-                          className="w-full py-1.5 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
+                          className="w-full h-10 text-[10px] font-black uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/35 hover:border-viking-gold text-viking-gold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-viking-gold/20"
                         >
                           <Plus className="w-3.5 h-3.5 text-viking-gold" /> + Treino A, B, C
                         </button>
@@ -10967,23 +10970,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           return (
                             <div 
                               key={(ex.id || 'ex') + '_' + originalIdx} 
-                              draggable={true}
+                              draggable={dragEnabledIdx === originalIdx}
                               onDragStart={(e) => handleEditorExerciseDragStart(e, originalIdx)}
                               onDragOver={(e) => handleEditorExerciseDragOver(e, originalIdx)}
                               onDrop={(e) => handleEditorExerciseDrop(e, originalIdx)}
-                              onDragEnd={handleEditorExerciseDragEnd}
+                              onDragEnd={() => { handleEditorExerciseDragEnd(); setDragEnabledIdx(null); }}
                               className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${
                                 isDragged 
                                   ? 'opacity-30 border-dashed border-viking-gold/60 scale-[0.98]' 
                                   : isExpanded 
                                     ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' 
                                     : 'border-viking-gold/15 hover:border-viking-gold/40'
-                              } cursor-grab active:cursor-grabbing`}
+                              }`}
                             >
                               
                               <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
                                 <div className="flex items-center gap-2">
-                                  <GripVertical className="w-3.5 h-3.5 text-viking-gold/40 hover:text-viking-gold shrink-0 transition-colors" />
+                                  <GripVertical 
+                                    className="w-3.5 h-3.5 text-viking-gold/40 hover:text-viking-gold shrink-0 transition-colors cursor-grab active:cursor-grabbing" 
+                                    onMouseEnter={() => setDragEnabledIdx(originalIdx)}
+                                    onMouseLeave={() => setDragEnabledIdx(null)}
+                                  />
                                   <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} {ex.name || 'Novo Exercício'}</span>
                                   {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold" /> : <ChevronDown className="w-3 h-3 text-viking-gold" />}
                                 </div>
