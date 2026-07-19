@@ -289,10 +289,29 @@ export default function App() {
   // Reuseable Drawer state
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [drawerTitle, setDrawerTitle] = useState<string>('');
-  const [drawerType, setDrawerType] = useState<string>(''); // 'history' | 'ranking' | 'plans' | 'settings' | 'addStudent' | 'whatsapp' | 'payments' | 'rpeFeedback' | 'editProgram'
+  const [drawerType, setDrawerType] = useState<string>(''); // 'history' | 'ranking' | 'plans' | 'settings' | 'addStudent' | 'whatsapp' | 'payments' | 'rpeFeedback' | 'editProgram' | 'whatsappSettings'
   const [trainingProtocols, setTrainingProtocols] = useState<TrainingProtocol[]>(() => { const stored = localStorage.getItem('viking_protocols'); return stored ? JSON.parse(stored) : []; });
+  const [whatsappWorkoutTemplate, setWhatsappWorkoutTemplate] = useState<string>(() => {
+    return localStorage.getItem('viking_whatsapp_workout_template') || `🛡️ *TEMPLO VIKING FORCE - TREINO PREPARADO!* 🛡️
+
+Saudações, Guerreiro *{NOME_ALUNO}*! ⚔️
+
+Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}*! Seu corpo, sua mente e seus limites serão testados nesta nova fase.
+
+📊 *Resumo de Batalha (PRs Atuais):*
+• 🏋️ Agachamento: {PR_SQUAT}
+• 🏋️ Supino: {PR_BENCH}
+• 🏋️ Levantamento Terra: {PR_DEADLIFT}
+
+📥 *Ação Solicitada:*
+1️⃣ Baixe a ficha em PDF que estou te enviando aqui.
+2️⃣ Acesse o *Diário do Guerreiro* para registrar suas repetições, RPE e acompanhar sua evolução em tempo real!
+
+*Que os deuses do ferro abençoem seus levantamentos. O ferro não mente!* 🔥💪⚡`;
+  });
   const [editingStudentEmail, setEditingStudentEmail] = useState<string>('');
   const [activeChatStudentEmail, setActiveChatStudentEmail] = useState<string>('');
+  const [whatsappPreviewStudentEmail, setWhatsappPreviewStudentEmail] = useState<string>('');
   
   const hasCheckedDueDatesRef = useRef<boolean>(false);
   const previousStudentsRef = useRef<Record<string, StudentProfile>>({});
@@ -1458,6 +1477,243 @@ export default function App() {
     }
   };
 
+  const handleDownloadWorkoutPlanPDF = (profile: StudentProfile, email?: string) => {
+    try {
+      const doc = new jsPDF();
+      const activeProg = profile.customProgram || trainingProgram;
+      
+      // Page 1: Cover Header & Student info
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(197, 160, 89); // Viking gold
+      doc.text('🛡️ TEMPLO VIKING FORCE 🛡️', 105, 25, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.setTextColor(110, 110, 110);
+      doc.text('FICHA DE TREINAMENTO E FORTALECIMENTO', 105, 33, { align: 'center' });
+      
+      doc.setDrawColor(197, 160, 89);
+      doc.setLineWidth(0.8);
+      doc.line(20, 39, 190, 39);
+      
+      // Student Details Box
+      doc.setFillColor(248, 246, 240);
+      doc.rect(20, 44, 170, 34, 'F');
+      doc.setDrawColor(197, 160, 89);
+      doc.setLineWidth(0.5);
+      doc.rect(20, 44, 170, 34, 'D');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      doc.text('Guerreiro(a):', 25, 51);
+      doc.setFont('helvetica', 'normal');
+      doc.text(profile.name, 55, 51);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('Aliança / Plano:', 25, 58);
+      doc.setFont('helvetica', 'normal');
+      doc.text(profile.plan || 'Não especificado', 55, 58);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('WhatsApp:', 25, 65);
+      doc.setFont('helvetica', 'normal');
+      doc.text(profile.phone || 'Não cadastrado', 55, 65);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('E-mail Atleta:', 25, 72);
+      doc.setFont('helvetica', 'normal');
+      doc.text(email || 'Não cadastrado', 55, 72);
+      
+      // Right side columns of the box: Personal Records
+      doc.setFont('helvetica', 'bold');
+      doc.text('RECORDS PESSOAIS (PRs):', 120, 51);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Agachamento: ${profile.prs?.squat ? `${profile.prs.squat} kg` : '--'}`, 120, 58);
+      doc.text(`Supino: ${profile.prs?.bench ? `${profile.prs.bench} kg` : '--'}`, 120, 65);
+      doc.text(`Levantamento Terra: ${profile.prs?.deadlift ? `${profile.prs.deadlift} kg` : '--'}`, 120, 72);
+      
+      // Content of Workouts
+      let y = 88;
+      const pageHeight = doc.internal.pageSize.height;
+      
+      if (!activeProg || !activeProg.weeks || Object.keys(activeProg.weeks).length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(11);
+        doc.text('Nenhum treino prescrito no momento.', 20, y);
+      } else {
+        // Iterate through weeks
+        const sortedWeeks = Object.keys(activeProg.weeks).map(Number).sort((a, b) => a - b);
+        
+        sortedWeeks.forEach((weekNum) => {
+          const weekWorkout = activeProg.weeks[weekNum];
+          const sortedDays = Object.keys(weekWorkout).sort();
+          
+          if (sortedDays.length === 0) return;
+          
+          // Header for Week
+          if (y + 15 > pageHeight - 20) {
+            doc.addPage();
+            y = 25;
+          }
+          
+          doc.setFillColor(38, 26, 21); // Dark brown-red fill
+          doc.rect(20, y, 170, 9, 'F');
+          
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(212, 175, 55); // gold
+          doc.text(`SEMANA ${weekNum}`, 25, y + 6);
+          y += 14;
+          
+          sortedDays.forEach((dayName) => {
+            const exercises = weekWorkout[dayName] || [];
+            if (exercises.length === 0) return;
+            
+            // Calculate height of this day block to see if it fits
+            const dayHeaderHeight = 8;
+            const tableHeaderHeight = 7;
+            const rowHeight = 7;
+            const totalDayHeight = dayHeaderHeight + tableHeaderHeight + (exercises.length * rowHeight) + 10;
+            
+            if (y + totalDayHeight > pageHeight - 20) {
+              doc.addPage();
+              y = 25;
+              // Re-draw background week marker for clarity on new page
+              doc.setFillColor(38, 26, 21);
+              doc.rect(20, y, 170, 7, 'F');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(212, 175, 55);
+              doc.text(`SEMANA ${weekNum} (Continuação)`, 25, y + 5);
+              y += 12;
+            }
+            
+            // Draw Day Header
+            doc.setFillColor(235, 230, 220);
+            doc.rect(20, y, 170, 6, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9.5);
+            doc.setTextColor(30, 30, 30);
+            doc.text(`TREINO ${dayName}`, 23, y + 4.5);
+            y += 6;
+            
+            // Draw Table Headers
+            doc.setFillColor(197, 160, 89);
+            doc.rect(20, y, 170, 6.5, 'F');
+            
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(255, 255, 255);
+            doc.text('Exercício', 23, y + 4.5);
+            doc.text('Séries x Reps', 105, y + 4.5);
+            doc.text('Intensidade', 135, y + 4.5);
+            doc.text('RPE Alvo', 165, y + 4.5);
+            y += 6.5;
+            
+            // Draw rows
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(50, 50, 50);
+            
+            exercises.forEach((ex, idx) => {
+              // Draw light background for alternate rows
+              if (idx % 2 === 1) {
+                doc.setFillColor(252, 250, 246);
+                doc.rect(20, y, 170, 7, 'F');
+              }
+              
+              // Draw thin border under each row
+              doc.setDrawColor(240, 235, 225);
+              doc.setLineWidth(0.3);
+              doc.line(20, y + 7, 190, y + 7);
+              
+              const intensityStr = typeof ex.intensity === 'number'
+                ? `${(ex.intensity * 100).toFixed(0)}%`
+                : ex.intensity || 'Livre';
+                
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(30, 30, 30);
+              doc.text(ex.name, 23, y + 5);
+              
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(50, 50, 50);
+              doc.text(`${ex.sets}x${ex.reps}`, 105, y + 5);
+              doc.text(intensityStr, 135, y + 5);
+              doc.text(`@${ex.targetRPE}`, 165, y + 5);
+              
+              y += 7;
+            });
+            
+            y += 6; // Space after day block
+          });
+          
+          y += 4; // Space after week block
+        });
+      }
+      
+      // Footer text/signature
+      if (y + 20 > pageHeight - 20) {
+        doc.addPage();
+        y = 25;
+      }
+      doc.setDrawColor(197, 160, 89);
+      doc.setLineWidth(0.5);
+      doc.line(20, y + 5, 190, y + 5);
+      
+      doc.setFont('helvetica', 'bolditalic');
+      doc.setFontSize(9);
+      doc.setTextColor(120, 110, 90);
+      doc.text('"O ferro nunca mente para você. Ele sempre pesa o mesmo." - Clã Viking Force', 105, y + 13, { align: 'center' });
+      
+      const fileName = `ficha_treino_viking_${profile.name.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      doc.save(fileName);
+      showToast('Ficha de Treino em PDF baixada com sucesso!', 'success');
+      return true;
+    } catch (err) {
+      console.error("Erro ao gerar PDF de treino:", err);
+      showToast('Falha ao gerar PDF de treino.', 'error');
+      return false;
+    }
+  };
+
+  const handleSendWorkoutPlanWhatsApp = (studentEmail: string, s: StudentProfile) => {
+    // 1. Generate and trigger download of the PDF!
+    const success = handleDownloadWorkoutPlanPDF(s, studentEmail);
+    if (!success) return;
+    
+    // 2. Format phone number
+    if (!s.phone) {
+      showToast('Este guerreiro não possui número de WhatsApp cadastrado! Cadastre-o primeiro.', 'warning');
+      return;
+    }
+    
+    const phoneClean = s.phone.replace(/\D/g, '');
+    
+    // 3. Customize message from template with placeholders
+    const workoutName = s.customProgramName || 'Ficha de Treino';
+    const squatVal = s.prs?.squat ? `${s.prs.squat}kg` : 'A definir';
+    const benchVal = s.prs?.bench ? `${s.prs.bench}kg` : 'A definir';
+    const deadliftVal = s.prs?.deadlift ? `${s.prs.deadlift}kg` : 'A definir';
+
+    let message = whatsappWorkoutTemplate
+      .replace(/{NOME_ALUNO}/gi, s.name)
+      .replace(/{NOME_TREINO}/gi, workoutName)
+      .replace(/{PR_SQUAT}/gi, squatVal)
+      .replace(/{PR_BENCH}/gi, benchVal)
+      .replace(/{PR_DEADLIFT}/gi, deadliftVal);
+    
+    // 4. Open WhatsApp
+    const waUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
+    
+    // 5. Alert the coach that the PDF has been downloaded and to attach it on the chat
+    showToast('Redirecionando para o WhatsApp... Anexe o PDF que foi baixado na conversa!', 'info');
+    
+    setTimeout(() => {
+      window.open(waUrl, '_blank');
+    }, 1500);
+  };
+
   const handleDownloadMonthlySummaryPDF = (profile: StudentProfile) => {
     try {
       const doc = new jsPDF();
@@ -2334,8 +2590,8 @@ export default function App() {
   };
 
   // --- CHAT / FEEDBACK LOGIC ---
-  const handleSendMessage = (studentEmail: string, text: string, imageUrl?: string) => {
-    if (!text.trim() && !imageUrl) return;
+  const handleSendMessage = (studentEmail: string, text: string, imageUrl?: string, prHistory?: { squat: number | null; bench: number | null; deadlift: number | null }) => {
+    if (!text.trim() && !imageUrl && !prHistory) return;
     const student = studentsData[studentEmail.toLowerCase()];
     if (!student) return;
 
@@ -2348,6 +2604,10 @@ export default function App() {
     
     if (imageUrl) {
       newMessage.imageUrl = imageUrl;
+    }
+
+    if (prHistory) {
+      newMessage.prHistory = prHistory;
     }
 
     const updatedHistory = [...(student.chatHistory || []), newMessage];
@@ -5406,9 +5666,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             {/* Core Workout Prescribed Preview */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-viking-gold/15">
-                <div>
-                  <h3 className="font-viking-display text-lg font-bold text-viking-gold">PROVA ATUAL PROGRAMADA</h3>
-                  <p className="text-xs text-viking-silver">Desenvolvida pelo Treinador John com foco em técnica de Powerlifting</p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div>
+                    <h3 className="font-viking-display text-lg font-bold text-viking-gold">PROVA ATUAL PROGRAMADA</h3>
+                    <p className="text-xs text-viking-silver">Desenvolvida pelo Treinador John com foco em técnica de Powerlifting</p>
+                  </div>
+                  <button
+                    onClick={() => handleDownloadWorkoutPlanPDF(activeStudentProfile || { name: currentUser?.name || 'Guerreiro', plan: 'Mensal', status: 'Ativo', prs: { squat: null, bench: null, deadlift: null }, sessions: [] })}
+                    className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/30 text-viking-gold text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                    title="Baixar Ficha de Treino completa em formato PDF"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> Baixar Ficha PDF
+                  </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1.5 bg-viking-darker border border-viking-gold/20 px-3 py-1.5 rounded-xl">
@@ -7253,7 +7522,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               })()}
 
               {/* Quick actions for Trainer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3 mt-8 pt-6 border-t border-viking-gold/15">
                 <button 
                   onClick={() => { setDrawerType('whatsapp'); setDrawerTitle('Painel de Cobranças'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -7277,6 +7546,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Mail className="w-4 h-4 shrink-0" /> Central de Gmail (Correio)
+                </button>
+                <button 
+                  onClick={() => { setDrawerType('whatsappSettings'); setDrawerTitle('Template de Treino Pronto'); setDrawerOpen(true); }}
+                  className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4 shrink-0 text-viking-gold" /> Template WhatsApp
                 </button>
                 <button 
                   onClick={handleBackupData}
@@ -7318,7 +7593,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               exit={{ opacity: 0, scale: 0.85, x: '-50%', y: '-48%' }}
               transition={{ type: 'spring', damping: 20, stiffness: 280 }}
               className={`fixed top-1/2 left-1/2 w-[calc(100%-2rem)] ${
-                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp', 'trash', 'studentPanel'].includes(drawerType)
+                ['history', 'ranking', 'plans', 'payments', 'rpeFeedback', 'gmail', 'whatsapp', 'trash', 'studentPanel', 'whatsappSettings'].includes(drawerType)
                   ? 'max-w-4xl' 
                   : 'max-w-2xl'
               } bg-[#140e0c]/98 border-2 border-viking-gold/30 rounded-3xl shadow-[0_0_80px_rgba(212,175,55,0.25),inset_0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl z-50 flex flex-col max-h-[85vh] overflow-hidden text-[#e0d3a8]`}
@@ -7333,6 +7608,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   {drawerType === 'editStudent' && <Edit className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'addStudent' && <UserPlus className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'whatsapp' && <Phone className="w-5 h-5 text-viking-gold" />}
+                  {drawerType === 'whatsappSettings' && <MessageSquare className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'payments' && <CreditCard className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'rpeFeedback' && <MessageSquare className="w-5 h-5 text-viking-gold" />}
                   {drawerType === 'editProgram' && <Settings className="w-5 h-5 text-viking-gold" />}
@@ -9436,7 +9712,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           }}
                           className="p-3 rounded-xl bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 text-viking-gold transition-all flex items-center gap-2 cursor-pointer"
                         >
-                          <Mail className="w-4 h-4" /> <span className="text-xs font-bold uppercase tracking-wider">Enviar Ficha</span>
+                          <Mail className="w-4 h-4" /> <span className="text-xs font-bold uppercase tracking-wider">Enviar E-mail</span>
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            handleSendWorkoutPlanWhatsApp(editingStudentEmail, s);
+                          }}
+                          className="p-3 rounded-xl bg-[#1ea453]/10 hover:bg-[#1ea453]/20 border border-[#1ea453]/30 hover:border-[#1ea453]/70 text-[#25d366] transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-[#1ea453]/5"
+                        >
+                          <MessageCircle className="w-4 h-4 text-[#25d366]" /> <span className="text-xs font-bold uppercase tracking-wider">Ficha no WhatsApp</span>
                         </button>
 
                         <button 
@@ -9681,6 +9966,265 @@ Equipe Viking Force`);
                      </div>
                    </div>
                  )}
+
+                  {/* WhatsApp Custom Template Settings */}
+                  {drawerType === 'whatsappSettings' && (
+                    <div className="space-y-5">
+                      <div className="bg-[#0d0908]/60 border border-viking-gold/15 rounded-2xl p-4 space-y-2">
+                        <h4 className="text-sm font-black text-viking-gold uppercase tracking-widest flex items-center gap-2">
+                          🛡️ Personalizar Notificação
+                        </h4>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed">
+                          Ajuste o modelo de mensagem que o WhatsApp carrega ao compartilhar novos treinos preparados com seus guerreiros. Use os botões abaixo para inserir placeholders dinâmicos!
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* Editor Column */}
+                        <div className="space-y-4">
+                          <div className="space-y-3">
+                            <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
+                              Modelo da Mensagem (Template)
+                            </label>
+                            <textarea
+                              id="whatsappTemplateInput"
+                              value={whatsappWorkoutTemplate}
+                              onChange={(e) => {
+                                setWhatsappWorkoutTemplate(e.target.value);
+                                localStorage.setItem('viking_whatsapp_workout_template', e.target.value);
+                              }}
+                              className="w-full h-80 px-4 py-3 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/30 outline-none transition-all font-mono leading-relaxed resize-none"
+                              placeholder="Digite o modelo de mensagem aqui..."
+                            />
+                          </div>
+
+                          {/* Placeholders Toolbar */}
+                          <div className="space-y-2.5">
+                            <p className="text-[10px] font-black uppercase text-viking-gold tracking-widest">
+                              Placeholders Dinâmicos (Clique para inserir)
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[
+                                { tag: '{NOME_ALUNO}', desc: 'Nome do guerreiro' },
+                                { tag: '{NOME_TREINO}', desc: 'Nome do treino/protocolo' },
+                                { tag: '{PR_SQUAT}', desc: 'Carga de Agachamento' },
+                                { tag: '{PR_BENCH}', desc: 'Carga de Supino' },
+                                { tag: '{PR_DEADLIFT}', desc: 'Carga de Terra' },
+                              ].map((item) => (
+                                <button
+                                  key={item.tag}
+                                  type="button"
+                                  onClick={() => {
+                                    const textarea = document.getElementById('whatsappTemplateInput') as HTMLTextAreaElement;
+                                    if (textarea) {
+                                      const start = textarea.selectionStart;
+                                      const end = textarea.selectionEnd;
+                                      const text = textarea.value;
+                                      const before = text.substring(0, start);
+                                      const after = text.substring(end, text.length);
+                                      const newVal = before + item.tag + after;
+                                      setWhatsappWorkoutTemplate(newVal);
+                                      localStorage.setItem('viking_whatsapp_workout_template', newVal);
+                                      
+                                      // Refocus and place cursor after inserted tag
+                                      setTimeout(() => {
+                                        textarea.focus();
+                                        textarea.setSelectionRange(start + item.tag.length, start + item.tag.length);
+                                      }, 50);
+                                    } else {
+                                      const newVal = whatsappWorkoutTemplate + ' ' + item.tag;
+                                      setWhatsappWorkoutTemplate(newVal);
+                                      localStorage.setItem('viking_whatsapp_workout_template', newVal);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg bg-viking-gold/5 hover:bg-viking-gold/15 border border-viking-gold/20 hover:border-viking-gold/50 transition-all text-left text-[10px] cursor-pointer"
+                                >
+                                  <div className="font-mono text-viking-gold font-bold">{item.tag}</div>
+                                  <div className="text-[8px] text-viking-silver/60 uppercase mt-0.5">{item.desc}</div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Real-time Preview Column */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
+                              Visualização em Tempo Real (Prévia)
+                            </label>
+                            
+                            {/* Student selector */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-viking-silver/70 font-bold uppercase">Aluno:</span>
+                              <select
+                                value={whatsappPreviewStudentEmail}
+                                onChange={(e) => setWhatsappPreviewStudentEmail(e.target.value)}
+                                className="px-2.5 py-1 bg-[#120e0d] border border-viking-gold/25 hover:border-viking-gold/50 rounded-lg text-[11px] font-bold text-viking-gold outline-none transition-all cursor-pointer max-w-[160px]"
+                              >
+                                <option value="">[Ragnar Lodbrok - Exemplo]</option>
+                                {(Object.entries(studentsData) as [string, StudentProfile][])
+                                  .filter(([_, s]) => !s.isDeleted)
+                                  .map(([email, s]) => (
+                                    <option key={email} value={email}>
+                                      {s.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* WhatsApp Chat Container Mockup */}
+                          <div className="relative rounded-2xl border border-emerald-500/20 bg-[#0b141a] overflow-hidden shadow-2xl h-[420px] flex flex-col">
+                            {/* WhatsApp Top bar */}
+                            <div className="bg-[#1f2c34] px-4 py-3 flex items-center gap-3 shrink-0 border-b border-[#2a3942]">
+                              {/* Avatar */}
+                              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-black text-emerald-400 text-xs tracking-wider shrink-0 uppercase">
+                                {(() => {
+                                  const previewStudent = studentsData[whatsappPreviewStudentEmail];
+                                  const name = previewStudent?.name || 'Ragnar Lodbrok';
+                                  return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+                                })()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-xs font-bold text-white truncate leading-tight">
+                                  {(() => {
+                                    const previewStudent = studentsData[whatsappPreviewStudentEmail];
+                                    return previewStudent?.name || 'Ragnar Lodbrok';
+                                  })()}
+                                </h5>
+                                <span className="text-[9px] text-[#8696a0] font-medium">Online</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-[#aebac1]">
+                                <Phone className="w-3.5 h-3.5" />
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+
+                            {/* Chat bubble background with custom pattern look */}
+                            <div className="flex-1 overflow-y-auto p-4 bg-[#0b141a] flex flex-col justify-end space-y-3 relative" style={{ backgroundImage: `radial-gradient(#1f2c34 1px, transparent 1px)`, backgroundSize: '16px 16px' }}>
+                              {/* Left side received info bubble */}
+                              <div className="self-start max-w-[85%] rounded-lg rounded-tl-none bg-[#1f2c34] text-[#e9edef] p-2.5 text-[11px] shadow-sm leading-relaxed border border-[#2a3942]/40">
+                                Olá Coach! Pode me enviar o treino de hoje? 💪🏋️
+                                <div className="text-[9px] text-[#8696a0] text-right mt-1">18:55</div>
+                              </div>
+
+                              {/* Right side WhatsApp Message Bubble (Our template preview) */}
+                              <div className="self-end max-w-[85%] rounded-lg rounded-tr-none bg-[#005c4b] text-[#e9edef] p-3 text-[11px] shadow-md relative group border border-[#007a62]/30 flex flex-col">
+                                {/* Message text with bold/italic parser */}
+                                <div className="space-y-1 select-text">
+                                  {(() => {
+                                    const previewStudent = studentsData[whatsappPreviewStudentEmail];
+                                    let name = 'Ragnar Lodbrok';
+                                    let workout = 'Divisão Viking Força de Titã';
+                                    let squat = '180kg';
+                                    let bench = '120kg';
+                                    let deadlift = '220kg';
+
+                                    if (previewStudent) {
+                                      name = previewStudent.name;
+                                      workout = previewStudent.customProgramName || 'Ficha de Treino';
+                                      squat = previewStudent.prs?.squat ? `${previewStudent.prs.squat}kg` : 'A definir';
+                                      bench = previewStudent.prs?.bench ? `${previewStudent.prs.bench}kg` : 'A definir';
+                                      deadlift = previewStudent.prs?.deadlift ? `${previewStudent.prs.deadlift}kg` : 'A definir';
+                                    }
+
+                                    const filledMessage = whatsappWorkoutTemplate
+                                      .replace(/{NOME_ALUNO}/gi, name)
+                                      .replace(/{NOME_TREINO}/gi, workout)
+                                      .replace(/{PR_SQUAT}/gi, squat)
+                                      .replace(/{PR_BENCH}/gi, bench)
+                                      .replace(/{PR_DEADLIFT}/gi, deadlift);
+
+                                    return filledMessage.split('\n').map((line, lineIdx) => {
+                                      const regex = /(\*.*?\*|_.*?_|~.*?~)/g;
+                                      const tokens = line.split(regex);
+                                      const renderedLine = tokens.map((token, tokenIdx) => {
+                                        if (token.startsWith('*') && token.endsWith('*')) {
+                                          return <strong key={tokenIdx} className="font-extrabold text-white">{token.slice(1, -1)}</strong>;
+                                        }
+                                        if (token.startsWith('_') && token.endsWith('_')) {
+                                          return <em key={tokenIdx} className="italic text-gray-200">{token.slice(1, -1)}</em>;
+                                        }
+                                        if (token.startsWith('~') && token.endsWith('~')) {
+                                          return <span key={tokenIdx} className="line-through text-gray-400">{token.slice(1, -1)}</span>;
+                                        }
+                                        return token;
+                                      });
+                                      return (
+                                        <div key={lineIdx} className="min-h-[1.2rem] text-[11px] leading-relaxed text-[#e9edef] break-words">
+                                          {renderedLine}
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+
+                                <div className="text-[9px] text-[#8696a0] text-right mt-1.5 flex items-center justify-end gap-1">
+                                  <span>18:57</span>
+                                  {/* Double blue checks */}
+                                  <svg viewBox="0 0 16 11" width="16" height="11" className="fill-[#53bdeb] inline-block shrink-0">
+                                    <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.047L8.025 10.358 4.791 7.218a.365.365 0 0 0-.51.003l-.43.43a.37.37 0 0 0 .003.518l3.96 3.854a.365.365 0 0 0 .514-.006L15.057 3.83a.365.365 0 0 0-.047-.514zm-4.228 0l-.478-.372a.365.365 0 0 0-.51.047L4.297 10.358 3.322 9.41a.365.365 0 0 0-.51.003l-.43.43a.37.37 0 0 0 .003.518l1.714 1.669a.365.365 0 0 0 .515-.006L10.83 3.83a.365.365 0 0 0-.047-.514z"></path>
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* WhatsApp Bottom send bar */}
+                            <div className="bg-[#1f2c34] px-3 py-2 flex items-center gap-2.5 shrink-0 border-t border-[#2a3942]">
+                              <div className="flex-1 bg-[#2a3942] rounded-lg px-3.5 py-1.5 text-[10px] text-[#8696a0]">
+                                Mensagem enviada automaticamente...
+                              </div>
+                              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-[#111b21] shrink-0">
+                                <Send className="w-3.5 h-3.5 rotate-45" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Action buttons */}
+                      <div className="pt-2 flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaultTemplate = `🛡️ *TEMPLO VIKING FORCE - TREINO PREPARADO!* 🛡️
+
+Saudações, Guerreiro *{NOME_ALUNO}*! ⚔️
+
+Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}*! Seu corpo, sua mente e seus limites serão testados nesta nova fase.
+
+📊 *Resumo de Batalha (PRs Atuais):*
+• 🏋️ Agachamento: {PR_SQUAT}
+• 🏋️ Supino: {PR_BENCH}
+• 🏋️ Levantamento Terra: {PR_DEADLIFT}
+
+📥 *Ação Solicitada:*
+1️⃣ Baixe a ficha em PDF que estou te enviando aqui.
+2️⃣ Acesse o *Diário do Guerreiro* para registrar suas repetições, RPE e acompanhar sua evolução em tempo real!
+
+*Que os deuses do ferro abençoem seus levantamentos. O ferro não mente!* 🔥💪⚡`;
+                            setWhatsappWorkoutTemplate(defaultTemplate);
+                            localStorage.setItem('viking_whatsapp_workout_template', defaultTemplate);
+                            showToast('Modelo restaurado para o padrão Viking!', 'info');
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-viking-dark hover:bg-[#120e0d] border border-viking-gold/20 hover:border-viking-gold/44 text-viking-silver text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          Restaurar Padrão
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            showToast('Mensagem personalizada guardada com sucesso!', 'success');
+                            setDrawerOpen(false);
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-viking-gold hover:bg-viking-gold-hover text-black font-black text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-viking-gold/10"
+                        >
+                          Salvar Configuração
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 {/* 7. Payments list (Trainer) */}
                 {drawerType === 'payments' && (
@@ -10862,6 +11406,49 @@ Equipe Viking Force`);
                                     </div>
                                   )}
                                   {msg.text}
+
+                                  {msg.prHistory && (() => {
+                                    const { squat, bench, deadlift } = msg.prHistory;
+                                    const total = (squat || 0) + (bench || 0) + (deadlift || 0);
+                                    return (
+                                      <div className="mt-3 p-3.5 rounded-xl bg-black/90 border border-viking-gold/40 text-white space-y-2.5 max-w-sm shadow-lg">
+                                        <div className="flex items-center justify-between border-b border-viking-gold/20 pb-2">
+                                          <span className="font-viking-display font-black text-[10px] text-viking-gold uppercase tracking-widest flex items-center gap-1.5">
+                                            ⚔️ MARCAS DE FORÇA (PRs)
+                                          </span>
+                                          <span className="text-[8px] bg-viking-gold/15 border border-viking-gold/30 text-viking-gold px-2 py-0.5 rounded-md font-black uppercase tracking-wider">
+                                            Viking
+                                          </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2.5 text-center">
+                                          <div className="bg-[#120d0c] border border-viking-gold/15 p-2 rounded-lg">
+                                            <p className="text-[8px] text-viking-silver/70 uppercase font-black tracking-wider">Agachamento</p>
+                                            <p className="font-viking-display text-[11px] font-black text-viking-gold mt-1">
+                                              {squat !== null ? `${squat} kg` : '--'}
+                                            </p>
+                                          </div>
+                                          <div className="bg-[#120d0c] border border-viking-gold/15 p-2 rounded-lg">
+                                            <p className="text-[8px] text-viking-silver/70 uppercase font-black tracking-wider">Supino</p>
+                                            <p className="font-viking-display text-[11px] font-black text-viking-gold mt-1">
+                                              {bench !== null ? `${bench} kg` : '--'}
+                                            </p>
+                                          </div>
+                                          <div className="bg-[#120d0c] border border-viking-gold/15 p-2 rounded-lg">
+                                            <p className="text-[8px] text-viking-silver/70 uppercase font-black tracking-wider">Terra</p>
+                                            <p className="font-viking-display text-[11px] font-black text-viking-gold mt-1">
+                                              {deadlift !== null ? `${deadlift} kg` : '--'}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center justify-between bg-[#120d0c] border border-viking-gold/20 px-3 py-2 rounded-lg text-[9px] font-bold">
+                                          <span className="text-viking-silver uppercase tracking-wider">TOTAL DE CARGA:</span>
+                                          <span className="font-viking-display font-black text-viking-gold text-xs">
+                                            {total > 0 ? `${total} kg` : 'A definir'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </motion.div>
                             );
@@ -10871,6 +11458,29 @@ Equipe Viking Force`);
 
                       {/* Form Input */}
                       <div className="border-t border-viking-gold/15 pt-3 flex flex-col gap-2 shrink-0">
+                        {currentUser?.role === 'trainer' && student && (
+                          <div className="flex justify-start pb-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (student.prs) {
+                                  handleSendMessage(
+                                    targetEmail.toLowerCase(),
+                                    `💪 Confiram as minhas marcas atuais de força e histórico de PRs no painel! Foco no treino! 🔥`,
+                                    undefined,
+                                    student.prs
+                                  );
+                                } else {
+                                  showToast('Este guerreiro não possui PRs cadastrados!', 'warning');
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/30 hover:border-viking-gold/60 text-viking-gold text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                              title="Compartilhar histórico de PRs (Squat/Bench/Deadlift) deste aluno"
+                            >
+                              <Award className="w-3.5 h-3.5 animate-pulse" /> Compartilhar PRs (Histórico)
+                            </button>
+                          </div>
+                        )}
                         {chatImageFile && (
                           <div className="flex items-center justify-between bg-viking-gold/10 border border-viking-gold/20 p-2 rounded-lg">
                             <div className="flex items-center gap-2 text-viking-gold text-xs font-bold">
@@ -11275,6 +11885,7 @@ Equipe Viking Force`);
                          const updatedStudent = {
                            ...student,
                            customProgram: JSON.parse(JSON.stringify(protocol.program)),
+                           customProgramName: protocol.name,
                            workoutReady: true,
                            notifications: [notification, ...(student.notifications || [])]
                          };

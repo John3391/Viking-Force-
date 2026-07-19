@@ -108,6 +108,11 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   imageUrl?: string;
+  prHistory?: {
+    squat: number | null;
+    bench: number | null;
+    deadlift: number | null;
+  };
 }
 
 export interface CardioSession {
@@ -195,6 +200,7 @@ export interface StudentProfile {
     actionData?: { week: number; day: string };
   }[];
   customProgram?: TrainingProgram;
+  customProgramName?: string;
   workoutReady?: boolean;
   isDeleted?: boolean;
   deletedAt?: string;
