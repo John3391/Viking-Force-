@@ -71,7 +71,8 @@ import {
   Bell,
   Grid,
   List,
-  Info
+  Info,
+  GripVertical
 ,
   Calculator,
   Folder
@@ -480,6 +481,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [expandedExerciseIdx, setExpandedExerciseIdx] = useState<number | null>(null);
+  const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState<boolean>(false);
   const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
   const [activeTipsModal, setActiveTipsModal] = useState<{ name: string; tips: string } | null>(null);
@@ -3814,6 +3816,45 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       }
       return ex;
     }));
+  };
+
+  const handleEditorExerciseDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedExerciseIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleEditorExerciseDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleEditorExerciseDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedExerciseIdx === null || draggedExerciseIdx === targetIndex) return;
+
+    setEditorExercises(prev => {
+      const copy = [...prev];
+      const [draggedItem] = copy.splice(draggedExerciseIdx, 1);
+      copy.splice(targetIndex, 0, draggedItem);
+      return copy;
+    });
+
+    if (expandedExerciseIdx === draggedExerciseIdx) {
+      setExpandedExerciseIdx(targetIndex);
+    } else if (expandedExerciseIdx !== null) {
+      if (draggedExerciseIdx < expandedExerciseIdx && targetIndex >= expandedExerciseIdx) {
+        setExpandedExerciseIdx(prev => prev! - 1);
+      } else if (draggedExerciseIdx > expandedExerciseIdx && targetIndex <= expandedExerciseIdx) {
+        setExpandedExerciseIdx(prev => prev! + 1);
+      }
+    }
+
+    setDraggedExerciseIdx(null);
+  };
+
+  const handleEditorExerciseDragEnd = () => {
+    setDraggedExerciseIdx(null);
   };
 
   const handleEditorAddWarmupStep = (exIdx: number) => {
@@ -10922,11 +10963,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                         return filtered.map(({ ex, originalIdx }) => {
                           const isExpanded = expandedExerciseIdx === originalIdx;
+                          const isDragged = draggedExerciseIdx === originalIdx;
                           return (
-                            <div key={(ex.id || 'ex') + '_' + originalIdx} className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${isExpanded ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-viking-gold/15'}`}>
+                            <div 
+                              key={(ex.id || 'ex') + '_' + originalIdx} 
+                              draggable={true}
+                              onDragStart={(e) => handleEditorExerciseDragStart(e, originalIdx)}
+                              onDragOver={(e) => handleEditorExerciseDragOver(e, originalIdx)}
+                              onDrop={(e) => handleEditorExerciseDrop(e, originalIdx)}
+                              onDragEnd={handleEditorExerciseDragEnd}
+                              className={`p-4 rounded-xl bg-[#0d0908]/60 border transition-all duration-300 ${
+                                isDragged 
+                                  ? 'opacity-30 border-dashed border-viking-gold/60 scale-[0.98]' 
+                                  : isExpanded 
+                                    ? 'border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.25)]' 
+                                    : 'border-viking-gold/15 hover:border-viking-gold/40'
+                              } cursor-grab active:cursor-grabbing`}
+                            >
                               
                               <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedExerciseIdx(isExpanded ? null : originalIdx)}>
                                 <div className="flex items-center gap-2">
+                                  <GripVertical className="w-3.5 h-3.5 text-viking-gold/40 hover:text-viking-gold shrink-0 transition-colors" />
                                   <span className="text-xs text-viking-gold font-bold uppercase tracking-widest font-viking-medieval">#{originalIdx + 1} {ex.name || 'Novo Exercício'}</span>
                                   {isExpanded ? <ChevronUp className="w-3 h-3 text-viking-gold" /> : <ChevronDown className="w-3 h-3 text-viking-gold" />}
                                 </div>
