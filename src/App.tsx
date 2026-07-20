@@ -76,7 +76,10 @@ import {
 ,
   Calculator,
   Folder,
-  Share2
+  Share2,
+  HardDrive,
+  Database,
+  Clock
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -5001,6 +5004,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         >
                           <Mail className="w-4 h-4 shrink-0" /> Correio Gmail
                         </button>
+                        <button
+                          onClick={() => {
+                            setWorkoutModalOpen(false);
+                            setDrawerType('trainerSettings');
+                            setDrawerTitle('Configurações do Sistema');
+                            setDrawerOpen(true);
+                            setNavDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                            drawerOpen && drawerType === 'trainerSettings'
+                              ? 'text-viking-dark bg-viking-gold/90 font-bold'
+                              : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                          }`}
+                        >
+                          <Settings className="w-4 h-4 shrink-0" /> Configurações do Sistema
+                        </button>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -5045,6 +5064,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               { title: 'Agenda de Treinador', action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                               { title: 'Planos & Mensalidades', action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                               { title: 'Correio Gmail', action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                              { title: 'Configurações do Sistema', action: () => { setWorkoutModalOpen(false); setDrawerType('trainerSettings'); setDrawerTitle('Configurações do Sistema'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                             ] : [])
                           ];
                           const matched = allShortcuts.filter(item => item.title.toLowerCase().includes(navSearchInput.toLowerCase()));
@@ -5084,6 +5104,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             { title: 'Agenda de Treinador', action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                             { title: 'Planos & Mensalidades', action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                             { title: 'Correio Gmail', action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                            { title: 'Configurações do Sistema', action: () => { setWorkoutModalOpen(false); setDrawerType('trainerSettings'); setDrawerTitle('Configurações do Sistema'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           ] : [])
                         ];
                         const matched = allShortcuts.filter(item => item.title.toLowerCase().includes(navSearchInput.toLowerCase()));
@@ -5117,6 +5138,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           { title: 'Agenda de Treinador', icon: <Calendar className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('calendar'); setDrawerTitle('Agenda'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           { title: 'Planos & Mensalidades', icon: <CreditCard className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('plans'); setDrawerTitle('Gerenciamento de Mensalidades'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                           { title: 'Correio Gmail', icon: <Mail className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('gmail'); setDrawerTitle('Correio de Valhalla (Gmail)'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
+                          { title: 'Configurações do Sistema', icon: <Settings className="w-4 h-4 shrink-0" />, action: () => { setWorkoutModalOpen(false); setDrawerType('trainerSettings'); setDrawerTitle('Configurações do Sistema'); setDrawerOpen(true); setNavDropdownOpen(false); setNavSearchQuery(''); setNavSearchInput(''); } },
                         ] : [])
                       ];
 
@@ -13406,6 +13428,102 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 )}
 
                 {/* 13. Lixeira Virtual Drawer */}
+                {/* Trainer Settings */}
+                {drawerType === 'trainerSettings' && currentUser?.role === 'trainer' && (
+                  <div className="space-y-6">
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-viking-gold" /> Frequência de Backup Automático
+                      </h4>
+                      <p className="text-[11px] text-viking-silver leading-relaxed">
+                        Configure a periodicidade com que o sistema salvará um snapshot completo dos dados da guilda na nuvem.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                        <button 
+                          onClick={() => showToast('Frequência de backup alterada para: Diário', 'success')}
+                          className="px-4 py-3 bg-[#140e0c] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold/50 rounded-xl transition-all flex flex-col items-center gap-2"
+                        >
+                          <span className="p-2 rounded-full bg-viking-gold/10 text-viking-gold">
+                            <Calendar className="w-5 h-5" />
+                          </span>
+                          <span className="text-xs font-bold text-white uppercase">Diário</span>
+                          <span className="text-[9px] text-viking-silver text-center">Snapshot todos os dias à meia-noite</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => showToast('Frequência de backup alterada para: Semanal', 'success')}
+                          className="px-4 py-3 bg-[#140e0c] border-viking-gold bg-viking-gold/10 border-2 shadow-[0_0_10px_rgba(212,175,55,0.2)] rounded-xl transition-all flex flex-col items-center gap-2"
+                        >
+                          <span className="p-2 rounded-full bg-viking-gold text-viking-dark">
+                            <Clock className="w-5 h-5" />
+                          </span>
+                          <span className="text-xs font-bold text-viking-gold uppercase">Semanal</span>
+                          <span className="text-[9px] text-viking-gold/70 text-center">Ativo (Domingos)</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => showToast('Frequência de backup alterada para: Mensal', 'success')}
+                          className="px-4 py-3 bg-[#140e0c] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold/50 rounded-xl transition-all flex flex-col items-center gap-2"
+                        >
+                          <span className="p-2 rounded-full bg-viking-gold/10 text-viking-gold">
+                            <Database className="w-5 h-5" />
+                          </span>
+                          <span className="text-xs font-bold text-white uppercase">Mensal</span>
+                          <span className="text-[9px] text-viking-silver text-center">Dia 1 de cada mês</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                        <HardDrive className="w-4 h-4 text-viking-gold" /> Gerenciar Slots de Armazenamento na Nuvem
+                      </h4>
+                      <p className="text-[11px] text-viking-silver leading-relaxed">
+                        Controle o espaço de armazenamento alocado para arquivos de mídia (vídeos de execução e fotos de perfil).
+                      </p>
+                      
+                      <div className="bg-[#140e0c] border border-viking-gold/10 rounded-xl p-4 mt-2">
+                        <div className="flex justify-between items-end mb-2">
+                          <div>
+                            <p className="text-xs font-bold text-white uppercase tracking-wider">Uso do Servidor</p>
+                            <p className="text-[10px] text-viking-silver mt-0.5">Plano: Viking Premium (50GB)</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-viking-gold">14.2 GB</p>
+                            <p className="text-[10px] text-viking-silver uppercase">Usados</p>
+                          </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full h-3 bg-black/60 rounded-full overflow-hidden mt-3 mb-1">
+                          <div className="h-full bg-gradient-to-r from-viking-gold-dark to-viking-gold rounded-full" style={{ width: '28.4%' }}></div>
+                        </div>
+                        <div className="flex justify-between text-[9px] text-viking-silver font-bold uppercase mt-1">
+                          <span>0 GB</span>
+                          <span>28.4%</span>
+                          <span>50 GB</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 pt-3">
+                        <button 
+                          onClick={() => showToast('Limpando cache de vídeos antigos...', 'info')}
+                          className="flex-1 py-2 bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/30 text-viking-silver hover:text-viking-gold rounded-xl text-xs font-bold uppercase transition-all"
+                        >
+                          Limpar Cache Antigo
+                        </button>
+                        <button 
+                          onClick={() => showToast('Solicitação de upgrade de armazenamento enviada!', 'success')}
+                          className="flex-1 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark border border-viking-gold rounded-xl text-xs font-black uppercase transition-all shadow-md shadow-viking-gold/20"
+                        >
+                          Fazer Upgrade (100GB)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* 13. Lixeira Virtual Drawer */}
                 {drawerType === 'trash' && (
                   <div className="space-y-4">
                     <div className="bg-red-950/20 border border-red-500/20 rounded-2xl p-4 flex items-center gap-3">
@@ -15152,6 +15270,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                   >
                     <Mail className="w-4 h-4 text-viking-gold" /> Correio Gmail
                   </button>
+                  {currentUser?.role === 'trainer' && (
+                    <button 
+                      onClick={() => { 
+                        setMobileMenuOpen(false); 
+                        setDrawerType('trainerSettings'); 
+                        setDrawerTitle('Configurações do Sistema'); 
+                        setDrawerOpen(true); 
+                      }}
+                      className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer mt-2"
+                    >
+                      <Settings className="w-4 h-4 text-viking-gold" /> Configurações do Sistema
+                    </button>
+                  )}
                 </div>
               </div>
 
