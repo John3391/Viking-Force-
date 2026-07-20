@@ -64,7 +64,7 @@ import {
   Minimize2,
   Columns,
   Lock,
-  Calendar, Cloud, CloudLightning, RefreshCw,
+  Calendar, Cloud, CloudLightning, RefreshCw, BarChart3,
   Users, Target,
   Camera,
   Image as ImageIcon,
@@ -220,6 +220,7 @@ import TotalSBDChart from './components/TotalSBDChart';
 import WilksScatterChart from './components/WilksScatterChart';
 import FailureSentinel from './components/FailureSentinel';
 import PatentTimeline from './components/PatentTimeline';
+import SbdImpactSimulator from './components/SbdImpactSimulator';
 import WeeklyVolumeLineChart from './components/WeeklyVolumeLineChart';
 import { VikingLogo } from './components/VikingLogo';
 
@@ -386,6 +387,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [sessionNote, setSessionNote] = useState<string>('');
   const [exportModalOpen, setExportModalOpen] = useState<boolean>(false);
   const [exportText, setExportText] = useState<string>('');
+  const [exportSessionStats, setExportSessionStats] = useState<{
+    completedCount: number;
+    totalCount: number;
+    totalReps: number;
+    totalVolume: number;
+    avgRpe: string | null;
+    exercises: { name: string; maxWeight: number; volume: number; reps: number; rpe: number | null }[];
+  } | null>(null);
 
   // Touch swiping states for mobile exercise card slide navigation
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -1824,9 +1833,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
     text += `📋 *Exercícios Realizados:*\n`;
     
+    let totalRepsSession = 0;
+    let totalVolumeSession = 0;
     let completedCount = 0;
     let totalRpe = 0;
     let rpeCount = 0;
+
+    const statsExercisesList: {
+      name: string;
+      maxWeight: number;
+      volume: number;
+      reps: number;
+      rpe: number | null;
+    }[] = [];
 
     currentExercises.forEach((ex, idx) => {
       const sets = exerciseSetsState[ex.id] || [];
@@ -1836,6 +1855,21 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       const doneSets = sets.filter(s => s.done);
       const isDone = doneSets.length > 0;
       
+      let maxWeight = 0;
+      let exReps = 0;
+      let exVolume = 0;
+
+      doneSets.forEach(s => {
+        exReps += s.reps;
+        exVolume += s.reps * s.weight;
+        if (s.weight > maxWeight) {
+          maxWeight = s.weight;
+        }
+      });
+
+      totalRepsSession += exReps;
+      totalVolumeSession += exVolume;
+
       if (isDone) {
         completedCount++;
       }
@@ -1845,8 +1879,16 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
         rpeCount++;
       }
 
+      statsExercisesList.push({
+        name: ex.name,
+        maxWeight,
+        volume: exVolume,
+        reps: exReps,
+        rpe: typeof rpe === 'number' ? rpe : null
+      });
+
       // Format exercise details
-      text += `*#${idx + 1} ${ex.name}*\n`;
+      text += `*#${idx + 1} ${ex.name.toUpperCase()}* 🏋️\n`;
       
       // Target/planned values
       text += `  • Prescrito: ${ex.sets}x${ex.reps}`;
@@ -1855,20 +1897,22 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       }
       text += `\n`;
 
-      if (sets.length > 0) {
+      if (doneSets.length > 0) {
         const setsStr = sets.map((s, sIdx) => {
           return `${sIdx + 1}ª: ${s.reps}x${s.weight}kg${s.done ? ' (OK)' : ' (Pendente)'}`;
         }).join(', ');
         text += `  • Séries: ${setsStr}\n`;
+        text += `  • ⚡ Carga Máx: *${maxWeight}kg* | Volume: *${exVolume}kg*\n`;
+        text += `  • 🔄 Repetições: *${exReps} reps*\n`;
       } else if (isFailed) {
         const failure = exerciseFailureState[ex.id] || { setsDone: 1, actualReps: 1 };
         text += `  • Falhou após ${failure.setsDone} série(s) (${failure.actualReps} reps feitas)\n`;
       } else {
-        text += `  • Séries: Sem registro\n`;
+        text += `  • Séries: Sem registro (Pendente)\n`;
       }
 
       if (typeof rpe === 'number') {
-        text += `  • Esforço: RPE ${rpe}\n`;
+        text += `  • Esforço: RPE *${rpe}*\n`;
       }
       text += `\n`;
     });
@@ -1877,17 +1921,69 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       text += `📝 *Notas de Desempenho:*\n"${sessionNote.trim()}"\n\n`;
     }
 
+    // Generate Visual Emojis Graphs
+    const drawProgressBar = (value: number, max: number = 10) => {
+      const filledLength = Math.min(max, Math.max(0, Math.round(value)));
+      const emptyLength = max - filledLength;
+      let blockEmoji = '🟩';
+      if (value >= 10) blockEmoji = '🟥';
+      else if (value >= 9) blockEmoji = '🟧';
+      else if (value >= 7) blockEmoji = '🟨';
+
+      return blockEmoji.repeat(filledLength) + '⬜'.repeat(emptyLength);
+    };
+
+    text += `📈 *GRÁFICO DE ESFORÇO (RPE):*\n`;
+    let hasRpeData = false;
+    statsExercisesList.forEach((e) => {
+      if (e.rpe !== null) {
+        hasRpeData = true;
+        const bar = drawProgressBar(e.rpe, 10);
+        text += `• ${e.name.length > 15 ? e.name.substring(0, 15) + '...' : e.name}:\n  [${bar}] RPE ${e.rpe}\n`;
+      }
+    });
+    if (!hasRpeData) {
+      text += `• (Sem dados de RPE registrados nesta sessão)\n`;
+    }
+    text += `\n`;
+
+    text += `💪 *GRÁFICO DE VOLUME DE CARGA:*\n`;
+    const maxSessionVolume = Math.max(...statsExercisesList.map(e => e.volume), 0);
+    if (maxSessionVolume > 0) {
+      statsExercisesList.forEach((e) => {
+        if (e.volume > 0) {
+          const ratio = e.volume / maxSessionVolume;
+          const barLength = Math.round(ratio * 10);
+          const bar = '🟦'.repeat(barLength) + '⬜'.repeat(10 - barLength);
+          text += `• ${e.name.length > 15 ? e.name.substring(0, 15) + '...' : e.name}:\n  [${bar}] ${e.volume}kg\n`;
+        }
+      });
+    } else {
+      text += `• (Sem cargas registradas nesta sessão)\n`;
+    }
+    text += `\n`;
+
     const avgRpe = rpeCount > 0 ? (totalRpe / rpeCount).toFixed(1) : null;
-    text += `📊 *Estatísticas da Sessão:*\n`;
-    text += `• Exercícios Concluídos: ${completedCount}/${currentExercises.length}\n`;
+    text += `📊 *ESTATÍSTICAS DA SESSÃO:*\n`;
+    text += `• Exercícios Concluídos: *${completedCount}/${currentExercises.length}*\n`;
+    text += `• Total de Repetições: *${totalRepsSession} reps* 🔄\n`;
+    text += `• Tonelagem Total Movida: *${totalVolumeSession.toLocaleString('pt-BR')} kg* 🏋️\n`;
     if (avgRpe) {
-      text += `• Média de RPE: ${avgRpe}\n`;
+      text += `• Média de RPE: *${avgRpe}/10* 📈\n`;
     }
     
     // Add a signature
     text += `\n🛡️ *Força e Honra!* 🛡️`;
 
     setExportText(text);
+    setExportSessionStats({
+      completedCount,
+      totalCount: currentExercises.length,
+      totalReps: totalRepsSession,
+      totalVolume: totalVolumeSession,
+      avgRpe,
+      exercises: statsExercisesList
+    });
     setExportModalOpen(true);
     
     // Copy to clipboard automatically
@@ -6737,6 +6833,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         showToast={showToast}
                       />
 
+                      {/* SBD Impact Simulator component */}
+                      <SbdImpactSimulator 
+                        studentProfile={activeStudentProfile}
+                        showToast={showToast}
+                      />
+
                       {/* 2. Interactive Wilks Goals Table */}
                       <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 pb-4 border-b border-viking-gold/15">
@@ -6999,7 +7101,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
             </div>
 
-            {/* Resumo Financeiro Section */}
+            
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              {/* Left Column (Primary Ops & Finances) */}
+              <div className="xl:col-span-8 space-y-6 flex flex-col">
+{/* Resumo Financeiro Section */}
             {(() => {
               const expectedTotal = Object.keys(studentsData).reduce((sum, email) => {
                 const s = studentsData[email];
@@ -7133,7 +7239,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             })()}
 
             {/* Coach Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <User className="w-8 h-8 text-viking-gold mx-auto mb-2" />
@@ -7164,349 +7270,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
 
             </div>
-
-            {/* --- PRÓXIMAS COMPETIÇÕES & TESTES --- */}
-            {(() => {
-              const upcomingEvents = Object.keys(studentsData)
-                .map(email => ({ email, ...studentsData[email] }))
-                .filter(s => s && s.competitionDate)
-                .map(s => {
-                  const days = Math.max(0, Math.ceil((new Date(s.competitionDate!).getTime() - new Date().getTime()) / (1000 * 3600 * 24)));
-                  return { ...s, daysRemaining: days };
-                })
-                .sort((a, b) => a.daysRemaining - b.daysRemaining);
-
-              if (upcomingEvents.length === 0) return null;
-
-              return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden mb-6">
-                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
-                    <Calendar className="w-32 h-32" />
-                  </div>
-
-                  <div className="flex items-center gap-2 text-viking-gold mb-4 border-b border-viking-gold/15 pb-3">
-                    <Trophy className="w-5 h-5 text-viking-gold animate-pulse" />
-                    <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Guerreiros em Preparação</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {upcomingEvents.map(s => (
-                      <div key={s.email} className="bg-[#100a09]/70 border border-viking-gold/10 rounded-2xl p-4 flex flex-col justify-between">
-                        <div>
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-[9px] font-black uppercase tracking-widest bg-viking-gold/10 text-viking-gold px-2 py-0.5 rounded">
-                              {s.daysRemaining} dias
-                            </span>
-                            <span className="text-[10px] font-bold text-viking-silver">
-                              {s.competitionDate!.split('-').reverse().join('/')}
-                            </span>
-                          </div>
-                          <h4 className="font-bold text-sm text-white truncate">{s.name}</h4>
-                          <p className="text-[10px] text-viking-gold font-black uppercase mt-1">
-                            {s.targetEventName || 'Teste de 1RM / Competição'}
-                          </p>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            setActiveChatStudentEmail(s.email);
-                            setDrawerTitle(`Chat com ${s.name}`);
-                            setDrawerType('chat');
-                            setDrawerOpen(true);
-                          }}
-                          className="mt-3 py-1.5 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-viking-gold text-[10px] font-bold uppercase rounded-lg transition-all"
-                        >
-                          Motivar Atleta
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
-            {(() => {
-              const prNotifications: {
-                email: string;
-                studentName: string;
-                exercise: 'squat' | 'bench' | 'deadlift';
-                exerciseLabel: string;
-                oldValue: number | null;
-                newValue: number;
-                diff: number | null;
-              }[] = [];
-
-              Object.keys(studentsData).forEach(email => {
-                const student = studentsData[email];
-                if (!student) return;
-                const { prs, prevPrs, name } = student;
-                
-                if (prs) {
-                  const lifts: { key: 'squat' | 'bench' | 'deadlift'; label: string }[] = [
-                    { key: 'squat', label: 'Agachamento' },
-                    { key: 'bench', label: 'Supino' },
-                    { key: 'deadlift', label: 'Levantamento Terra' }
-                  ];
-                  
-                  lifts.forEach(({ key, label }) => {
-                    const newVal = prs[key];
-                    const oldVal = prevPrs?.[key] ?? null;
-                    
-                    if (newVal !== null && newVal > 0) {
-                      if (oldVal === null || newVal > oldVal) {
-                        const diff = oldVal !== null ? newVal - oldVal : null;
-                        prNotifications.push({
-                          email,
-                          studentName: name,
-                          exercise: key,
-                          exerciseLabel: label,
-                          oldValue: oldVal,
-                          newValue: newVal,
-                          diff
-                        });
-                      }
-                    }
-                  });
-                }
-              });
-
-              return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
-                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
-                    <Trophy className="w-32 h-32" />
-                  </div>
-
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-viking-gold">
-                        <Trophy className="w-5 h-5 text-viking-gold animate-bounce" />
-                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Mural de Conquistas (PRs)</h2>
-                      </div>
-                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-0.5">Glória e Recordes de Força Recentes</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] text-viking-silver/60 uppercase font-bold">Recordes Registrados:</span>
-                      <p className="text-xs text-viking-gold font-extrabold uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/20 px-2.5 py-1 rounded-lg mt-1 inline-block">
-                        {prNotifications.length} Conquistas Ativas
-                      </p>
-                    </div>
-                  </div>
-
-                  {prNotifications.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {prNotifications.map((notif) => {
-                        const student = studentsData[notif.email.toLowerCase()];
-                        const congratMessage = `⚔️ ¡Parabéns pelo novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg! ${notif.diff ? `Uma evolução de +${notif.diff}kg!` : ''} Que os deuses do ferro celebrem sua força! 🏋️🔥`;
-                        
-                        // Verificar se já parabenizou o aluno por esse peso exato
-                        const alreadyCongratulated = student?.chatHistory?.some(
-                          msg => msg.sender === 'trainer' && msg.text.includes(`novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg`)
-                        ) || false;
-
-                        return (
-                          <div 
-                            key={`${notif.email}-${notif.exercise}`}
-                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
-                          >
-                            {!alreadyCongratulated && (
-                              <div className="absolute inset-0 bg-viking-gold/2 pointer-events-none animate-pulse" />
-                            )}
-                            
-                            <div className="relative z-10">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
-                                    <Sparkles className="w-4 h-4" />
-                                  </span>
-                                  <div>
-                                    <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
-                                      {notif.studentName}
-                                    </h4>
-                                    <p className="text-[10px] text-viking-silver/60 truncate">{notif.email}</p>
-                                  </div>
-                                </div>
-                                <span className="bg-viking-gold/15 text-viking-gold border border-viking-gold/25 text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval">
-                                  {notif.exerciseLabel}
-                                </span>
-                              </div>
-
-                              <div className="mt-3.5 flex items-baseline gap-2.5 bg-[#0d0908]/40 p-2.5 rounded-xl border border-viking-gold/5">
-                                <span className="text-xl font-black text-viking-gold">{notif.newValue} kg</span>
-                                {notif.oldValue !== null ? (
-                                  <span className="text-[11px] text-viking-silver/65 line-through">Anterior: {notif.oldValue} kg</span>
-                                ) : (
-                                  <span className="text-[10px] text-viking-silver/50 uppercase tracking-widest font-viking-medieval">Primeiro Registro</span>
-                                )}
-                                {notif.diff !== null && notif.diff > 0 && (
-                                  <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md ml-auto animate-pulse">
-                                    +{notif.diff} kg
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => {
-                                if (alreadyCongratulated) {
-                                  setActiveChatStudentEmail(notif.email);
-                                  setDrawerTitle(`Chat com ${notif.studentName}`);
-                                  setDrawerType('chat');
-                                  setDrawerOpen(true);
-                                  return;
-                                }
-
-                                handleSendMessage(notif.email, congratMessage);
-                                triggerPrConfetti();
-                                
-                                setActiveChatStudentEmail(notif.email);
-                                setDrawerTitle(`Chat com ${notif.studentName}`);
-                                setDrawerType('chat');
-                                setDrawerOpen(true);
-                              }}
-                              className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer ${
-                                alreadyCongratulated
-                                  ? 'bg-emerald-950/20 hover:bg-emerald-900/10 border-emerald-500/25 text-emerald-400 font-bold'
-                                  : 'bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark border-viking-gold font-extrabold hover:scale-[1.02]'
-                              }`}
-                            >
-                              {alreadyCongratulated ? (
-                                <>
-                                  <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                                  Parabenizado! Ver Chat
-                                </>
-                              ) : (
-                                <>
-                                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                                  Parabenizar via Chat
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl">
-                      <span className="text-3xl">🛡️</span>
-                      <div>
-                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Salão do Silêncio</p>
-                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
-                          Nenhum novo recorde de força registrado por seus gladiadores nesta quinzena. Mantenha os guerreiros focados nos treinos pesados para clamar glória!
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* --- RECENT WORKOUTS (LIVE LIST) --- */}
-            {(() => {
-              const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
-              Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
-                if (student && student.sessions && student.sessions.length > 0) {
-                  student.sessions.forEach(sess => {
-                    allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
-                  });
-                }
-              });
-
-              // Sort by date/id
-              allSessions.sort((a, b) => {
-                const aTime = a.id ? parseInt(a.id.split('_')[1] || '0') : 0;
-                const bTime = b.id ? parseInt(b.id.split('_')[1] || '0') : 0;
-                return bTime - aTime;
-              });
-
-              // Take only the 6 most recent ones
-              const recentSessions = allSessions.slice(0, 6);
-
-              return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
-                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
-                    <Activity className="w-32 h-32" />
-                  </div>
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5 relative z-10">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-viking-gold">
-                        <span className="flex h-2.5 w-2.5 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </span>
-                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest text-emerald-400">Atividade em Tempo Real</h2>
-                      </div>
-                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-1">Guerreiros que Concluíram Treinos</p>
-                    </div>
-                  </div>
-
-                  {recentSessions.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
-                      <AnimatePresence>
-                        {recentSessions.map((sess, idx) => (
-                          <motion.div 
-                            key={`${sess.studentEmail}-${sess.id}`}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
-                                  <Dumbbell className="w-4 h-4" />
-                                </span>
-                                <div>
-                                  <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
-                                    {sess.studentName}
-                                  </h4>
-                                  <p className="text-[10px] text-viking-silver/60 truncate">{sess.sessionName}</p>
-                                </div>
-                              </div>
-                              <span className={`bg-opacity-10 border text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval ${
-                                sess.avgRPE >= 9 ? 'bg-red-500 text-red-400 border-red-500/25' : sess.avgRPE >= 7.5 ? 'bg-amber-500 text-amber-400 border-amber-500/25' : 'bg-emerald-500 text-emerald-400 border-emerald-500/25'
-                              }`}>
-                                RPE {(sess.avgRPE || 0).toFixed(1)}
-                              </span>
-                            </div>
-                            
-                            {sess.note && (
-                              <div className="mt-2 p-2.5 bg-black/40 rounded-lg border border-viking-gold/5">
-                                <p className="text-xs text-viking-silver italic line-clamp-2">"{sess.note}"</p>
-                              </div>
-                            )}
-
-                            <button
-                              onClick={() => {
-                                setDrawerTitle('Treinos Concluídos');
-                                setDrawerType('recentWorkouts');
-                                setDrawerOpen(true);
-                              }}
-                              className="w-full py-2.5 mt-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer bg-viking-gold/10 border-viking-gold/20 hover:bg-viking-gold/20 text-viking-gold"
-                            >
-                              <Search className="w-3.5 h-3.5 shrink-0" />
-                              Ver Todos os Treinos
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl relative z-10">
-                      <span className="text-3xl">💤</span>
-                      <div>
-                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Templo Vazio</p>
-                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
-                          Nenhum guerreiro concluiu treinos recentemente. O ferro aguarda.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Wilks Efficiency Scatter Chart */}
-            <WilksScatterChart entries={leaderboard} />
 
             {/* Payment Highlight Card */}
             {(() => {
@@ -7701,7 +7464,356 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               );
             })()}
 
-            {/* Failure Sentinel & Periodization Optimizer */}
+            {/* Wilks Efficiency Scatter Chart */}
+            <WilksScatterChart entries={leaderboard} />
+
+                          </div>
+
+              {/* Right Column (Live Activity & Alerts) */}
+              <div className="xl:col-span-4 space-y-6 flex flex-col">
+{/* --- RECENT WORKOUTS (LIVE LIST) --- */}
+            {(() => {
+              const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
+              Object.entries(studentsData).forEach(([email, student]: [string, any]) => {
+                if (student && student.sessions && student.sessions.length > 0) {
+                  student.sessions.forEach(sess => {
+                    allSessions.push({ ...sess, studentName: student.name, studentEmail: email });
+                  });
+                }
+              });
+
+              // Sort by date/id
+              allSessions.sort((a, b) => {
+                const aTime = a.id ? parseInt(a.id.split('_')[1] || '0') : 0;
+                const bTime = b.id ? parseInt(b.id.split('_')[1] || '0') : 0;
+                return bTime - aTime;
+              });
+
+              // Take only the 6 most recent ones
+              const recentSessions = allSessions.slice(0, 6);
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Activity className="w-32 h-32" />
+                  </div>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5 relative z-10">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-viking-gold">
+                        <span className="flex h-2.5 w-2.5 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest text-emerald-400">Atividade em Tempo Real</h2>
+                      </div>
+                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-1">Guerreiros que Concluíram Treinos</p>
+                    </div>
+                  </div>
+
+                  {recentSessions.length > 0 ? (
+                    <div className="space-y-3 relative z-10">
+                      <AnimatePresence>
+                        {recentSessions.map((sess, idx) => (
+                          <motion.div 
+                            key={`${sess.studentEmail}-${sess.id}`}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
+                                  <Dumbbell className="w-4 h-4" />
+                                </span>
+                                <div>
+                                  <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
+                                    {sess.studentName}
+                                  </h4>
+                                  <p className="text-[10px] text-viking-silver/60 truncate">{sess.sessionName}</p>
+                                </div>
+                              </div>
+                              <span className={`bg-opacity-10 border text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval ${
+                                sess.avgRPE >= 9 ? 'bg-red-500 text-red-400 border-red-500/25' : sess.avgRPE >= 7.5 ? 'bg-amber-500 text-amber-400 border-amber-500/25' : 'bg-emerald-500 text-emerald-400 border-emerald-500/25'
+                              }`}>
+                                RPE {(sess.avgRPE || 0).toFixed(1)}
+                              </span>
+                            </div>
+                            
+                            {sess.note && (
+                              <div className="mt-2 p-2.5 bg-black/40 rounded-lg border border-viking-gold/5">
+                                <p className="text-xs text-viking-silver italic line-clamp-2">"{sess.note}"</p>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setDrawerTitle('Treinos Concluídos');
+                                setDrawerType('recentWorkouts');
+                                setDrawerOpen(true);
+                              }}
+                              className="w-full py-2.5 mt-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer bg-viking-gold/10 border-viking-gold/20 hover:bg-viking-gold/20 text-viking-gold"
+                            >
+                              <Search className="w-3.5 h-3.5 shrink-0" />
+                              Ver Todos os Treinos
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl relative z-10">
+                      <span className="text-3xl">💤</span>
+                      <div>
+                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Templo Vazio</p>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
+                          Nenhum guerreiro concluiu treinos recentemente. O ferro aguarda.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
+            {(() => {
+              const prNotifications: {
+                email: string;
+                studentName: string;
+                exercise: 'squat' | 'bench' | 'deadlift';
+                exerciseLabel: string;
+                oldValue: number | null;
+                newValue: number;
+                diff: number | null;
+              }[] = [];
+
+              Object.keys(studentsData).forEach(email => {
+                const student = studentsData[email];
+                if (!student) return;
+                const { prs, prevPrs, name } = student;
+                
+                if (prs) {
+                  const lifts: { key: 'squat' | 'bench' | 'deadlift'; label: string }[] = [
+                    { key: 'squat', label: 'Agachamento' },
+                    { key: 'bench', label: 'Supino' },
+                    { key: 'deadlift', label: 'Levantamento Terra' }
+                  ];
+                  
+                  lifts.forEach(({ key, label }) => {
+                    const newVal = prs[key];
+                    const oldVal = prevPrs?.[key] ?? null;
+                    
+                    if (newVal !== null && newVal > 0) {
+                      if (oldVal === null || newVal > oldVal) {
+                        const diff = oldVal !== null ? newVal - oldVal : null;
+                        prNotifications.push({
+                          email,
+                          studentName: name,
+                          exercise: key,
+                          exerciseLabel: label,
+                          oldValue: oldVal,
+                          newValue: newVal,
+                          diff
+                        });
+                      }
+                    }
+                  });
+                }
+              });
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Trophy className="w-32 h-32" />
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-viking-gold/15 pb-4 mb-5">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-viking-gold">
+                        <Trophy className="w-5 h-5 text-viking-gold animate-bounce" />
+                        <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Mural de Conquistas (PRs)</h2>
+                      </div>
+                      <p className="text-white font-viking-display text-lg font-black tracking-wide mt-0.5">Glória e Recordes de Força Recentes</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-viking-silver/60 uppercase font-bold">Recordes Registrados:</span>
+                      <p className="text-xs text-viking-gold font-extrabold uppercase tracking-wider bg-viking-gold/10 border border-viking-gold/20 px-2.5 py-1 rounded-lg mt-1 inline-block">
+                        {prNotifications.length} Conquistas Ativas
+                      </p>
+                    </div>
+                  </div>
+
+                  {prNotifications.length > 0 ? (
+                    <div className="space-y-3">
+                      {prNotifications.map((notif) => {
+                        const student = studentsData[notif.email.toLowerCase()];
+                        const congratMessage = `⚔️ ¡Parabéns pelo novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg! ${notif.diff ? `Uma evolução de +${notif.diff}kg!` : ''} Que os deuses do ferro celebrem sua força! 🏋️🔥`;
+                        
+                        // Verificar se já parabenizou o aluno por esse peso exato
+                        const alreadyCongratulated = student?.chatHistory?.some(
+                          msg => msg.sender === 'trainer' && msg.text.includes(`novo Recorde Pessoal de ${notif.exerciseLabel} com ${notif.newValue}kg`)
+                        ) || false;
+
+                        return (
+                          <div 
+                            key={`${notif.email}-${notif.exercise}`}
+                            className="bg-[#100a09]/70 border border-viking-gold/10 hover:border-viking-gold/30 rounded-2xl p-4.5 transition-all flex flex-col justify-between gap-3 group relative overflow-hidden"
+                          >
+                            {!alreadyCongratulated && (
+                              <div className="absolute inset-0 bg-viking-gold/2 pointer-events-none animate-pulse" />
+                            )}
+                            
+                            <div className="relative z-10">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="p-2 rounded-xl bg-viking-gold/10 border border-viking-gold/20 text-viking-gold">
+                                    <Sparkles className="w-4 h-4" />
+                                  </span>
+                                  <div>
+                                    <h4 className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate max-w-[150px]">
+                                      {notif.studentName}
+                                    </h4>
+                                    <p className="text-[10px] text-viking-silver/60 truncate">{notif.email}</p>
+                                  </div>
+                                </div>
+                                <span className="bg-viking-gold/15 text-viking-gold border border-viking-gold/25 text-[10px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider font-viking-medieval">
+                                  {notif.exerciseLabel}
+                                </span>
+                              </div>
+
+                              <div className="mt-3.5 flex items-baseline gap-2.5 bg-[#0d0908]/40 p-2.5 rounded-xl border border-viking-gold/5">
+                                <span className="text-xl font-black text-viking-gold">{notif.newValue} kg</span>
+                                {notif.oldValue !== null ? (
+                                  <span className="text-[11px] text-viking-silver/65 line-through">Anterior: {notif.oldValue} kg</span>
+                                ) : (
+                                  <span className="text-[10px] text-viking-silver/50 uppercase tracking-widest font-viking-medieval">Primeiro Registro</span>
+                                )}
+                                {notif.diff !== null && notif.diff > 0 && (
+                                  <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md ml-auto animate-pulse">
+                                    +{notif.diff} kg
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                if (alreadyCongratulated) {
+                                  setActiveChatStudentEmail(notif.email);
+                                  setDrawerTitle(`Chat com ${notif.studentName}`);
+                                  setDrawerType('chat');
+                                  setDrawerOpen(true);
+                                  return;
+                                }
+
+                                handleSendMessage(notif.email, congratMessage);
+                                triggerPrConfetti();
+                                
+                                setActiveChatStudentEmail(notif.email);
+                                setDrawerTitle(`Chat com ${notif.studentName}`);
+                                setDrawerType('chat');
+                                setDrawerOpen(true);
+                              }}
+                              className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 border cursor-pointer ${
+                                alreadyCongratulated
+                                  ? 'bg-emerald-950/20 hover:bg-emerald-900/10 border-emerald-500/25 text-emerald-400 font-bold'
+                                  : 'bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark border-viking-gold font-extrabold hover:scale-[1.02]'
+                              }`}
+                            >
+                              {alreadyCongratulated ? (
+                                <>
+                                  <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                                  Parabenizado! Ver Chat
+                                </>
+                              ) : (
+                                <>
+                                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                                  Parabenizar via Chat
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3.5 bg-[#0d0908]/40 border border-viking-gold/10 p-5 rounded-2xl">
+                      <span className="text-3xl">🛡️</span>
+                      <div>
+                        <p className="text-xs font-bold text-viking-gold uppercase tracking-wide font-viking-medieval">Salão do Silêncio</p>
+                        <p className="text-xs text-viking-silver/85 leading-relaxed mt-0.5">
+                          Nenhum novo recorde de força registrado por seus gladiadores nesta quinzena. Mantenha os guerreiros focados nos treinos pesados para clamar glória!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* --- PRÓXIMAS COMPETIÇÕES & TESTES --- */}
+            {(() => {
+              const upcomingEvents = Object.keys(studentsData)
+                .map(email => ({ email, ...studentsData[email] }))
+                .filter(s => s && s.competitionDate)
+                .map(s => {
+                  const days = Math.max(0, Math.ceil((new Date(s.competitionDate!).getTime() - new Date().getTime()) / (1000 * 3600 * 24)));
+                  return { ...s, daysRemaining: days };
+                })
+                .sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+              if (upcomingEvents.length === 0) return null;
+
+              return (
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden mb-0">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <Calendar className="w-32 h-32" />
+                  </div>
+
+                  <div className="flex items-center gap-2 text-viking-gold mb-4 border-b border-viking-gold/15 pb-3">
+                    <Trophy className="w-5 h-5 text-viking-gold animate-pulse" />
+                    <h2 className="font-viking-medieval text-xs font-black uppercase tracking-widest">Guerreiros em Preparação</h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    {upcomingEvents.map(s => (
+                      <div key={s.email} className="bg-[#100a09]/70 border border-viking-gold/10 rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-viking-gold/10 text-viking-gold px-2 py-0.5 rounded">
+                              {s.daysRemaining} dias
+                            </span>
+                            <span className="text-[10px] font-bold text-viking-silver">
+                              {s.competitionDate!.split('-').reverse().join('/')}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-sm text-white truncate">{s.name}</h4>
+                          <p className="text-[10px] text-viking-gold font-black uppercase mt-1">
+                            {s.targetEventName || 'Teste de 1RM / Competição'}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setActiveChatStudentEmail(s.email);
+                            setDrawerTitle(`Chat com ${s.name}`);
+                            setDrawerType('chat');
+                            setDrawerOpen(true);
+                          }}
+                          className="mt-3 py-1.5 bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-viking-gold text-[10px] font-bold uppercase rounded-lg transition-all"
+                        >
+                          Motivar Atleta
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+                          </div>
+            </div>
+{/* Failure Sentinel & Periodization Optimizer */}
             <FailureSentinel 
               studentsData={studentsData}
               trainingProgram={trainingProgram}
@@ -13396,7 +13508,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-[#140e0c]/98 border border-viking-gold/25 p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.9)] max-w-xl w-full text-[#e0d3a8] flex flex-col max-h-[85vh]"
+              className="bg-[#140e0c]/98 border border-viking-gold/25 p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.9)] max-w-2xl w-full text-[#e0d3a8] flex flex-col max-h-[90vh]"
             >
               <div className="flex items-center justify-between border-b border-viking-gold/15 pb-4 mb-4 shrink-0">
                 <div className="flex items-center gap-3">
@@ -13404,7 +13516,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                     <Share2 className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold text-viking-gold uppercase tracking-wider font-viking-display">Resumo Exportável</h2>
+                    <h2 className="text-base sm:text-lg font-bold text-viking-gold uppercase tracking-wider font-viking-display">Resumo Completo de Treino</h2>
                     <p className="text-[10px] text-viking-silver uppercase font-viking-medieval mt-0.5">Pronto para compartilhar via WhatsApp ou salvar</p>
                   </div>
                 </div>
@@ -13418,21 +13530,85 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
               <div className="flex-1 overflow-y-auto space-y-4 mb-5 text-xs font-semibold pr-1">
                 <p className="text-viking-silver text-xs">
-                  O resumo abaixo foi copiado automaticamente para a sua área de transferência. Você pode usá-lo para enviar ao seu treinador, salvar em notas pessoais ou colar no WhatsApp!
+                  O resumo com estatísticas completas, toneladas movidas (cargas) e contagem de repetições foi gerado! Envie diretamente no WhatsApp do seu treinador/atleta abaixo.
                 </p>
-                <textarea
-                  readOnly
-                  value={exportText}
-                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                  rows={14}
-                  className="w-full p-4 rounded-xl bg-black/50 border border-viking-gold/15 text-[#e0d3a8] font-mono text-[11px] focus:outline-none focus:border-viking-gold/40 resize-none h-80"
-                />
+
+                {exportSessionStats && (
+                  <div className="bg-[#0f0908]/90 border border-viking-gold/15 rounded-2xl p-4 space-y-4">
+                    <h3 className="text-xs uppercase font-bold text-viking-gold tracking-wider flex items-center gap-1.5 border-b border-viking-gold/10 pb-2">
+                      <BarChart3 className="w-4 h-4 text-viking-gold" /> Desempenho no Templo
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-[#1c1210]/60 p-2.5 rounded-xl border border-viking-gold/10 text-center">
+                        <p className="text-[9px] text-viking-silver/60 uppercase">Exercícios</p>
+                        <p className="text-xs sm:text-sm font-black text-white font-mono mt-0.5">{exportSessionStats.completedCount}/{exportSessionStats.totalCount}</p>
+                      </div>
+                      <div className="bg-[#1c1210]/60 p-2.5 rounded-xl border border-viking-gold/10 text-center">
+                        <p className="text-[9px] text-viking-silver/60 uppercase">Repetições</p>
+                        <p className="text-xs sm:text-sm font-black text-viking-gold font-mono mt-0.5">{exportSessionStats.totalReps} rep</p>
+                      </div>
+                      <div className="bg-[#1c1210]/60 p-2.5 rounded-xl border border-viking-gold/10 text-center">
+                        <p className="text-[9px] text-viking-silver/60 uppercase">Tonelagem</p>
+                        <p className="text-xs sm:text-sm font-black text-emerald-400 font-mono mt-0.5">{exportSessionStats.totalVolume.toLocaleString('pt-BR')} kg</p>
+                      </div>
+                      <div className="bg-[#1c1210]/60 p-2.5 rounded-xl border border-viking-gold/10 text-center">
+                        <p className="text-[9px] text-viking-silver/60 uppercase">Média RPE</p>
+                        <p className="text-xs sm:text-sm font-black text-amber-400 font-mono mt-0.5">{exportSessionStats.avgRpe || 'N/A'}/10</p>
+                      </div>
+                    </div>
+
+                    {/* Exercise chart bar preview */}
+                    <div className="space-y-2.5 pt-1">
+                      <p className="text-[10px] text-viking-silver uppercase font-bold tracking-wider">Distribuição de Cargas por Exercício</p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        {exportSessionStats.exercises.map((e, i) => {
+                          const maxVol = Math.max(...exportSessionStats.exercises.map(ex => ex.volume), 1);
+                          const volRatio = Math.min(100, Math.max(5, (e.volume / maxVol) * 100));
+                          
+                          return (
+                            <div key={i} className="space-y-1 bg-black/45 p-2.5 rounded-xl border border-white/5">
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className="font-bold text-white truncate max-w-[150px] sm:max-w-[220px]">{e.name}</span>
+                                <span className="text-viking-silver/80 font-mono text-[9px]">
+                                  Carga Máx: {e.maxWeight}kg | {e.reps} reps {e.rpe ? `| RPE ${e.rpe}` : ''}
+                                </span>
+                              </div>
+                              <div className="flex gap-1.5 items-center">
+                                {/* Volume bar */}
+                                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-viking-gold-dark to-viking-gold rounded-full" 
+                                    style={{ width: `${volRatio}%` }}
+                                  />
+                                </div>
+                                <span className="text-[9px] text-viking-gold font-mono shrink-0 w-14 text-right">
+                                  {e.volume.toLocaleString('pt-BR')}kg
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1 pt-1">
+                  <p className="text-viking-silver text-[10px] uppercase font-bold">Resumo Texto (Copiado Automático)</p>
+                  <textarea
+                    readOnly
+                    value={exportText}
+                    onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                    rows={10}
+                    className="w-full p-4 rounded-xl bg-black/50 border border-viking-gold/15 text-[#e0d3a8] font-mono text-[11px] focus:outline-none focus:border-viking-gold/40 resize-none h-44"
+                  />
+                </div>
               </div>
 
-              <div className="flex gap-3 shrink-0">
+              <div className="flex flex-col sm:flex-row gap-3 shrink-0">
                 <button 
                   onClick={() => setExportModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/60 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer"
+                  className="w-full sm:flex-1 py-2.5 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/60 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer"
                 >
                   Fechar
                 </button>
@@ -13445,10 +13621,31 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       showToast('Falha ao copiar para a área de transferência', 'error');
                     }
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-viking-gold text-[#140e0c] font-bold hover:brightness-110 transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full sm:flex-1 py-2.5 rounded-xl bg-[#1c1210]/80 border border-viking-gold/35 text-viking-gold hover:text-white hover:bg-[#1c1210] transition-all font-bold text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Copy className="w-4 h-4" />
-                  Copiar Novamente
+                  Copiar Texto
+                </button>
+                <button 
+                  onClick={() => {
+                    let phone = '';
+                    if (currentUser?.role === 'student') {
+                      phone = '5551998612067'; // Coach phone
+                    } else if (currentUser?.role === 'trainer' && activeStudentProfile?.phone) {
+                      phone = activeStudentProfile.phone.replace(/\D/g, '');
+                    }
+
+                    const url = phone 
+                      ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(exportText)}`
+                      : `https://api.whatsapp.com/send?text=${encodeURIComponent(exportText)}`;
+
+                    window.open(url, '_blank');
+                    showToast('Redirecionando para o WhatsApp...', 'success');
+                  }}
+                  className="w-full sm:flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-all text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(16,185,129,0.2)]"
+                >
+                  <MessageCircle className="w-4 h-4 text-white" />
+                  Enviar p/ WhatsApp
                 </button>
               </div>
             </motion.div>
