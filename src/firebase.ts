@@ -144,6 +144,9 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
     const students: Record<string, StudentProfile> = {};
     snapshot.forEach((d) => {
       const cleanId = d.id.trim().toLowerCase();
+      // Skip backup documents stored in this collection
+      if (cleanId.startsWith('backup_')) return;
+      
       const data = d.data() as StudentProfile;
       students[cleanId] = data;
       // Populate local dirty check cache
@@ -231,6 +234,8 @@ export function subscribeStudents(
       const students: Record<string, StudentProfile> = {};
       snapshot.forEach((d) => {
         const cleanId = d.id.trim().toLowerCase();
+        if (cleanId.startsWith('backup_')) return;
+        
         const data = d.data() as StudentProfile;
         students[cleanId] = data;
         // Sync cache on real-time collection updates

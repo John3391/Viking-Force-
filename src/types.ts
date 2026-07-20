@@ -246,6 +246,8 @@ export interface DbExercise {
   videoUrl?: string;       // YouTube link
   videoBase64?: string;    // Base64 string for mobile uploads
   videoFileType?: string;  // e.g. "video/mp4" or "video/quicktime"
+  muscleGroup?: string;
+  exerciseType?: string;
 }
 
 export interface DbMobilityExercise {

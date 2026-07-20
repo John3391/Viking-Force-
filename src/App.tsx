@@ -84,6 +84,7 @@ import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
 import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent, TrainingProtocol, CardioSession, CardioGoal, CardioPrescription, VikingBackup } from './types';
 import { ProtocolsDrawer } from './components/ProtocolsDrawer';
+import { WorkoutHistory } from './components/WorkoutHistory';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 
 
@@ -253,6 +254,70 @@ function getYouTubeEmbedUrl(url: string | undefined): string | null {
   return null;
 }
 
+export function getExerciseMuscleGroup(ex: DbExercise): string {
+  if (ex.muscleGroup) return ex.muscleGroup;
+  
+  const nameLower = ex.name.toLowerCase();
+  
+  if (ex.techniqueTips && ex.techniqueTips.includes('(Treino de ')) {
+    const match = ex.techniqueTips.match(/\(Treino de ([^\)]+)\)/);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  if (nameLower.includes('supino') || nameLower.includes('peito') || nameLower.includes('crucifixo') || nameLower.includes('peck deck') || nameLower.includes('voador') || nameLower.includes('flexão de braço') || nameLower.includes('flexao de braco')) {
+    return 'Peito';
+  }
+  if (nameLower.includes('remada') || nameLower.includes('puxada') || nameLower.includes('barra fixa') || nameLower.includes('pullover') || nameLower.includes('serrote') || nameLower.includes('cavalinho') || nameLower.includes('dorsal') || nameLower.includes('latíssimo') || nameLower.includes('latissimo')) {
+    return 'Costas';
+  }
+  if (nameLower.includes('agachamento') || nameLower.includes('leg press') || nameLower.includes('extensora') || nameLower.includes('flexora') || nameLower.includes('afundo') || nameLower.includes('passada') || nameLower.includes('búlgaro') || nameLower.includes('bulgaro') || nameLower.includes('hack') || nameLower.includes('gêmeos') || nameLower.includes('gemeos') || nameLower.includes('panturrilha') || nameLower.includes('stiff') || nameLower.includes('cadeira') || nameLower.includes('mesa') || nameLower.includes('isquiotibiais') || nameLower.includes('pélvica') || nameLower.includes('pelvica') || nameLower.includes('quadril') || nameLower.includes('glúteo') || nameLower.includes('gluteo') || nameLower.includes('adutor') || nameLower.includes('abdutor')) {
+    return 'Pernas (Quadríceps e Isquiotibiais)';
+  }
+  if (nameLower.includes('desenvolvimento') || nameLower.includes('elevação lateral') || nameLower.includes('elevacao lateral') || nameLower.includes('elevação frontal') || nameLower.includes('elevacao frontal') || nameLower.includes('crucifixo invertido') || nameLower.includes('deltoide') || nameLower.includes('ombro') || nameLower.includes('encolhimento')) {
+    return 'Ombros';
+  }
+  if (nameLower.includes('rosca') || nameLower.includes('bíceps') || nameLower.includes('biceps') || nameLower.includes('martelo') || nameLower.includes('scott')) {
+    return 'Bíceps';
+  }
+  if (nameLower.includes('tríceps') || nameLower.includes('triceps') || nameLower.includes('testa') || nameLower.includes('pulley') || nameLower.includes('francês') || nameLower.includes('frances') || nameLower.includes('coice') || nameLower.includes('paralelas')) {
+    return 'Tríceps';
+  }
+  if (nameLower.includes('abdominal') || nameLower.includes('prancha') || nameLower.includes('infra') || nameLower.includes('supra') || nameLower.includes('core') || nameLower.includes('obliquo') || nameLower.includes('oblíquo') || nameLower.includes('crunch')) {
+    return 'Core e Abdômen';
+  }
+  if (nameLower.includes('terra') || nameLower.includes('clean') || nameLower.includes('snatch') || nameLower.includes('arranco') || nameLower.includes('arremesso') || nameLower.includes('jerk') || nameLower.includes('lpo') || nameLower.includes('powerlifting')) {
+    return 'Powerlifting e LPO';
+  }
+  
+  return 'Outros';
+}
+
+export function getExerciseType(ex: DbExercise): string {
+  if (ex.exerciseType) return ex.exerciseType;
+  
+  const nameLower = ex.name.toLowerCase();
+  
+  if (nameLower.includes('máquina') || nameLower.includes('maquina') || nameLower.includes('hack') || nameLower.includes('leg press') || nameLower.includes('extensora') || nameLower.includes('flexora') || nameLower.includes('peck deck') || nameLower.includes('voador') || nameLower.includes('smith') || nameLower.includes('guiado') || nameLower.includes('articulado') || nameLower.includes('articulada')) {
+    return 'Máquina';
+  }
+  if (nameLower.includes('polia') || nameLower.includes('cabo') || nameLower.includes('crossover') || nameLower.includes('pulley') || nameLower.includes('cross')) {
+    return 'Polia / Cabo';
+  }
+  if (nameLower.includes('halter') || nameLower.includes('halteres') || nameLower.includes('serrote')) {
+    return 'Halter';
+  }
+  if (nameLower.includes('flexão') || nameLower.includes('flexao') || nameLower.includes('barra fixa') || nameLower.includes('prancha') || nameLower.includes('abdominal') || nameLower.includes('peso corporal') || nameLower.includes('paralelas') || nameLower.includes('crunch') || nameLower.includes('suspenso na barra')) {
+    return 'Peso Corporal';
+  }
+  if (nameLower.includes('barra') || nameLower.includes('olímpica') || nameLower.includes('olimpica') || nameLower.includes('banco') || nameLower.includes('reto') || nameLower.includes('inclinado') || nameLower.includes('declinado') || nameLower.includes('agachamento livre') || nameLower.includes('supino') || nameLower.includes('terra')) {
+    return 'Barra';
+  }
+  
+  return 'Barra';
+}
+
 function mergeDbExercisesWithDefaults(remoteExs: DbExercise[]): DbExercise[] {
   const defaults = generate500Exercises();
   const mergedMap = new Map<string, DbExercise>();
@@ -308,7 +373,7 @@ export default function App() {
 
   // Active UI Navigation state
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'wilks' | 'cardio' | 'calculator'>('overview');
+  const [studentSubTab, setStudentSubTab] = useState<'overview' | 'dashboard' | 'wilks' | 'cardio' | 'calculator'>('overview');
   const [activeChartTab, setActiveChartTab] = useState<'volume' | 'weekly' | 'onerm' | 'totalsbd'>('volume');
   const [wilksRatios, setWilksRatios] = useState({ squat: 38, bench: 24, deadlift: 38 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
@@ -475,11 +540,12 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [rpeSearch, setRpeSearch] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
-  const [historyTab, setHistoryTab] = useState<'list' | 'comparison'>('list');
-  const [historyPage, setHistoryPage] = useState<number>(1);
-  const [historyItemsPerPage, setHistoryItemsPerPage] = useState<number>(5);
+  
+  
+  
   const [navDropdownOpen, setNavDropdownOpen] = useState<boolean>(false);
   const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'list'>('grid');
+  const [trainerRightTab, setTrainerRightTab] = useState<'activity' | 'prs' | 'events'>('activity');
   const [customLogo, setCustomLogo] = useState<string>(() => {
     return localStorage.getItem('viking_custom_logo') || '';
   });
@@ -558,6 +624,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
   const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState<boolean>(false);
+  const [pickerMuscleGroup, setPickerMuscleGroup] = useState<string>('all');
+  const [pickerExerciseType, setPickerExerciseType] = useState<string>('all');
   const [activeVideoModal, setActiveVideoModal] = useState<{ name: string; videoUrl?: string; videoBase64?: string; tips?: string } | null>(null);
   const [activeTipsModal, setActiveTipsModal] = useState<{ name: string; tips: string } | null>(null);
 
@@ -746,10 +814,6 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     localStorage.setItem('viking_protocols', JSON.stringify(trainingProtocols));
   }, [trainingProtocols]);
 
-  // Reset student history page when drawer type or tab changes
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [drawerOpen, drawerType, historyTab]);
 
   // Synchronize Settings PR states on open
   useEffect(() => {
@@ -923,10 +987,21 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     const loggedOut = localStorage.getItem('viking_logged_out');
 
     if (storedProgram) setTrainingProgram(JSON.parse(storedProgram));
-    if (storedStudents) setStudentsData(JSON.parse(storedStudents));
+    let initialStudents = DEFAULT_STUDENTS;
+    if (storedStudents) {
+      try {
+        const parsed = JSON.parse(storedStudents);
+        const filtered: any = {};
+        for (const k in parsed) {
+          if (!k.startsWith('backup_')) filtered[k] = parsed[k];
+        }
+        initialStudents = filtered;
+        setStudentsData(filtered);
+      } catch (e) {}
+    }
 
     try {
-      const initS = storedStudents ? JSON.parse(storedStudents) : DEFAULT_STUDENTS;
+      const initS = initialStudents;
       const initP = storedProgram ? JSON.parse(storedProgram) : DEFAULT_PROGRAM;
       const initPlans = localStorage.getItem('viking_plans') ? JSON.parse(localStorage.getItem('viking_plans')!) : [];
       const initCal = localStorage.getItem('viking_calendar_events') ? JSON.parse(localStorage.getItem('viking_calendar_events')!) : [];
@@ -2876,13 +2951,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
     // Standard full backup
     if (backup.studentsData && typeof backup.studentsData === 'object') {
-      setStudentsData(backup.studentsData);
-      localStorage.setItem('viking_students', JSON.stringify(backup.studentsData));
+      const filteredStudents: any = {};
+      for (const email of Object.keys(backup.studentsData)) {
+        if (!email.startsWith('backup_')) {
+          filteredStudents[email] = backup.studentsData[email];
+        }
+      }
+      setStudentsData(filteredStudents);
+      localStorage.setItem('viking_students', JSON.stringify(filteredStudents));
       
       // Save each student to Firebase (async background)
-      for (const email of Object.keys(backup.studentsData)) {
+      for (const email of Object.keys(filteredStudents)) {
         try {
-          await saveStudentToFirebase(email, backup.studentsData[email]);
+          await saveStudentToFirebase(email, filteredStudents[email]);
         } catch (err) {
           console.error(`Erro ao restaurar atleta ${email} no Firebase:`, err);
         }
@@ -6155,6 +6236,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 ⚔️ Treinos
               </button>
               <button 
+                onClick={() => setStudentSubTab('dashboard')}
+                className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                  studentSubTab === 'dashboard' 
+                    ? 'text-viking-dark bg-gradient-to-r from-viking-gold-dark to-viking-gold shadow-md shadow-viking-gold/15' 
+                    : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/5'
+                }`}
+              >
+                📊 Dashboard
+              </button>
+              <button 
                 onClick={() => setStudentSubTab('cardio')}
                 className={`flex-1 sm:flex-initial py-2.5 px-4 sm:py-3 sm:px-5 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
                   studentSubTab === 'cardio' 
@@ -6235,7 +6326,67 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               />
             )}
 
-            {studentSubTab === 'overview' && (
+            
+            {studentSubTab === 'dashboard' && activeStudentProfile && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* Dashboard Header */}
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                    <TrendingUp className="w-32 h-32" />
+                  </div>
+                  <div>
+                    <h2 className="font-viking-display text-2xl font-black text-[#e0d3a8] tracking-wider uppercase">Dashboard de Evolução</h2>
+                    <p className="text-viking-silver/80 text-sm mt-1">
+                      Acompanhe seu progresso de volume, cargas estimadas e records pessoais de SBD (Squat, Bench, Deadlift).
+                    </p>
+                  </div>
+                </div>
+
+                {renderStrengthEvolution()}
+                {/* Consolidated Evolution Charts Widget */}
+                    <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-5 shadow-xl relative overflow-hidden backdrop-blur-md">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#3d2f2b]/60 pb-4 mb-5">
+                        <div>
+                          <h3 className="font-viking-display text-sm sm:text-base font-black tracking-widest text-[#e0d3a8] uppercase flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-viking-gold animate-pulse" /> Salão de Evolução das Métricas
+                          </h3>
+                          <p className="text-[10px] sm:text-xs text-viking-silver/80">Acompanhe seu progresso de volume e 1RM estimado</p>
+                        </div>
+                        
+                        {/* Tabs selector */}
+                        <div className="flex flex-wrap gap-1 bg-[#140e0c] border border-viking-gold/15 p-1 rounded-xl">
+                          {[
+                            { id: 'volume', label: 'Volume' },
+                            { id: 'weekly', label: 'Carga Semanal' },
+                            { id: 'onerm', label: 'Evolução 1RM' },
+                            { id: 'totalsbd', label: 'Total SBD' }
+                          ].map(tb => (
+                            <button
+                              key={tb.id}
+                              onClick={() => setActiveChartTab(tb.id as any)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                activeChartTab === tb.id 
+                                  ? 'bg-viking-gold text-viking-dark shadow-md' 
+                                  : 'text-viking-silver hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              {tb.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-left">
+                        {activeChartTab === 'volume' && <VolumeChart profile={activeStudentProfile} />}
+                        {activeChartTab === 'weekly' && <WeeklyVolumeLineChart profile={activeStudentProfile} />}
+                        {activeChartTab === 'onerm' && <OneRepMaxChart profile={activeStudentProfile} />}
+                        {activeChartTab === 'totalsbd' && <TotalSBDChart profile={activeStudentProfile} />}
+                      </div>
+                    </div>
+
+              </div>
+            )}
+{studentSubTab === 'overview' && (
               <div className="space-y-6">
                 {/* DYNAMIC TARGET EVENT CARD - MARCAÇÃO DO ALVO DO ALUNO */}
                 {activeStudentProfile.competitionDate && (() => {
@@ -6661,52 +6812,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     </div>
 
                     {/* Strength Evolution SBD Panel */}
-                    {renderStrengthEvolution()}
-
-                    {/* Consolidated Evolution Charts Widget */}
-                    <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-5 shadow-xl relative overflow-hidden backdrop-blur-md">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#3d2f2b]/60 pb-4 mb-5">
-                        <div>
-                          <h3 className="font-viking-display text-sm sm:text-base font-black tracking-widest text-[#e0d3a8] uppercase flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5 text-viking-gold animate-pulse" /> Salão de Evolução das Métricas
-                          </h3>
-                          <p className="text-[10px] sm:text-xs text-viking-silver/80">Acompanhe seu progresso de volume e 1RM estimado</p>
-                        </div>
-                        
-                        {/* Tabs selector */}
-                        <div className="flex flex-wrap gap-1 bg-[#140e0c] border border-viking-gold/15 p-1 rounded-xl">
-                          {[
-                            { id: 'volume', label: 'Volume' },
-                            { id: 'weekly', label: 'Carga Semanal' },
-                            { id: 'onerm', label: 'Evolução 1RM' },
-                            { id: 'totalsbd', label: 'Total SBD' }
-                          ].map(tb => (
-                            <button
-                              key={tb.id}
-                              onClick={() => setActiveChartTab(tb.id as any)}
-                              className={`px-2.5 py-1.5 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                                activeChartTab === tb.id 
-                                  ? 'bg-viking-gold text-viking-dark shadow-md' 
-                                  : 'text-viking-silver hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              {tb.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-left">
-                        {activeChartTab === 'volume' && <VolumeChart profile={activeStudentProfile} />}
-                        {activeChartTab === 'weekly' && <WeeklyVolumeLineChart profile={activeStudentProfile} />}
-                        {activeChartTab === 'onerm' && <OneRepMaxChart profile={activeStudentProfile} />}
-                        {activeChartTab === 'totalsbd' && <TotalSBDChart profile={activeStudentProfile} />}
-                      </div>
-                    </div>
-
+                    
                   </div>
 
-                  {/* RIGHT COLUMN: Sidebar Statistics & Quick Actions (4 cols on desktop) */}
+                    {/* RIGHT COLUMN: Sidebar Statistics & Quick Actions (4 cols on desktop) */}
                   <div className="lg:col-span-4 space-y-6 flex flex-col">
 
                     {/* QUICK ACTIONS PANEL */}
@@ -7767,8 +7876,45 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                           </div>
 
-              {/* Right Column (Live Activity & Alerts) */}
-              <div className="lg:col-span-4 space-y-6 flex flex-col">
+                            {/* Right Column (Live Activity & Alerts) */}
+              <div className="lg:col-span-4 flex flex-col space-y-4">
+                {/* Tabs */}
+                <div className="flex bg-[#0d0908] rounded-xl border border-viking-gold/20 p-1 shadow-lg">
+                  <button
+                    onClick={() => setTrainerRightTab('activity')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                      trainerRightTab === 'activity' 
+                        ? 'bg-viking-gold/20 text-viking-gold shadow-sm' 
+                        : 'text-viking-silver hover:text-white'
+                    }`}
+                  >
+                    Atividade
+                  </button>
+                  <button
+                    onClick={() => setTrainerRightTab('prs')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                      trainerRightTab === 'prs' 
+                        ? 'bg-viking-gold/20 text-viking-gold shadow-sm' 
+                        : 'text-viking-silver hover:text-white'
+                    }`}
+                  >
+                    Recordes
+                  </button>
+                  <button
+                    onClick={() => setTrainerRightTab('events')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                      trainerRightTab === 'events' 
+                        ? 'bg-viking-gold/20 text-viking-gold shadow-sm' 
+                        : 'text-viking-silver hover:text-white'
+                    }`}
+                  >
+                    Eventos
+                  </button>
+                </div>
+
+                <div className="relative flex-1">
+                  {trainerRightTab === 'activity' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
 {/* --- RECENT WORKOUTS (LIVE LIST) --- */}
             {(() => {
               const allSessions: (LoggedSession & { studentName: string; studentEmail: string })[] = [];
@@ -7791,7 +7937,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               const recentSessions = allSessions.slice(0, 6);
 
               return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-2xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
                   <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
                     <Activity className="w-32 h-32" />
                   </div>
@@ -7874,7 +8020,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               );
             })()}
 
-            {/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
+                                </div>
+                  )}
+                  {trainerRightTab === 'prs' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+{/* --- PAINEL DE RECORDES PESSOAIS (PR) --- */}
             {(() => {
               const prNotifications: {
                 email: string;
@@ -7921,7 +8071,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               });
 
               return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-2xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
                   <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
                     <Trophy className="w-32 h-32" />
                   </div>
@@ -8050,7 +8200,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               );
             })()}
 
-            {/* --- PRÓXIMAS COMPETIÇÕES & TESTES --- */}
+                                </div>
+                  )}
+                  {trainerRightTab === 'events' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+{/* --- PRÓXIMAS COMPETIÇÕES & TESTES --- */}
             {(() => {
               const upcomingEvents = Object.keys(studentsData)
                 .map(email => ({ email, ...studentsData[email] }))
@@ -8064,7 +8218,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               if (upcomingEvents.length === 0) return null;
 
               return (
-                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden mb-0">
+                <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-2xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden mb-0">
                   <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
                     <Calendar className="w-32 h-32" />
                   </div>
@@ -8109,7 +8263,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               );
             })()}
 
-                          </div>
+                                              </div>
+                  )}
+                </div>
+              </div>
             </div>
 {/* Failure Sentinel & Periodization Optimizer */}
             <FailureSentinel 
@@ -8706,328 +8863,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 
                 {/* 1. History Drawer */}
                 {drawerType === 'history' && activeStudentProfile && (
-                  <div className="space-y-4">
-                    <div className="flex bg-[#0d0908] rounded-xl border border-viking-gold/20 p-1 mb-4">
-                      <button
-                        onClick={() => setHistoryTab('list')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase transition-all ${
-                          historyTab === 'list' 
-                            ? 'bg-viking-gold/20 text-viking-gold shadow-sm' 
-                            : 'text-viking-silver hover:text-white'
-                        }`}
-                      >
-                        Lista de Treinos
-                      </button>
-                      <button
-                        onClick={() => setHistoryTab('comparison')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase transition-all ${
-                          historyTab === 'comparison' 
-                            ? 'bg-viking-gold/20 text-viking-gold shadow-sm' 
-                            : 'text-viking-silver hover:text-white'
-                        }`}
-                      >
-                        Evolução vs Clã
-                      </button>
-                    </div>
-
-                    {historyTab === 'list' && (
-                      <>
-                        <button 
-                          onClick={() => handleDownloadPDF(activeStudentProfile)}
-                          className="w-full py-3 px-4 rounded-xl bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/40 hover:border-viking-gold text-viking-gold font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                        >
-                          <FileDown className="w-4.5 h-4.5" /> Exportar Relatório em PDF
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleDownloadMonthlySummaryPDF(activeStudentProfile)}
-                          className="w-full py-3 px-4 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                        >
-                          <Calendar className="w-4.5 h-4.5" /> Resumo Mensal Consolidado (PDF)
-                        </button>
-                      </>
-                    )}
-
-                    {historyTab === 'comparison' && (() => {
-                       // Calcula médias do clã
-                       let clanTotalRpe = 0;
-                       let clanRpeCount = 0;
-                       let clanTotalVolume = 0;
-                       let clanSessionsCount = 0;
-                       
-                       Object.values(studentsData).forEach((student: any) => {
-                         if (student.sessions) {
-                           student.sessions.forEach((sess: any) => {
-                             if (sess.avgRPE && sess.avgRPE > 0) {
-                               clanTotalRpe += sess.avgRPE;
-                               clanRpeCount++;
-                             }
-                             if (sess.totalAchievedVolume) {
-                               clanTotalVolume += sess.totalAchievedVolume;
-                               clanSessionsCount++;
-                             }
-                           });
-                         }
-                       });
-
-                       const clanAvgRpe = clanRpeCount > 0 ? (clanTotalRpe / clanRpeCount).toFixed(1) : 'N/A';
-                       const clanAvgVolume = clanSessionsCount > 0 ? (clanTotalVolume / clanSessionsCount).toFixed(0) : 'N/A';
-
-                       // Calcula médias do atleta
-                       let athleteTotalRpe = 0;
-                       let athleteRpeCount = 0;
-                       let athleteTotalVolume = 0;
-                       let athleteSessionsCount = 0;
-
-                       (activeStudentProfile.sessions || []).forEach(sess => {
-                         if (sess.avgRPE && sess.avgRPE > 0) {
-                           athleteTotalRpe += sess.avgRPE;
-                           athleteRpeCount++;
-                         }
-                         if (sess.totalAchievedVolume) {
-                           athleteTotalVolume += sess.totalAchievedVolume;
-                           athleteSessionsCount++;
-                         }
-                       });
-
-                       const athleteAvgRpe = athleteRpeCount > 0 ? (athleteTotalRpe / athleteRpeCount).toFixed(1) : 'N/A';
-                       const athleteAvgVolume = athleteSessionsCount > 0 ? (athleteTotalVolume / athleteSessionsCount).toFixed(0) : 'N/A';
-
-                       return (
-                         <div className="space-y-6">
-                           <div className="bg-[#0d0908]/80 p-5 rounded-2xl border border-viking-gold/20 shadow-lg">
-                             <h4 className="text-sm font-black text-viking-gold uppercase tracking-widest mb-4 flex items-center gap-2">
-                               <Activity className="w-5 h-5 text-viking-gold" /> Comparativo de Esforço (RPE)
-                             </h4>
-                             <div className="grid grid-cols-2 gap-4">
-                               <div className="bg-[#1c1210] p-4 rounded-xl border border-viking-gold/10 text-center">
-                                 <p className="text-[10px] text-viking-silver uppercase font-bold">Sua Média (RPE)</p>
-                                 <p className="text-2xl font-black text-white mt-1">{athleteAvgRpe}</p>
-                               </div>
-                               <div className="bg-[#1c1210] p-4 rounded-xl border border-viking-gold/10 text-center relative overflow-hidden">
-                                 <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
-                                   <Users className="w-12 h-12 text-viking-silver" />
-                                 </div>
-                                 <p className="text-[10px] text-viking-silver uppercase font-bold relative z-10">Média do Clã (RPE)</p>
-                                 <p className="text-2xl font-black text-viking-gold mt-1 relative z-10">{clanAvgRpe}</p>
-                               </div>
-                             </div>
-                             {athleteAvgRpe !== 'N/A' && clanAvgRpe !== 'N/A' && (
-                               <p className="text-xs text-viking-silver/80 mt-4 text-center">
-                                 {Number(athleteAvgRpe) > Number(clanAvgRpe) 
-                                   ? 'Seus treinos estão mais intensos que a média do clã. Cuidado com o overtraining!' 
-                                   : 'Seu esforço percebido está abaixo ou na média do clã. Mantenha a consistência!'}
-                               </p>
-                             )}
-                           </div>
-
-                           <div className="bg-[#0d0908]/80 p-5 rounded-2xl border border-emerald-500/20 shadow-lg">
-                             <h4 className="text-sm font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                               <Dumbbell className="w-5 h-5 text-emerald-400" /> Comparativo de Volume (Reps)
-                             </h4>
-                             <div className="grid grid-cols-2 gap-4">
-                               <div className="bg-[#101912] p-4 rounded-xl border border-emerald-500/10 text-center">
-                                 <p className="text-[10px] text-emerald-500/70 uppercase font-bold">Seu Volume Médio</p>
-                                 <p className="text-2xl font-black text-white mt-1">{athleteAvgVolume}</p>
-                               </div>
-                               <div className="bg-[#101912] p-4 rounded-xl border border-emerald-500/10 text-center relative overflow-hidden">
-                                 <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
-                                   <Users className="w-12 h-12 text-emerald-500" />
-                                 </div>
-                                 <p className="text-[10px] text-emerald-500/70 uppercase font-bold relative z-10">Volume Médio do Clã</p>
-                                 <p className="text-2xl font-black text-emerald-500 mt-1 relative z-10">{clanAvgVolume}</p>
-                               </div>
-                             </div>
-                             {athleteAvgVolume !== 'N/A' && clanAvgVolume !== 'N/A' && (
-                               <p className="text-xs text-emerald-500/70 mt-4 text-center">
-                                 {Number(athleteAvgVolume) > Number(clanAvgVolume)
-                                   ? 'Você está suportando uma carga de trabalho maior que a maioria. Excelente guerreiro!'
-                                   : 'Seu volume está um pouco abaixo da média geral. Se for intencional (foco em força máxima), siga o plano!'}
-                               </p>
-                             )}
-                           </div>
-                         </div>
-                       );
-                    })()}
-
-                    {historyTab === 'list' && (() => {
-                      const allSessions = activeStudentProfile.sessions || [];
-                      const totalSessionsCount = allSessions.length;
-                      
-                      if (totalSessionsCount === 0) {
-                        return (
-                          <div className="text-center py-12 text-viking-silver">
-                            <History className="w-12 h-12 text-viking-gold/30 mx-auto mb-3" />
-                            <p className="font-bold">Nenhum treino realizado ainda.</p>
-                            <p className="text-xs mt-1">Conclua sua primeira prova em "Treino Hoje" para iniciar seu histórico.</p>
-                          </div>
-                        );
-                      }
-
-                      const totalPagesCount = Math.ceil(totalSessionsCount / historyItemsPerPage) || 1;
-                      const validCurrentPage = Math.min(Math.max(1, historyPage), totalPagesCount);
-                      const paginatedSessions = allSessions.slice(
-                        (validCurrentPage - 1) * historyItemsPerPage,
-                        validCurrentPage * historyItemsPerPage
-                      );
-
-                      return (
-                        <div className="space-y-4">
-                          {/* Controle de Exibição / Paginação Superior */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#0d0908]/80 rounded-xl border border-viking-gold/15 text-xs text-viking-silver">
-                            <div className="flex items-center gap-2">
-                              <span>Sessões por página:</span>
-                              <select
-                                value={historyItemsPerPage}
-                                onChange={(e) => {
-                                  setHistoryItemsPerPage(Number(e.target.value));
-                                  setHistoryPage(1);
-                                }}
-                                className="px-2 py-1 rounded bg-[#140e0c] border border-viking-gold/25 text-[#e0d3a8] text-[11px] font-bold outline-none focus:border-viking-gold cursor-pointer"
-                              >
-                                <option value={5}>5 por página</option>
-                                <option value={10}>10 por página</option>
-                                <option value={15}>15 por página</option>
-                                <option value={20}>20 por página</option>
-                                <option value={50}>50 por página</option>
-                              </select>
-                            </div>
-                            <div className="text-[10px] font-black uppercase text-viking-gold/85 tracking-wider">
-                              Exibindo {paginatedSessions.length} de {totalSessionsCount} treinos
-                            </div>
-                          </div>
-
-                          {/* Lista Paginada de Treinos */}
-                          <div className="space-y-4">
-                            {paginatedSessions.map((sess, idx) => (
-                              <div key={sess.id || idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-viking-silver font-bold">{sess.date}</span>
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    sess.avgRPE >= 9 
-                                      ? 'bg-red-950/40 text-red-400 border border-red-800/30' 
-                                      : sess.avgRPE >= 7.5
-                                      ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
-                                      : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
-                                  }`}>
-                                    RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-white">{sess.sessionName}</p>
-                                  {sess.totalPlannedVolume !== undefined && sess.totalAchievedVolume !== undefined && (
-                                    <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-viking-silver bg-black/30 px-2 py-1 rounded border border-viking-gold/5">
-                                      <span>Volume de Trabalho:</span>
-                                      <span className={sess.volumeDeficit && sess.volumeDeficit > 0 ? 'text-viking-gold' : 'text-green-400'}>
-                                        {sess.totalAchievedVolume} / {sess.totalPlannedVolume} reps realizada(s) 
-                                        {sess.volumeDeficit && sess.volumeDeficit > 0 ? ` (-${sess.volumeDeficit})` : ' (100%)'}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div className="space-y-2.5 border-t border-viking-gold/15 pt-2.5">
-                                  {sess.exercises.map((ex, eidx) => (
-                                    <div key={eidx} className="space-y-1">
-                                      <div className="flex justify-between items-center text-xs">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="text-viking-silver font-medium">{ex.name}</span>
-                                          {ex.failed && (
-                                            <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
-                                            <span className="text-[10px] text-viking-silver font-mono">
-                                              {ex.achievedVolume}/{ex.plannedVolume} reps
-                                            </span>
-                                          )}
-                                          <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
-                                        </div>
-                                      </div>
-                                      {ex.sets && ex.sets.length > 0 && (
-                                        <div className="pl-2.5 flex flex-wrap gap-1 text-[9px]">
-                                          {ex.sets.map((s, sidx) => (
-                                            <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono inline-flex items-center gap-1" title={s.note || ''}>
-                                              <span>S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong></span>
-                                              {s.note && <span className="text-[8px] text-viking-gold/60 truncate max-w-[100px] border-l border-viking-gold/20 pl-1 ml-1 leading-none" title={s.note}>{s.note}</span>}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-
-                                {sess.compensationSuggestion && (
-                                  <div className="p-3 bg-viking-gold/5 rounded-xl border border-viking-gold/25 space-y-1.5 text-xs">
-                                    <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
-                                      <Zap className="w-3.5 h-3.5 text-viking-gold animate-bounce" /> Compensação de Volume Sugerida:
-                                    </p>
-                                    <p className="text-viking-silver leading-relaxed font-semibold whitespace-pre-line">
-                                      {sess.compensationSuggestion}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {sess.note && (
-                                  <div className="mt-3 p-2 rounded bg-black/40 border-l-2 border-viking-gold text-xs text-viking-silver italic">
-                                    "{sess.note}"
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Navegação Inferior de Página */}
-                          {totalPagesCount > 1 && (
-                            <div className="flex items-center justify-between pt-4 border-t border-viking-gold/15">
-                              <button
-                                type="button"
-                                disabled={validCurrentPage === 1}
-                                onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                                className="px-3 py-2 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-25 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
-                              >
-                                <ArrowLeft className="w-3.5 h-3.5" /> Anterior
-                              </button>
-                              
-                              <div className="flex items-center gap-1">
-                                {Array.from({ length: totalPagesCount }, (_, i) => i + 1).map((p) => {
-                                  if (totalPagesCount > 5 && Math.abs(p - validCurrentPage) > 1 && p !== 1 && p !== totalPagesCount) {
-                                    if (p === 2 && validCurrentPage > 3) return <span key={p} className="text-viking-silver/50 px-1 text-xs select-none">...</span>;
-                                    if (p === totalPagesCount - 1 && validCurrentPage < totalPagesCount - 2) return <span key={p} className="text-viking-silver/50 px-1 text-xs select-none">...</span>;
-                                    return null;
-                                  }
-                                  return (
-                                    <button
-                                      key={p}
-                                      onClick={() => setHistoryPage(p)}
-                                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                        p === validCurrentPage
-                                          ? 'bg-viking-gold/25 border border-viking-gold text-viking-gold'
-                                          : 'bg-black/20 border border-viking-gold/10 text-viking-silver hover:border-viking-gold/40 hover:text-white'
-                                      }`}
-                                    >
-                                      {p}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              <button
-                                type="button"
-                                disabled={validCurrentPage === totalPagesCount}
-                                onClick={() => setHistoryPage(prev => Math.min(totalPagesCount, prev + 1))}
-                                className="px-3 py-2 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-25 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
-                              >
-                                Próximo <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                  <WorkoutHistory 
+                    activeStudentProfile={activeStudentProfile}
+                    studentsData={studentsData}
+                    handleDownloadPDF={handleDownloadPDF}
+                    handleDownloadMonthlySummaryPDF={handleDownloadMonthlySummaryPDF}
+                    drawerContentRef={drawerContentRef}
+                  />
                 )}
 
                 {/* Calendar Drawer */}
@@ -12826,7 +12668,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               <button onClick={() => setIsExercisePickerOpen(false)} className="text-viking-silver hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
                             </div>
                             
-                            <div className="p-4 border-b border-viking-gold/15 bg-[#0a0706]">
+                            <div className="p-4 border-b border-viking-gold/15 bg-[#0a0706] space-y-3">
                               <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-viking-gold/60" />
                                 <input
@@ -12834,32 +12676,159 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                   placeholder="Buscar exercícios..."
                                   value={dbExerciseSearch}
                                   onChange={(e) => setDbExerciseSearch(e.target.value)}
-                                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-sm focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
+                                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] text-sm focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold"
                                 />
+                                {dbExerciseSearch && (
+                                  <button
+                                    onClick={() => setDbExerciseSearch('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-viking-silver hover:text-viking-gold cursor-pointer p-0.5"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div>
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="block text-[9px] font-bold text-viking-silver uppercase">Grupo Muscular</span>
+                                    {(pickerMuscleGroup !== 'all' || pickerExerciseType !== 'all') && (
+                                      <button 
+                                        onClick={() => { setPickerMuscleGroup('all'); setPickerExerciseType('all'); }} 
+                                        className="text-[9px] font-bold text-viking-gold hover:underline cursor-pointer"
+                                      >
+                                        Limpar Filtros
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                    {[
+                                      { id: 'all', label: 'Todos' },
+                                      { id: 'peito', label: 'Peito' },
+                                      { id: 'costas', label: 'Costas' },
+                                      { id: 'pernas', label: 'Pernas' },
+                                      { id: 'ombros', label: 'Ombros' },
+                                      { id: 'biceps', label: 'Bíceps' },
+                                      { id: 'triceps', label: 'Tríceps' },
+                                      { id: 'core', label: 'Core / Abs' },
+                                      { id: 'power', label: 'Força / LPO' }
+                                    ].map(group => (
+                                      <button
+                                        key={group.id}
+                                        type="button"
+                                        onClick={() => setPickerMuscleGroup(group.id)}
+                                        className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all whitespace-nowrap cursor-pointer ${
+                                          pickerMuscleGroup === group.id
+                                            ? 'bg-viking-gold text-viking-dark border-viking-gold shadow-sm shadow-viking-gold/20'
+                                            : 'bg-black/30 text-viking-silver border-viking-gold/15 hover:border-viking-gold/40'
+                                        }`}
+                                      >
+                                        {group.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <span className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Tipo de Exercício</span>
+                                  <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                    {[
+                                      { id: 'all', label: 'Todos' },
+                                      { id: 'barra', label: 'Barra' },
+                                      { id: 'halter', label: 'Halter' },
+                                      { id: 'maquina', label: 'Máquina' },
+                                      { id: 'polia', label: 'Polia / Cabo' },
+                                      { id: 'corporal', label: 'Peso Corporal' }
+                                    ].map(type => (
+                                      <button
+                                        key={type.id}
+                                        type="button"
+                                        onClick={() => setPickerExerciseType(type.id)}
+                                        className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all whitespace-nowrap cursor-pointer ${
+                                          pickerExerciseType === type.id
+                                            ? 'bg-viking-gold text-viking-dark border-viking-gold shadow-sm shadow-viking-gold/20'
+                                            : 'bg-black/30 text-viking-silver border-viking-gold/15 hover:border-viking-gold/40'
+                                        }`}
+                                      >
+                                        {type.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-[#0d0908]">
-                              {dbExercises
-                                .filter(ex => dbExerciseSearch.trim() === '' || ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase()))
-                                .map(ex => (
-                                  <button
-                                    key={ex.id}
-                                    onClick={() => { handleEditorAddExerciseFromDb(ex); setDbExerciseSearch(''); }}
-                                    className="w-full text-left p-3 rounded-xl bg-[#140e0c]/80 border border-viking-gold/10 hover:border-viking-gold/40 transition-colors flex justify-between items-center group cursor-pointer"
-                                  >
-                                    <div>
-                                      <div className="text-[#e0d3a8] font-bold text-sm group-hover:text-viking-gold transition-colors">{ex.name}</div>
-                                      {ex.techniqueTips && <div className="text-[10px] text-viking-silver/60 line-clamp-1 mt-1">{ex.techniqueTips}</div>}
+                              {(() => {
+                                const filteredList = dbExercises.filter(ex => {
+                                  const matchesSearch = dbExerciseSearch.trim() === '' || 
+                                    ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase());
+                                  
+                                  if (!matchesSearch) return false;
+
+                                  if (pickerMuscleGroup !== 'all') {
+                                    const exGroup = getExerciseMuscleGroup(ex).toLowerCase();
+                                    if (pickerMuscleGroup === 'peito' && !exGroup.includes('peito')) return false;
+                                    if (pickerMuscleGroup === 'costas' && !exGroup.includes('costas')) return false;
+                                    if (pickerMuscleGroup === 'pernas' && !exGroup.includes('perna')) return false;
+                                    if (pickerMuscleGroup === 'ombros' && !exGroup.includes('ombro')) return false;
+                                    if (pickerMuscleGroup === 'biceps' && !exGroup.includes('bíceps') && !exGroup.includes('biceps')) return false;
+                                    if (pickerMuscleGroup === 'triceps' && !exGroup.includes('tríceps') && !exGroup.includes('triceps')) return false;
+                                    if (pickerMuscleGroup === 'core' && !exGroup.includes('core') && !exGroup.includes('abdômen') && !exGroup.includes('abdomen')) return false;
+                                    if (pickerMuscleGroup === 'power' && !exGroup.includes('powerlifting') && !exGroup.includes('lpo')) return false;
+                                  }
+
+                                  if (pickerExerciseType !== 'all') {
+                                    const exType = getExerciseType(ex).toLowerCase();
+                                    if (pickerExerciseType === 'barra' && !exType.includes('barra')) return false;
+                                    if (pickerExerciseType === 'halter' && !exType.includes('halter')) return false;
+                                    if (pickerExerciseType === 'maquina' && !exType.includes('máquina') && !exType.includes('maquina')) return false;
+                                    if (pickerExerciseType === 'polia' && !exType.includes('polia') && !exType.includes('cabo')) return false;
+                                    if (pickerExerciseType === 'corporal' && !exType.includes('corporal') && !exType.includes('peso corporal')) return false;
+                                  }
+
+                                  return true;
+                                });
+
+                                if (filteredList.length === 0) {
+                                  return (
+                                    <div className="text-center p-6 text-viking-silver/50 italic text-sm">
+                                      Nenhum exercício encontrado com os filtros selecionados.
                                     </div>
-                                    {ex.videoUrl && <Youtube className="w-4 h-4 text-viking-silver/40 group-hover:text-red-500 transition-colors shrink-0" />}
-                                  </button>
-                                ))}
-                              {dbExercises.filter(ex => dbExerciseSearch.trim() === '' || ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase())).length === 0 && (
-                                <div className="text-center p-6 text-viking-silver/50 italic text-sm">
-                                  Nenhum exercício encontrado na biblioteca.
-                                </div>
-                              )}
+                                  );
+                                }
+
+                                return filteredList.map(ex => {
+                                  const group = getExerciseMuscleGroup(ex);
+                                  const type = getExerciseType(ex);
+                                  return (
+                                    <button
+                                      key={ex.id}
+                                      onClick={() => { 
+                                        handleEditorAddExerciseFromDb(ex); 
+                                        setDbExerciseSearch(''); 
+                                        setPickerMuscleGroup('all'); 
+                                        setPickerExerciseType('all'); 
+                                      }}
+                                      className="w-full text-left p-3 rounded-xl bg-[#140e0c]/80 border border-viking-gold/10 hover:border-viking-gold/40 transition-all flex justify-between items-center group cursor-pointer"
+                                    >
+                                      <div className="space-y-1.5 flex-1 pr-2">
+                                        <div className="text-[#e0d3a8] font-bold text-sm group-hover:text-viking-gold transition-colors">{ex.name}</div>
+                                        {ex.techniqueTips && <div className="text-[10px] text-viking-silver/60 line-clamp-1">{ex.techniqueTips}</div>}
+                                        <div className="flex flex-wrap gap-1 pt-0.5">
+                                          <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-viking-gold/10 text-viking-gold border border-viking-gold/10">
+                                            {group === 'Pernas (Quadríceps e Isquiotibiais)' ? 'Pernas' : group}
+                                          </span>
+                                          <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 text-viking-silver/80 border border-white/5">
+                                            {type}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {ex.videoUrl && <Youtube className="w-4 h-4 text-viking-silver/40 group-hover:text-red-500 transition-colors shrink-0" />}
+                                    </button>
+                                  );
+                                });
+                              })()}
                             </div>
                           </motion.div>
                         </div>
@@ -13526,6 +13495,77 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       <strong className="text-viking-gold font-black font-mono tracking-wide">{dbExercises.length} Exercícios Prescritivos</strong>
                     </div>
 
+                    {!editingDbExercise && (
+                      <div className="p-3.5 bg-[#0a0706] border border-viking-gold/15 rounded-2xl space-y-2.5">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="block text-[9px] font-bold text-viking-silver uppercase">Grupo Muscular</span>
+                            {(pickerMuscleGroup !== 'all' || pickerExerciseType !== 'all') && (
+                              <button 
+                                onClick={() => { setPickerMuscleGroup('all'); setPickerExerciseType('all'); }} 
+                                className="text-[9px] font-bold text-viking-gold hover:underline cursor-pointer"
+                              >
+                                Limpar Filtros
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                            {[
+                              { id: 'all', label: 'Todos' },
+                              { id: 'peito', label: 'Peito' },
+                              { id: 'costas', label: 'Costas' },
+                              { id: 'pernas', label: 'Pernas' },
+                              { id: 'ombros', label: 'Ombros' },
+                              { id: 'biceps', label: 'Bíceps' },
+                              { id: 'triceps', label: 'Tríceps' },
+                              { id: 'core', label: 'Core / Abs' },
+                              { id: 'power', label: 'Força / LPO' }
+                            ].map(group => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() => setPickerMuscleGroup(group.id)}
+                                className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all whitespace-nowrap cursor-pointer ${
+                                  pickerMuscleGroup === group.id
+                                    ? 'bg-viking-gold text-viking-dark border-viking-gold shadow-sm shadow-viking-gold/20'
+                                    : 'bg-black/30 text-viking-silver border-viking-gold/15 hover:border-viking-gold/40'
+                                }`}
+                              >
+                                {group.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="block text-[9px] font-bold text-viking-silver uppercase mb-1">Tipo de Exercício</span>
+                          <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                            {[
+                              { id: 'all', label: 'Todos' },
+                              { id: 'barra', label: 'Barra' },
+                              { id: 'halter', label: 'Halter' },
+                              { id: 'maquina', label: 'Máquina' },
+                              { id: 'polia', label: 'Polia / Cabo' },
+                              { id: 'corporal', label: 'Peso Corporal' }
+                            ].map(type => (
+                              <button
+                                key={type.id}
+                                type="button"
+                                onClick={() => setPickerExerciseType(type.id)}
+                                className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all whitespace-nowrap cursor-pointer ${
+                                  pickerExerciseType === type.id
+                                    ? 'bg-viking-gold text-viking-dark border-viking-gold shadow-sm shadow-viking-gold/20'
+                                    : 'bg-black/30 text-viking-silver border-viking-gold/15 hover:border-viking-gold/40'
+                                }`}
+                              >
+                                {type.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Unified Form (Add or Edit) */}
                     {currentUser?.role === 'trainer' && editingDbExercise && (
                       <div className="p-4 bg-[#0d0908]/90 border border-viking-gold/25 rounded-2xl space-y-3.5 relative">
@@ -13567,6 +13607,44 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               onChange={(val: string) => setEditingDbExercise({ ...editingDbExercise, techniqueTips: val })}
                               className="w-full p-3 rounded-xl bg-black/40 border border-viking-gold/20 text-[#e0d3a8] placeholder-viking-silver/30 text-xs font-semibold focus:outline-none focus:border-viking-gold"
                             />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Grupo Muscular</label>
+                              <select
+                                value={editingDbExercise.muscleGroup || ''}
+                                onChange={(e) => setEditingDbExercise({ ...editingDbExercise, muscleGroup: e.target.value })}
+                                className="w-full px-3 py-2.5 rounded-xl bg-[#0d0908]/90 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold cursor-pointer"
+                              >
+                                <option value="" className="bg-[#140e0c]">Automático (Detectar)</option>
+                                <option value="Peito" className="bg-[#140e0c]">Peito</option>
+                                <option value="Costas" className="bg-[#140e0c]">Costas</option>
+                                <option value="Pernas (Quadríceps e Isquiotibiais)" className="bg-[#140e0c]">Pernas</option>
+                                <option value="Ombros" className="bg-[#140e0c]">Ombros</option>
+                                <option value="Bíceps" className="bg-[#140e0c]">Bíceps</option>
+                                <option value="Tríceps" className="bg-[#140e0c]">Tríceps</option>
+                                <option value="Core e Abdômen" className="bg-[#140e0c]">Core e Abdômen</option>
+                                <option value="Powerlifting e LPO" className="bg-[#140e0c]">Powerlifting e LPO</option>
+                                <option value="Outros" className="bg-[#140e0c]">Outros</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-viking-silver mb-1">Tipo de Exercício</label>
+                              <select
+                                value={editingDbExercise.exerciseType || ''}
+                                onChange={(e) => setEditingDbExercise({ ...editingDbExercise, exerciseType: e.target.value })}
+                                className="w-full px-3 py-2.5 rounded-xl bg-[#0d0908]/90 border border-viking-gold/20 text-[#e0d3a8] font-semibold text-xs focus:outline-none focus:border-viking-gold cursor-pointer"
+                              >
+                                <option value="" className="bg-[#140e0c]">Automático (Detectar)</option>
+                                <option value="Barra" className="bg-[#140e0c]">Barra</option>
+                                <option value="Halter" className="bg-[#140e0c]">Halter</option>
+                                <option value="Máquina" className="bg-[#140e0c]">Máquina</option>
+                                <option value="Polia / Cabo" className="bg-[#140e0c]">Polia / Cabo</option>
+                                <option value="Peso Corporal" className="bg-[#140e0c]">Peso Corporal</option>
+                              </select>
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -13702,10 +13780,35 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           <p className="text-xs text-viking-silver font-bold uppercase tracking-wider">Lendo banco de dados de exercícios...</p>
                         </div>
                       ) : (() => {
-                        const filtered = dbExercises.filter(ex => 
-                          ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase()) ||
-                          (ex.techniqueTips && ex.techniqueTips.toLowerCase().includes(dbExerciseSearch.toLowerCase()))
-                        );
+                        const filtered = dbExercises.filter(ex => {
+                          const matchesSearch = ex.name.toLowerCase().includes(dbExerciseSearch.toLowerCase()) ||
+                            (ex.techniqueTips && ex.techniqueTips.toLowerCase().includes(dbExerciseSearch.toLowerCase()));
+                          
+                          if (!matchesSearch) return false;
+
+                          if (pickerMuscleGroup !== 'all') {
+                            const exGroup = getExerciseMuscleGroup(ex).toLowerCase();
+                            if (pickerMuscleGroup === 'peito' && !exGroup.includes('peito')) return false;
+                            if (pickerMuscleGroup === 'costas' && !exGroup.includes('costas')) return false;
+                            if (pickerMuscleGroup === 'pernas' && !exGroup.includes('perna')) return false;
+                            if (pickerMuscleGroup === 'ombros' && !exGroup.includes('ombro')) return false;
+                            if (pickerMuscleGroup === 'biceps' && !exGroup.includes('bíceps') && !exGroup.includes('biceps')) return false;
+                            if (pickerMuscleGroup === 'triceps' && !exGroup.includes('tríceps') && !exGroup.includes('triceps')) return false;
+                            if (pickerMuscleGroup === 'core' && !exGroup.includes('core') && !exGroup.includes('abdômen') && !exGroup.includes('abdomen')) return false;
+                            if (pickerMuscleGroup === 'power' && !exGroup.includes('powerlifting') && !exGroup.includes('lpo')) return false;
+                          }
+
+                          if (pickerExerciseType !== 'all') {
+                            const exType = getExerciseType(ex).toLowerCase();
+                            if (pickerExerciseType === 'barra' && !exType.includes('barra')) return false;
+                            if (pickerExerciseType === 'halter' && !exType.includes('halter')) return false;
+                            if (pickerExerciseType === 'maquina' && !exType.includes('máquina') && !exType.includes('maquina')) return false;
+                            if (pickerExerciseType === 'polia' && !exType.includes('polia') && !exType.includes('cabo')) return false;
+                            if (pickerExerciseType === 'corporal' && !exType.includes('corporal') && !exType.includes('peso corporal')) return false;
+                          }
+
+                          return true;
+                        });
 
                         if (filtered.length === 0) {
                           return (
@@ -13745,6 +13848,17 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       ) : null;
                                     })()}
                                   </h4>
+                                  <div className="flex flex-wrap gap-1.5 mt-1 pb-1">
+                                    <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-viking-gold/10 text-viking-gold border border-viking-gold/10">
+                                      {(() => {
+                                        const group = getExerciseMuscleGroup(ex);
+                                        return group === 'Pernas (Quadríceps e Isquiotibiais)' ? 'Pernas' : group;
+                                      })()}
+                                    </span>
+                                    <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 text-viking-silver/80 border border-white/5">
+                                      {getExerciseType(ex)}
+                                    </span>
+                                  </div>
                                   {ex.techniqueTips && (
                                     <p className="text-[11px] text-[#e0d3a8]/80 leading-relaxed">
                                       <strong className="text-viking-gold">Dica de Técnica:</strong> {ex.techniqueTips}
