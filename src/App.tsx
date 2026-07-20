@@ -199,6 +199,7 @@ import {
   auth,
   subscribeStudents,
   subscribeStudentProfile,
+  fetchStudentProfileFromFirebase,
   storage,
   generate500Exercises,
   saveTrainerAutoBackupToFirebase,
@@ -806,11 +807,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             let pr = ex.baseWeight || null;
             if (!pr && activeStudentProfile) {
               if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-                pr = activeStudentProfile.prs.squat;
+                pr = activeStudentProfile.prs?.squat ?? null;
               } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-                pr = activeStudentProfile.prs.bench;
+                pr = activeStudentProfile.prs?.bench ?? null;
               } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-                pr = activeStudentProfile.prs.deadlift;
+                pr = activeStudentProfile.prs?.deadlift ?? null;
               }
             }
             let intensityRatio = 0;
@@ -2440,8 +2441,21 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           handleLoginSuccess({ name: 'John Rodrigues', email, role: 'trainer' });
         } else {
           // If it's a student, let's check if their profile exists in Firestore / local state
-          const student = studentsData[email];
+          let student = studentsData[email];
+          if (!student) {
+            try {
+              student = await fetchStudentProfileFromFirebase(email) || undefined;
+            } catch (err) {
+              console.warn("Failed to fetch student on login fallback", err);
+            }
+          }
+
           if (student) {
+            setStudentsData(prev => {
+              const updated = { ...prev, [email]: student! };
+              localStorage.setItem('viking_students', JSON.stringify(updated));
+              return updated;
+            });
             handleLoginSuccess({ name: student.name, email, role: 'student' });
           } else {
             // Fallback: create dynamic profile in Firestore if it doesn't exist
@@ -2642,6 +2656,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const isInitialMountRef = useRef(true);
   const hasUnsavedChangesRef = useRef(false);
   const autoBackupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightBgRef = useRef<HTMLDivElement>(null);
 
   const applyBackupData = async (backup: any) => {
     if (!backup) throw new Error("Backup inválido ou vazio");
@@ -3322,25 +3337,25 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       firstDate = firstSession.date;
       recentDate = recentSession.date;
       
-      firstS = firstSession.prsAtSession?.squat ?? activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs.squat ?? 0;
-      firstB = firstSession.prsAtSession?.bench ?? activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs.bench ?? 0;
-      firstD = firstSession.prsAtSession?.deadlift ?? activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+      firstS = firstSession.prsAtSession?.squat ?? activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs?.squat ?? 0;
+      firstB = firstSession.prsAtSession?.bench ?? activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs?.bench ?? 0;
+      firstD = firstSession.prsAtSession?.deadlift ?? activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs?.deadlift ?? 0;
       
-      recentS = recentSession.prsAtSession?.squat ?? activeStudentProfile.prs.squat ?? 0;
-      recentB = recentSession.prsAtSession?.bench ?? activeStudentProfile.prs.bench ?? 0;
-      recentD = recentSession.prsAtSession?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+      recentS = recentSession.prsAtSession?.squat ?? activeStudentProfile.prs?.squat ?? 0;
+      recentB = recentSession.prsAtSession?.bench ?? activeStudentProfile.prs?.bench ?? 0;
+      recentD = recentSession.prsAtSession?.deadlift ?? activeStudentProfile.prs?.deadlift ?? 0;
     } else {
       // Fallback para os PRs cadastrados vs PRs anteriores
       firstDate = 'Cadastro Inicial';
       recentDate = 'Registro Atual';
       
-      firstS = activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs.squat ?? 0;
-      firstB = activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs.bench ?? 0;
-      firstD = activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs.deadlift ?? 0;
+      firstS = activeStudentProfile.prevPrs?.squat ?? activeStudentProfile.prs?.squat ?? 0;
+      firstB = activeStudentProfile.prevPrs?.bench ?? activeStudentProfile.prs?.bench ?? 0;
+      firstD = activeStudentProfile.prevPrs?.deadlift ?? activeStudentProfile.prs?.deadlift ?? 0;
       
-      recentS = activeStudentProfile.prs.squat ?? 0;
-      recentB = activeStudentProfile.prs.bench ?? 0;
-      recentD = activeStudentProfile.prs.deadlift ?? 0;
+      recentS = activeStudentProfile.prs?.squat ?? 0;
+      recentB = activeStudentProfile.prs?.bench ?? 0;
+      recentD = activeStudentProfile.prs?.deadlift ?? 0;
     }
     
     const firstTotal = firstS + firstB + firstD;
@@ -3638,7 +3653,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     saveStudentsToDB(updatedStudents);
 
     // Check for Wilks goal achievement
-    const oldTotal = (activeStudentProfile.prs.squat || 0) + (activeStudentProfile.prs.bench || 0) + (activeStudentProfile.prs.deadlift || 0);
+    const oldTotal = (activeStudentProfile.prs?.squat || 0) + (activeStudentProfile.prs?.bench || 0) + (activeStudentProfile.prs?.deadlift || 0);
     const oldWilks = calculateWilks(activeStudentProfile.gender || 'male', activeStudentProfile.bodyWeight || 0, oldTotal);
     
     const getTierIdx = (w: number) => {
@@ -3653,7 +3668,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     };
     
     const oldTierIdx = getTierIdx(oldWilks);
-    const newTotal = (updatedProfile.prs.squat || 0) + (updatedProfile.prs.bench || 0) + (updatedProfile.prs.deadlift || 0);
+    const newTotal = (updatedProfile.prs?.squat || 0) + (updatedProfile.prs?.bench || 0) + (updatedProfile.prs?.deadlift || 0);
     const newWilks = calculateWilks(updatedProfile.gender || 'male', updatedProfile.bodyWeight || 0, newTotal);
     const newTierIdx = getTierIdx(newWilks);
 
@@ -3761,9 +3776,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       volumeDeficit,
       compensationSuggestion: compensationSuggestion || null,
       prsAtSession: {
-        squat: activeStudentProfile.prs.squat,
-        bench: activeStudentProfile.prs.bench,
-        deadlift: activeStudentProfile.prs.deadlift
+        squat: activeStudentProfile.prs?.squat ?? null,
+        bench: activeStudentProfile.prs?.bench ?? null,
+        deadlift: activeStudentProfile.prs?.deadlift ?? null
       }
     };
 
@@ -3776,7 +3791,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     setConfirmSessionModalOpen(true);
 
     // Check for Wilks goal achievement
-    const oldTotal = (activeStudentProfile.prs.squat || 0) + (activeStudentProfile.prs.bench || 0) + (activeStudentProfile.prs.deadlift || 0);
+    const oldTotal = (activeStudentProfile.prs?.squat || 0) + (activeStudentProfile.prs?.bench || 0) + (activeStudentProfile.prs?.deadlift || 0);
     const oldWilks = calculateWilks(activeStudentProfile.gender || 'male', activeStudentProfile.bodyWeight || 0, oldTotal);
     
     const getTierIdx = (w: number) => {
@@ -3791,7 +3806,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     };
     
     const oldTierIdx = getTierIdx(oldWilks);
-    const newTotal = (updatedProfile.prs.squat || 0) + (updatedProfile.prs.bench || 0) + (updatedProfile.prs.deadlift || 0);
+    const newTotal = (updatedProfile.prs?.squat || 0) + (updatedProfile.prs?.bench || 0) + (updatedProfile.prs?.deadlift || 0);
     const newWilks = calculateWilks(updatedProfile.gender || 'male', updatedProfile.bodyWeight || 0, newTotal);
     const newTierIdx = getTierIdx(newWilks);
 
@@ -6277,7 +6292,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
                 <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-viking-gold mx-auto mb-2" />
                 <p className="text-lg sm:text-2xl font-black text-white">
-                  {(activeStudentProfile.prs.squat || 0) > 0 ? '3' : '0'}
+                  {(activeStudentProfile.prs?.squat || 0) > 0 ? '3' : '0'}
                 </p>
                 <p className="text-[9px] sm:text-[10px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">PRs Ativos</p>
               </div>
@@ -6554,9 +6569,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {(() => {
                   const bw = activeStudentProfile.bodyWeight || 80.0;
                   const gender = activeStudentProfile.gender || 'male';
-                  const s = activeStudentProfile.prs.squat || 0;
-                  const b = activeStudentProfile.prs.bench || 0;
-                  const d = activeStudentProfile.prs.deadlift || 0;
+                  const s = activeStudentProfile.prs?.squat || 0;
+                  const b = activeStudentProfile.prs?.bench || 0;
+                  const d = activeStudentProfile.prs?.deadlift || 0;
                   const total = s + b + d;
                   const currentWilks = calculateWilks(gender, bw, total);
 
@@ -11045,32 +11060,121 @@ Equipe Viking Force`);
                         {/* Editor Column */}
                         <div className="space-y-4">
                           <div className="space-y-3">
-                            <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
-                              Modelo da Mensagem (Template)
-                            </label>
+                            <div className="flex items-center justify-between">
+                              <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
+                                Modelo da Mensagem (Template)
+                              </label>
+                              {(() => {
+                                const validPlaceholders = ['{NOME_ALUNO}', '{NOME_TREINO}', '{PR_SQUAT}', '{PR_BENCH}', '{PR_DEADLIFT}'];
+                                const matches = whatsappWorkoutTemplate.match(/\{[^}]+\}/g) || [];
+                                const invalidPlaceholders = Array.from(new Set(matches.filter(tag => !validPlaceholders.includes(tag.toUpperCase()))));
+                                const hasInvalidPlaceholders = invalidPlaceholders.length > 0;
+                                if (hasInvalidPlaceholders) {
+                                  return (
+                                    <motion.div
+                                      initial={{ scale: 0.9, opacity: 0 }}
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      className="flex items-center text-viking-red gap-1 bg-viking-red/10 border border-viking-red/20 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
+                                      title="Foram encontrados placeholders inválidos!"
+                                    >
+                                      <AlertTriangle className="w-3.5 h-3.5 animate-pulse text-viking-red" />
+                                      <span>Aviso: Placeholder Inválido</span>
+                                    </motion.div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
                             {(() => {
                               const validPlaceholders = ['{NOME_ALUNO}', '{NOME_TREINO}', '{PR_SQUAT}', '{PR_BENCH}', '{PR_DEADLIFT}'];
                               const matches = whatsappWorkoutTemplate.match(/\{[^}]+\}/g) || [];
                               const invalidPlaceholders = Array.from(new Set(matches.filter(tag => !validPlaceholders.includes(tag.toUpperCase()))));
                               const hasInvalidPlaceholders = invalidPlaceholders.length > 0;
 
+                              const renderHighlightedTemplate = (text: string) => {
+                                const parts = text.split(/(\{[^}]*\})/g);
+                                return parts.map((part, idx) => {
+                                  if (part.startsWith('{') && part.endsWith('}')) {
+                                    const isWordValid = validPlaceholders.includes(part.toUpperCase());
+                                    if (isWordValid) {
+                                      return (
+                                        <span 
+                                          key={idx} 
+                                          className="bg-viking-gold/20 border border-viking-gold/40 rounded px-1 py-0.5 font-bold text-transparent"
+                                        >
+                                          {part}
+                                        </span>
+                                      );
+                                    } else {
+                                      return (
+                                        <span 
+                                          key={idx} 
+                                          className="bg-red-500/25 border border-red-500/50 rounded px-1 py-0.5 font-bold text-transparent animate-pulse"
+                                        >
+                                          {part}
+                                        </span>
+                                      );
+                                    }
+                                  }
+                                  return <span key={idx} className="opacity-0">{part}</span>;
+                                });
+                              };
+
                               return (
                                 <div className="space-y-2">
-                                  <DebouncedTextarea
-                                    id="whatsappTemplateInput"
-                                    value={whatsappWorkoutTemplate}
-                                    onChange={(val: string) => {
-                                      setWhatsappWorkoutTemplate(val);
-                                      localStorage.setItem('viking_whatsapp_workout_template', val);
-                                    }}
-                                    className={`w-full h-80 px-4 py-3 bg-[#0d0908]/60 rounded-xl text-xs text-white placeholder-viking-silver/30 outline-none transition-all font-mono leading-relaxed resize-none ${hasInvalidPlaceholders ? 'border border-viking-red focus:border-viking-red focus:ring-1 focus:ring-viking-red text-red-100 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold'}`}
-                                    placeholder="Digite o modelo de mensagem aqui..."
-                                  />
+                                  <div className={`relative w-full h-80 bg-[#0d0908]/60 rounded-xl border overflow-hidden transition-all ${
+                                    hasInvalidPlaceholders 
+                                      ? 'border-viking-red focus-within:ring-1 focus-within:ring-viking-red shadow-[0_0_15px_rgba(239,68,68,0.25)]' 
+                                      : 'border-viking-gold/20 hover:border-viking-gold/45 focus-within:border-viking-gold focus-within:ring-1 focus-within:ring-viking-gold'
+                                  }`}>
+                                    {/* Highlights background layer */}
+                                    <div
+                                      ref={highlightBgRef}
+                                      id="whatsappTemplateHighlightBg"
+                                      className="absolute inset-0 pointer-events-none px-4 py-3 bg-transparent text-xs font-mono leading-relaxed whitespace-pre-wrap break-words overflow-auto"
+                                      style={{
+                                        fontFamily: "monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas",
+                                        fontSize: "12px",
+                                        lineHeight: "1.625",
+                                      }}
+                                    >
+                                      {renderHighlightedTemplate(whatsappWorkoutTemplate)}
+                                    </div>
+
+                                    {/* Edit foreground layer */}
+                                    <textarea
+                                      id="whatsappTemplateInput"
+                                      value={whatsappWorkoutTemplate}
+                                      onChange={(e) => {
+                                        const rawVal = e.target.value;
+                                        // Auto-sanitize characters inside {} in real-time
+                                        const sanitized = rawVal.replace(/\{([^}]+)\}/g, (match, p1) => {
+                                          const cleanInner = p1
+                                            .toUpperCase()
+                                            .normalize("NFD")
+                                            .replace(/[\u0300-\u036f]/g, "") // remove accents
+                                            .replace(/[^A-Z0-9_]/g, '_') // alphanumeric and underscore
+                                            .replace(/_+/g, '_');
+                                          return `{${cleanInner}}`;
+                                        });
+                                        setWhatsappWorkoutTemplate(sanitized);
+                                        localStorage.setItem('viking_whatsapp_workout_template', sanitized);
+                                      }}
+                                      onScroll={(e) => {
+                                        if (highlightBgRef.current) {
+                                          highlightBgRef.current.scrollTop = e.currentTarget.scrollTop;
+                                          highlightBgRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                                        }
+                                      }}
+                                      className="absolute inset-0 bg-transparent text-white px-4 py-3 text-xs font-mono leading-relaxed resize-none caret-white focus:outline-none w-full h-full"
+                                      placeholder="Digite o modelo de mensagem aqui..."
+                                    />
+                                  </div>
                                   {hasInvalidPlaceholders && (
                                     <div className="flex items-center gap-2 text-viking-red bg-viking-red/10 p-2.5 rounded-lg border border-viking-red/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                                      <AlertTriangle className="w-4 h-4 shrink-0 animate-bounce" />
                                       <p className="text-[10px] font-bold tracking-wider leading-relaxed">
-                                        <span className="uppercase">Placeholder Inválido:</span> {invalidPlaceholders.join(', ')} não será substituído.
+                                        <span className="uppercase">Placeholder Inválido Detectado:</span> {invalidPlaceholders.join(', ')} não será substituído. Use apenas os botões ou o formato correto.
                                       </p>
                                     </div>
                                   )}
@@ -14243,11 +14347,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               } else {
                                 const exNameLower = ex.name.toLowerCase();
                                 if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-                                  currentPr = activeStudentProfile.prs.squat;
+                                  currentPr = activeStudentProfile.prs?.squat ?? null;
                                 } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-                                  currentPr = activeStudentProfile.prs.bench;
+                                  currentPr = activeStudentProfile.prs?.bench ?? null;
                                 } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-                                  currentPr = activeStudentProfile.prs.deadlift;
+                                  currentPr = activeStudentProfile.prs?.deadlift ?? null;
                                 }
                               }
                               const intensityStr = typeof ex.intensity === 'number' ? `${Math.round(ex.intensity * 100)}% 1RM` : ex.intensity;
@@ -14513,9 +14617,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                                         const maxWeight = Math.max(...sets.map(s => s.weight || 0));
                                                         let prValue = null;
                                                         const exNameLower = ex.name.toLowerCase();
-                                                        if (exNameLower.includes('squat') || exNameLower.includes('agachamento')) prValue = activeStudentProfile.prs.squat;
-                                                        else if (exNameLower.includes('bench') || exNameLower.includes('supino')) prValue = activeStudentProfile.prs.bench;
-                                                        else if (exNameLower.includes('deadlift') || exNameLower.includes('levantamento')) prValue = activeStudentProfile.prs.deadlift;
+                                                        if (exNameLower.includes('squat') || exNameLower.includes('agachamento')) prValue = activeStudentProfile.prs?.squat ?? null;
+                                                        else if (exNameLower.includes('bench') || exNameLower.includes('supino')) prValue = activeStudentProfile.prs?.bench ?? null;
+                                                        else if (exNameLower.includes('deadlift') || exNameLower.includes('levantamento')) prValue = activeStudentProfile.prs?.deadlift ?? null;
                                                         
                                                         if (prValue !== null && prValue > 0 && maxWeight > prValue) {
                                                             confetti({
@@ -14747,11 +14851,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       const exNameLower = ex.name.toLowerCase();
                                       if (!pr && activeStudentProfile) {
                                         if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
-                                          pr = activeStudentProfile.prs.squat;
+                                          pr = activeStudentProfile.prs?.squat ?? null;
                                         } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
-                                          pr = activeStudentProfile.prs.bench;
+                                          pr = activeStudentProfile.prs?.bench ?? null;
                                         } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
-                                          pr = activeStudentProfile.prs.deadlift;
+                                          pr = activeStudentProfile.prs?.deadlift ?? null;
                                         }
                                       }
                                       if (pr && typeof ex.intensity === 'number') {

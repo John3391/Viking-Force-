@@ -144,13 +144,18 @@ export function subscribeStudentProfile(
   if (!email || email.trim() === '') {
     return () => {};
   }
-  const docRef = doc(db, 'students', email);
+  const cleanEmail = email.trim().toLowerCase();
+  const docRef = doc(db, 'students', cleanEmail);
+  console.log(`[Firebase] Subscribing to student profile: ${cleanEmail}`);
   return onSnapshot(
     docRef,
     (snapshot) => {
       if (snapshot.exists()) {
-        onUpdate(snapshot.data() as StudentProfile);
+        const data = snapshot.data() as StudentProfile;
+        console.log(`[Firebase] Student profile snapshot received for ${cleanEmail}:`, data);
+        onUpdate(data);
       } else {
+        console.log(`[Firebase] Student profile snapshot received: document does not exist for ${cleanEmail}`);
         onUpdate(null);
       }
     },
@@ -165,10 +170,10 @@ export function subscribeStudentProfile(
         errMessage.includes('permission-denied') ||
         errMessage.includes('Missing or insufficient permissions')
       ) {
-        console.warn(`Inscrição em tempo real (student ${email}) interrompida ou instável:`, error);
+        console.warn(`Inscrição em tempo real (student ${cleanEmail}) interrompida ou instável:`, error);
         return;
       }
-      handleFirestoreError(error, OperationType.GET, `students/${email}`);
+      handleFirestoreError(error, OperationType.GET, `students/${cleanEmail}`);
     }
   );
 }
@@ -177,13 +182,16 @@ export function subscribeStudents(
   onUpdate: (students: Record<string, StudentProfile>) => void
 ): () => void {
   const colRef = collection(db, 'students');
+  console.log(`[Firebase] Subscribing to all students`);
   return onSnapshot(
     colRef,
     (snapshot) => {
       const students: Record<string, StudentProfile> = {};
       snapshot.forEach((d) => {
-        students[d.id] = d.data() as StudentProfile;
+        const cleanId = d.id.trim().toLowerCase();
+        students[cleanId] = d.data() as StudentProfile;
       });
+      console.log(`[Firebase] Students snapshot received. Total athletes count: ${Object.keys(students).length}`);
       onUpdate(students);
     },
     (error) => {
@@ -205,12 +213,27 @@ export function subscribeStudents(
   );
 }
 
+export async function fetchStudentProfileFromFirebase(email: string): Promise<StudentProfile | null> {
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const docSnap = await getDoc(doc(db, 'students', cleanEmail));
+    if (docSnap.exists()) {
+      return docSnap.data() as StudentProfile;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `students/${email}`);
+  }
+}
+
 /**
  * Save/update a single student document in Firestore.
  */
 export async function saveStudentToFirebase(email: string, student: StudentProfile): Promise<void> {
   try {
-    await setDoc(doc(db, 'students', email), student);
+    const cleanEmail = email.trim().toLowerCase();
+    console.log(`[Firebase] Saving student: ${cleanEmail}`);
+    await setDoc(doc(db, 'students', cleanEmail), student);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `students/${email}`);
   }
@@ -221,7 +244,9 @@ export async function saveStudentToFirebase(email: string, student: StudentProfi
  */
 export async function deleteStudentFromFirebase(email: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'students', email));
+    const cleanEmail = email.trim().toLowerCase();
+    console.log(`[Firebase] Deleting student: ${cleanEmail}`);
+    await deleteDoc(doc(db, 'students', cleanEmail));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `students/${email}`);
   }
