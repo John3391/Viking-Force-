@@ -83,6 +83,41 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // --- FIREBASE SYNC METHODS ---
 
+// Local in-memory cache for tracking last synced state of student profiles to optimize writes and detect dirty states.
+const studentCache = new Map<string, StudentProfile>();
+
+/**
+ * Perform deep object comparison to check if there are actual structural changes.
+ */
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== typeof b) return false;
+  
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  
+  if (typeof a === 'object') {
+    if (Array.isArray(b)) return false;
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+      if (!keysB.includes(key)) return false;
+      if (!deepEqual(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  
+  return false;
+}
+
 /**
  * Fetch all students from Firestore.
  * If collection is empty, initializes it with DEFAULT_STUDENTS.
@@ -98,6 +133,7 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
       for (const email of Object.keys(initial)) {
         try {
           await setDoc(doc(db, 'students', email), initial[email]);
+          studentCache.set(email.trim().toLowerCase(), JSON.parse(JSON.stringify(initial[email])));
         } catch (e) {
           console.warn("Falha ao salvar estudante inicial no Firestore:", email, e);
         }
@@ -107,7 +143,11 @@ export async function fetchStudentsFromFirebase(): Promise<Record<string, Studen
     
     const students: Record<string, StudentProfile> = {};
     snapshot.forEach((d) => {
-      students[d.id] = d.data() as StudentProfile;
+      const cleanId = d.id.trim().toLowerCase();
+      const data = d.data() as StudentProfile;
+      students[cleanId] = data;
+      // Populate local dirty check cache
+      studentCache.set(cleanId, JSON.parse(JSON.stringify(data)));
     });
     return students;
   } catch (error) {
@@ -153,6 +193,8 @@ export function subscribeStudentProfile(
       if (snapshot.exists()) {
         const data = snapshot.data() as StudentProfile;
         console.log(`[Firebase] Student profile snapshot received for ${cleanEmail}:`, data);
+        // Sync cache on snapshot load
+        studentCache.set(cleanEmail, JSON.parse(JSON.stringify(data)));
         onUpdate(data);
       } else {
         console.log(`[Firebase] Student profile snapshot received: document does not exist for ${cleanEmail}`);
@@ -189,7 +231,10 @@ export function subscribeStudents(
       const students: Record<string, StudentProfile> = {};
       snapshot.forEach((d) => {
         const cleanId = d.id.trim().toLowerCase();
-        students[cleanId] = d.data() as StudentProfile;
+        const data = d.data() as StudentProfile;
+        students[cleanId] = data;
+        // Sync cache on real-time collection updates
+        studentCache.set(cleanId, JSON.parse(JSON.stringify(data)));
       });
       console.log(`[Firebase] Students snapshot received. Total athletes count: ${Object.keys(students).length}`);
       onUpdate(students);
@@ -218,7 +263,10 @@ export async function fetchStudentProfileFromFirebase(email: string): Promise<St
     const cleanEmail = email.trim().toLowerCase();
     const docSnap = await getDoc(doc(db, 'students', cleanEmail));
     if (docSnap.exists()) {
-      return docSnap.data() as StudentProfile;
+      const data = docSnap.data() as StudentProfile;
+      // Sync cache on manual fetch
+      studentCache.set(cleanEmail, JSON.parse(JSON.stringify(data)));
+      return data;
     }
     return null;
   } catch (error) {
@@ -232,8 +280,18 @@ export async function fetchStudentProfileFromFirebase(email: string): Promise<St
 export async function saveStudentToFirebase(email: string, student: StudentProfile): Promise<void> {
   try {
     const cleanEmail = email.trim().toLowerCase();
-    console.log(`[Firebase] Saving student: ${cleanEmail}`);
+    
+    // Dirty check: Compare proposed state with last-known Firestore state
+    const cached = studentCache.get(cleanEmail);
+    if (cached && deepEqual(cached, student)) {
+      console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} has NO changes. Skipping write.`);
+      return;
+    }
+    
+    console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} IS DIRTY (has changes). Proceeding with Firestore write.`);
     await setDoc(doc(db, 'students', cleanEmail), student);
+    // Keep cache synchronized with newly written data
+    studentCache.set(cleanEmail, JSON.parse(JSON.stringify(student)));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `students/${email}`);
   }
