@@ -567,12 +567,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     ];
   });
 
-  const getPlanPrice = (planName: string) => {
+  const getPlanPrice = (planName: string | undefined | null) => {
+    if (!planName) return 200; // default to Mensal price
     const plan = vikingPlans.find(p => p.id === planName.toLowerCase() || p.name.toLowerCase().includes(planName.toLowerCase()));
     return plan ? plan.price : (planName === 'Mensal' ? 200 : planName === 'Trimestral' ? 540 : 1800);
   };
 
-  const getPlanMonthlyEquivalent = (planName: string) => {
+  const getPlanMonthlyEquivalent = (planName: string | undefined | null) => {
+    if (!planName) return 200; // default
     const price = getPlanPrice(planName);
     if (planName === 'Trimestral') return price / 3;
     if (planName === 'Anual') return price / 12;
