@@ -141,6 +141,9 @@ export function subscribeStudentProfile(
   email: string,
   onUpdate: (student: StudentProfile | null) => void
 ): () => void {
+  if (!email || email.trim() === '') {
+    return () => {};
+  }
   const docRef = doc(db, 'students', email);
   return onSnapshot(
     docRef,

@@ -79,7 +79,6 @@ import {
   Share2,
   HardDrive,
   Database,
-  Clock
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -972,15 +971,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             });
           } else {
             // Se for aluno, inscreve apenas no próprio perfil
-            unsubscribeStudents = subscribeStudentProfile(email, (remoteStudent) => {
-              if (remoteStudent) {
-                setStudentsData(prev => {
-                  const newData = { ...prev, [email]: remoteStudent };
-                  localStorage.setItem('viking_students', JSON.stringify(newData));
-                  return newData;
-                });
-              }
-            });
+            if (!email) {
+              console.warn("Nenhum email fornecido para inscrição de aluno. Ignorando.");
+            } else {
+              unsubscribeStudents = subscribeStudentProfile(email, (remoteStudent) => {
+                if (remoteStudent) {
+                  setStudentsData(prev => {
+                    const newData = { ...prev, [email]: remoteStudent };
+                    localStorage.setItem('viking_students', JSON.stringify(newData));
+                    return newData;
+                  });
+                }
+              });
+            }
           }
         } catch (e) {
           console.warn("Error subscribing to athletes real-time feed:", e);
@@ -1803,7 +1806,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       .replace(/{NOME_TREINO}/gi, workoutName)
       .replace(/{PR_SQUAT}/gi, squatVal)
       .replace(/{PR_BENCH}/gi, benchVal)
-      .replace(/{PR_DEADLIFT}/gi, deadliftVal);
+      .replace(/{PR_DEADLIFT}/gi, deadliftVal)
+      .replace(/\{[^}]+\}/g, '');
     
     // 4. Open WhatsApp
     const waUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
@@ -11044,16 +11048,35 @@ Equipe Viking Force`);
                             <label className="block text-xs font-black uppercase text-viking-silver tracking-wider">
                               Modelo da Mensagem (Template)
                             </label>
-                            <DebouncedTextarea
-                              id="whatsappTemplateInput"
-                              value={whatsappWorkoutTemplate}
-                              onChange={(val: string) => {
-                                setWhatsappWorkoutTemplate(val);
-                                localStorage.setItem('viking_whatsapp_workout_template', val);
-                              }}
-                              className="w-full h-80 px-4 py-3 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/30 outline-none transition-all font-mono leading-relaxed resize-none"
-                              placeholder="Digite o modelo de mensagem aqui..."
-                            />
+                            {(() => {
+                              const validPlaceholders = ['{NOME_ALUNO}', '{NOME_TREINO}', '{PR_SQUAT}', '{PR_BENCH}', '{PR_DEADLIFT}'];
+                              const matches = whatsappWorkoutTemplate.match(/\{[^}]+\}/g) || [];
+                              const invalidPlaceholders = Array.from(new Set(matches.filter(tag => !validPlaceholders.includes(tag.toUpperCase()))));
+                              const hasInvalidPlaceholders = invalidPlaceholders.length > 0;
+
+                              return (
+                                <div className="space-y-2">
+                                  <DebouncedTextarea
+                                    id="whatsappTemplateInput"
+                                    value={whatsappWorkoutTemplate}
+                                    onChange={(val: string) => {
+                                      setWhatsappWorkoutTemplate(val);
+                                      localStorage.setItem('viking_whatsapp_workout_template', val);
+                                    }}
+                                    className={`w-full h-80 px-4 py-3 bg-[#0d0908]/60 rounded-xl text-xs text-white placeholder-viking-silver/30 outline-none transition-all font-mono leading-relaxed resize-none ${hasInvalidPlaceholders ? 'border border-viking-red focus:border-viking-red focus:ring-1 focus:ring-viking-red text-red-100 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold'}`}
+                                    placeholder="Digite o modelo de mensagem aqui..."
+                                  />
+                                  {hasInvalidPlaceholders && (
+                                    <div className="flex items-center gap-2 text-viking-red bg-viking-red/10 p-2.5 rounded-lg border border-viking-red/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                                      <p className="text-[10px] font-bold tracking-wider leading-relaxed">
+                                        <span className="uppercase">Placeholder Inválido:</span> {invalidPlaceholders.join(', ')} não será substituído.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Placeholders Toolbar */}
@@ -11192,7 +11215,8 @@ Equipe Viking Force`);
                                       .replace(/{NOME_TREINO}/gi, workout)
                                       .replace(/{PR_SQUAT}/gi, squat)
                                       .replace(/{PR_BENCH}/gi, bench)
-                                      .replace(/{PR_DEADLIFT}/gi, deadlift);
+                                      .replace(/{PR_DEADLIFT}/gi, deadlift)
+                                      .replace(/\{[^}]+\}/g, '');
 
                                     return filledMessage.split('\n').map((line, lineIdx) => {
                                       const regex = /(\*.*?\*|_.*?_|~.*?~)/g;
