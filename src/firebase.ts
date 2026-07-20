@@ -252,6 +252,67 @@ export async function deleteStudentFromFirebase(email: string): Promise<void> {
   }
 }
 
+export interface SyncMetadata {
+  programUpdatedAt?: string;
+  plansUpdatedAt?: string;
+  exercisesUpdatedAt?: string;
+  mobilityExercisesUpdatedAt?: string;
+  calendarEventsUpdatedAt?: string;
+}
+
+/**
+ * Fetch the latest synchronization metadata from Firestore config.
+ */
+export async function fetchSyncMetadataFromFirebase(): Promise<SyncMetadata | null> {
+  try {
+    const docSnap = await getDoc(doc(db, 'config', 'metadata'));
+    if (docSnap.exists()) {
+      return docSnap.data() as SyncMetadata;
+    }
+  } catch (error) {
+    console.warn("[Firebase Sync] Failed to fetch sync metadata from Firebase:", error);
+  }
+  return null;
+}
+
+/**
+ * Subscribe to the sync metadata in real-time.
+ */
+export function subscribeSyncMetadata(
+  onUpdate: (metadata: SyncMetadata | null) => void
+): () => void {
+  const docRef = doc(db, 'config', 'metadata');
+  console.log(`[Firebase Sync] Subscribing to sync metadata`);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onUpdate(snapshot.data() as SyncMetadata);
+      } else {
+        onUpdate(null);
+      }
+    },
+    (error) => {
+      console.warn("[Firebase Sync] Error in sync metadata real-time feed:", error);
+    }
+  );
+}
+
+/**
+ * Update a specific field in the sync metadata document.
+ */
+export async function updateSyncMetadataFieldInFirebase(field: keyof SyncMetadata): Promise<void> {
+  try {
+    const timestamp = new Date().toISOString();
+    await setDoc(doc(db, 'config', 'metadata'), {
+      [field]: timestamp
+    }, { merge: true });
+    console.log(`[Firebase Sync] Updated metadata field ${field} to ${timestamp}`);
+  } catch (error) {
+    console.warn(`[Firebase Sync] Failed to update metadata field ${field}:`, error);
+  }
+}
+
 /**
  * Subscribe to the training program in real-time.
  */
@@ -335,6 +396,7 @@ export async function fetchProgramFromFirebase(): Promise<TrainingProgram> {
 export async function saveProgramToFirebase(program: TrainingProgram): Promise<void> {
   try {
     await setDoc(doc(db, 'config', 'program'), program);
+    await updateSyncMetadataFieldInFirebase('programUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'config/program');
   }
@@ -382,6 +444,7 @@ export async function fetchPlansFromFirebase(): Promise<VikingPlan[] | null> {
 export async function savePlansToFirebase(plans: VikingPlan[]): Promise<void> {
   try {
     await setDoc(doc(db, 'config', 'plans'), { plans });
+    await updateSyncMetadataFieldInFirebase('plansUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'config/plans');
   }
@@ -727,6 +790,7 @@ export async function saveDbExerciseToFirebase(exercise: DbExercise): Promise<vo
       exercise.id = newDocRef.id;
     }
     await setDoc(doc(db, 'exercises', exercise.id), exercise);
+    await updateSyncMetadataFieldInFirebase('exercisesUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `exercises/${exercise.id}`);
   }
@@ -738,6 +802,7 @@ export async function saveDbExerciseToFirebase(exercise: DbExercise): Promise<vo
 export async function deleteDbExerciseFromFirebase(id: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'exercises', id));
+    await updateSyncMetadataFieldInFirebase('exercisesUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `exercises/${id}`);
   }
@@ -795,6 +860,7 @@ export async function saveDbMobilityExerciseToFirebase(exercise: DbMobilityExerc
       exercise.id = newDocRef.id;
     }
     await setDoc(doc(db, 'mobility_exercises', exercise.id), exercise);
+    await updateSyncMetadataFieldInFirebase('mobilityExercisesUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `mobility_exercises/${exercise.id}`);
   }
@@ -806,6 +872,7 @@ export async function saveDbMobilityExerciseToFirebase(exercise: DbMobilityExerc
 export async function deleteDbMobilityExerciseFromFirebase(id: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'mobility_exercises', id));
+    await updateSyncMetadataFieldInFirebase('mobilityExercisesUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `mobility_exercises/${id}`);
   }
@@ -851,6 +918,7 @@ export async function saveCalendarEventToFirebase(event: CalendarEvent): Promise
       event.id = newDocRef.id;
     }
     await setDoc(doc(db, 'calendar_events', event.id), event);
+    await updateSyncMetadataFieldInFirebase('calendarEventsUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `calendar_events/${event.id}`);
   }
@@ -862,6 +930,7 @@ export async function saveCalendarEventToFirebase(event: CalendarEvent): Promise
 export async function deleteCalendarEventFromFirebase(id: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'calendar_events', id));
+    await updateSyncMetadataFieldInFirebase('calendarEventsUpdatedAt');
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `calendar_events/${id}`);
   }

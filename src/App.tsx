@@ -205,7 +205,8 @@ import {
   saveTrainerAutoBackupToFirebase,
   fetchTrainerAutoBackupFromFirebase,
   saveStudentAutoBackupToFirebase,
-  fetchStudentAutoBackupFromFirebase
+  fetchStudentAutoBackupFromFirebase,
+  subscribeSyncMetadata
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -449,6 +450,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending_or_overdue'>('all');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [historyTab, setHistoryTab] = useState<'list' | 'comparison'>('list');
+  const [historyPage, setHistoryPage] = useState<number>(1);
+  const [historyItemsPerPage, setHistoryItemsPerPage] = useState<number>(5);
   const [navDropdownOpen, setNavDropdownOpen] = useState<boolean>(false);
   const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'list'>('grid');
   const [customLogo, setCustomLogo] = useState<string>(() => {
@@ -716,6 +719,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   useEffect(() => {
     localStorage.setItem('viking_protocols', JSON.stringify(trainingProtocols));
   }, [trainingProtocols]);
+
+  // Reset student history page when drawer type or tab changes
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [drawerOpen, drawerType, historyTab]);
 
   // Synchronize Settings PR states on open
   useEffect(() => {
@@ -1001,86 +1009,209 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           }
         }
 
+        // Subscribe to synchronization metadata to optimize subsequent fetches and minimize reads!
         try {
           if (unsubscribeProgram) {
             unsubscribeProgram();
             unsubscribeProgram = null;
           }
-          unsubscribeProgram = subscribeProgram((remoteProgram) => {
-            if (remoteProgram) {
-              setTrainingProgram(remoteProgram);
-              localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+          
+          unsubscribeProgram = subscribeSyncMetadata(async (metadata) => {
+            console.log("[Firebase Sync] Received metadata version stamp:", metadata);
+            
+            if (!metadata) {
+              console.log("[Firebase Sync] No metadata document found. Performing complete fallback sync.");
+              // Fallback to fetch everything directly
+              try {
+                const remoteProgram = await fetchProgramFromFirebase();
+                if (remoteProgram) {
+                  setTrainingProgram(remoteProgram);
+                  localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+                }
+              } catch (e) { console.warn(e); }
+
+              try {
+                const remotePlans = await fetchPlansFromFirebase();
+                if (remotePlans && remotePlans.length > 0) {
+                  setVikingPlans(remotePlans);
+                  localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+                }
+              } catch (e) { console.warn(e); }
+
+              try {
+                const remoteExs = await fetchDbExercisesFromFirebase();
+                if (remoteExs) {
+                  const merged = mergeDbExercisesWithDefaults(remoteExs);
+                  setDbExercises(merged);
+                  localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
+                }
+              } catch (e) { console.warn(e); }
+
+              try {
+                const remoteMobility = await fetchDbMobilityExercisesFromFirebase();
+                if (remoteMobility && remoteMobility.length > 0) {
+                  setDbMobilityExercises(remoteMobility);
+                  localStorage.setItem('viking_db_mobility_exercises', JSON.stringify(remoteMobility));
+                }
+              } catch (e) { console.warn(e); }
+
+              try {
+                const remoteEvents = await fetchCalendarEventsFromFirebase();
+                if (remoteEvents) {
+                  setCalendarEvents(remoteEvents);
+                  localStorage.setItem('viking_calendar_events', JSON.stringify(remoteEvents));
+                }
+              } catch (e) { console.warn(e); }
+
+              // If trainer, initialize metadata to current timestamps to bootstrap future optimized loads!
+              if (role === 'trainer') {
+                const nowStr = new Date().toISOString();
+                try {
+                  const { setDoc, doc } = await import('firebase/firestore');
+                  const { db } = await import('./firebase');
+                  await setDoc(doc(db, 'config', 'metadata'), {
+                    programUpdatedAt: nowStr,
+                    plansUpdatedAt: nowStr,
+                    exercisesUpdatedAt: nowStr,
+                    mobilityExercisesUpdatedAt: nowStr,
+                    calendarEventsUpdatedAt: nowStr
+                  });
+                  console.log("[Firebase Sync] Initialized synchronization metadata document in Firestore.");
+                } catch (err) {
+                  console.warn("Failed initializing sync metadata document:", err);
+                }
+              }
+              return;
             }
+
+            // A metadata document exists! Check versions one-by-one to avoid redundant reads.
+            
+            // 1. Program
+            try {
+              const localProgVer = localStorage.getItem('viking_program_version');
+              const cachedProg = localStorage.getItem('viking_program');
+              if (metadata.programUpdatedAt && localProgVer === metadata.programUpdatedAt && cachedProg) {
+                console.log("[Sync Cache] Program is up-to-date (matching version). Loading from local cache.");
+                setTrainingProgram(JSON.parse(cachedProg));
+              } else {
+                console.log("[Sync Cache] Program version mismatch or empty. Fetching from Firestore.");
+                const remoteProgram = await fetchProgramFromFirebase();
+                if (remoteProgram) {
+                  setTrainingProgram(remoteProgram);
+                  localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
+                  if (metadata.programUpdatedAt) {
+                    localStorage.setItem('viking_program_version', metadata.programUpdatedAt);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Error syncing program with metadata:", err);
+              const cached = localStorage.getItem('viking_program');
+              if (cached) setTrainingProgram(JSON.parse(cached));
+            }
+
+            // 2. Plans
+            try {
+              const localPlansVer = localStorage.getItem('viking_plans_version');
+              const cachedPlans = localStorage.getItem('viking_plans');
+              if (metadata.plansUpdatedAt && localPlansVer === metadata.plansUpdatedAt && cachedPlans) {
+                console.log("[Sync Cache] Plans are up-to-date (matching version). Loading from local cache.");
+                setVikingPlans(JSON.parse(cachedPlans));
+              } else {
+                console.log("[Sync Cache] Plans version mismatch or empty. Fetching from Firestore.");
+                const remotePlans = await fetchPlansFromFirebase();
+                if (remotePlans && remotePlans.length > 0) {
+                  setVikingPlans(remotePlans);
+                  localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
+                  if (metadata.plansUpdatedAt) {
+                    localStorage.setItem('viking_plans_version', metadata.plansUpdatedAt);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Error syncing plans with metadata:", err);
+              const cached = localStorage.getItem('viking_plans');
+              if (cached) setVikingPlans(JSON.parse(cached));
+            }
+
+            // 3. Exercises
+            try {
+              const localExsVer = localStorage.getItem('viking_exercises_version');
+              const cachedExs = localStorage.getItem('viking_db_exercises');
+              if (metadata.exercisesUpdatedAt && localExsVer === metadata.exercisesUpdatedAt && cachedExs) {
+                console.log("[Sync Cache] Exercises are up-to-date (matching version). Loading from local cache.");
+                setDbExercises(JSON.parse(cachedExs));
+              } else {
+                console.log("[Sync Cache] Exercises version mismatch or empty. Fetching from Firestore.");
+                const remoteExs = await fetchDbExercisesFromFirebase();
+                if (remoteExs) {
+                  const merged = mergeDbExercisesWithDefaults(remoteExs);
+                  setDbExercises(merged);
+                  localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
+                  if (metadata.exercisesUpdatedAt) {
+                    localStorage.setItem('viking_exercises_version', metadata.exercisesUpdatedAt);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Error syncing exercises with metadata:", err);
+              const cached = localStorage.getItem('viking_db_exercises');
+              if (cached) setDbExercises(JSON.parse(cached));
+            }
+
+            // 4. Mobility Exercises
+            try {
+              const localMobilityVer = localStorage.getItem('viking_mobility_exercises_version');
+              const cachedMobility = localStorage.getItem('viking_db_mobility_exercises');
+              if (metadata.mobilityExercisesUpdatedAt && localMobilityVer === metadata.mobilityExercisesUpdatedAt && cachedMobility) {
+                console.log("[Sync Cache] Mobility exercises are up-to-date (matching version). Loading from local cache.");
+                setDbMobilityExercises(JSON.parse(cachedMobility));
+              } else {
+                console.log("[Sync Cache] Mobility exercises version mismatch or empty. Fetching from Firestore.");
+                const remoteMobility = await fetchDbMobilityExercisesFromFirebase();
+                if (remoteMobility && remoteMobility.length > 0) {
+                  setDbMobilityExercises(remoteMobility);
+                  localStorage.setItem('viking_db_mobility_exercises', JSON.stringify(remoteMobility));
+                  if (metadata.mobilityExercisesUpdatedAt) {
+                    localStorage.setItem('viking_mobility_exercises_version', metadata.mobilityExercisesUpdatedAt);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Error syncing mobility exercises with metadata:", err);
+              const cached = localStorage.getItem('viking_db_mobility_exercises');
+              if (cached) setDbMobilityExercises(JSON.parse(cached));
+            }
+
+            // 5. Calendar Events
+            try {
+              const localCalendarVer = localStorage.getItem('viking_calendar_events_version');
+              const cachedCalendar = localStorage.getItem('viking_calendar_events');
+              if (metadata.calendarEventsUpdatedAt && localCalendarVer === metadata.calendarEventsUpdatedAt && cachedCalendar) {
+                console.log("[Sync Cache] Calendar events are up-to-date (matching version). Loading from local cache.");
+                setCalendarEvents(JSON.parse(cachedCalendar));
+              } else {
+                console.log("[Sync Cache] Calendar events version mismatch or empty. Fetching from Firestore.");
+                const remoteEvents = await fetchCalendarEventsFromFirebase();
+                if (remoteEvents) {
+                  setCalendarEvents(remoteEvents);
+                  localStorage.setItem('viking_calendar_events', JSON.stringify(remoteEvents));
+                  if (metadata.calendarEventsUpdatedAt) {
+                    localStorage.setItem('viking_calendar_events_version', metadata.calendarEventsUpdatedAt);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Error syncing calendar events with metadata:", err);
+              const cached = localStorage.getItem('viking_calendar_events');
+              if (cached) setCalendarEvents(JSON.parse(cached));
+            }
+
+            setIsOnline(true);
           });
         } catch (e) {
-          console.warn("Error subscribing to training program real-time feed:", e);
-          syncSuccess = false;
-          // Fallback to one-time fetch
-          try {
-            const remoteProgram = await fetchProgramFromFirebase();
-            if (remoteProgram) {
-              setTrainingProgram(remoteProgram);
-              localStorage.setItem('viking_program', JSON.stringify(remoteProgram));
-            }
-          } catch (err) {
-            console.warn("Using offline storage for training program:", err);
-          }
-        }
-
-        try {
-          const remotePlans = await fetchPlansFromFirebase();
-          if (remotePlans && remotePlans.length > 0) {
-            setVikingPlans(remotePlans);
-            localStorage.setItem('viking_plans', JSON.stringify(remotePlans));
-          }
-        } catch (e) {
-          console.warn("Using offline storage for plans:", e);
-          syncSuccess = false;
-        }
-
-        try {
-          const remoteExs = await fetchDbExercisesFromFirebase();
-          if (remoteExs) {
-            const merged = mergeDbExercisesWithDefaults(remoteExs);
-            setDbExercises(merged);
-            localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
-          }
-        } catch (e) {
-          console.warn("Using offline storage for exercises:", e);
-          const cached = localStorage.getItem('viking_db_exercises');
-          if (cached) {
-            setDbExercises(JSON.parse(cached));
-          }
-          syncSuccess = false;
-        }
-
-        try {
-          const remoteMobility = await fetchDbMobilityExercisesFromFirebase();
-          if (remoteMobility && remoteMobility.length > 0) {
-            setDbMobilityExercises(remoteMobility);
-            localStorage.setItem('viking_db_mobility_exercises', JSON.stringify(remoteMobility));
-          }
-        } catch (e) {
-          console.warn("Using offline storage for mobility:", e);
-          const cached = localStorage.getItem('viking_db_mobility_exercises');
-          if (cached) {
-            setDbMobilityExercises(JSON.parse(cached));
-          }
-          syncSuccess = false;
-        }
-
-        try {
-          const remoteEvents = await fetchCalendarEventsFromFirebase();
-          if (remoteEvents) {
-            setCalendarEvents(remoteEvents);
-            localStorage.setItem('viking_calendar_events', JSON.stringify(remoteEvents));
-          }
-        } catch (e) {
-          console.warn("Using offline storage for calendar events:", e);
-          const cached = localStorage.getItem('viking_calendar_events');
-          if (cached) {
-            setCalendarEvents(JSON.parse(cached));
-          }
+          console.warn("Error subscribing to synchronization metadata real-time feed:", e);
+          setIsOnline(false);
         }
 
         setIsOnline(syncSuccess);
@@ -8351,27 +8482,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <MessageCircle className="w-4 h-4 shrink-0 text-viking-gold" /> Template WhatsApp
                 </button>
-                <button 
-                  onClick={handleBackupData}
-                  className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Save className="w-4 h-4 shrink-0" /> Fazer Backup (JSON)
-                </button>
-                <div className="relative flex">
-                  <input 
-                    type="file" 
-                    accept=".json" 
-                    id="restore-backup-dashboard-input" 
-                    className="hidden" 
-                    onChange={handleRestoreBackupData} 
-                  />
-                  <button 
-                    onClick={() => document.getElementById('restore-backup-dashboard-input')?.click()}
-                    className="w-full p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Upload className="w-4 h-4 shrink-0" /> Restaurar Backup (JSON)
-                  </button>
-                </div>
+
                 <button 
                   onClick={handleRestoreFromCloud}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -8615,94 +8726,183 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                        );
                     })()}
 
-                    {historyTab === 'list' && (
-                      (activeStudentProfile.sessions || []).length === 0 ? (
-                        <div className="text-center py-12 text-viking-silver">
-                          <History className="w-12 h-12 text-viking-gold/30 mx-auto mb-3" />
-                          <p className="font-bold">Nenhum treino realizado ainda.</p>
-                          <p className="text-xs mt-1">Conclua sua primeira prova em "Treino Hoje" para iniciar seu histórico.</p>
-                        </div>
-                      ) : (
-                        (activeStudentProfile.sessions || []).map((sess, idx) => (
-                        <div key={idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-viking-silver font-bold">{sess.date}</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              sess.avgRPE >= 9 
-                                ? 'bg-red-950/40 text-red-400 border border-red-800/30' 
-                                : sess.avgRPE >= 7.5
-                                ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
-                                : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
-                            }`}>
-                              RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
-                            </span>
+                    {historyTab === 'list' && (() => {
+                      const allSessions = activeStudentProfile.sessions || [];
+                      const totalSessionsCount = allSessions.length;
+                      
+                      if (totalSessionsCount === 0) {
+                        return (
+                          <div className="text-center py-12 text-viking-silver">
+                            <History className="w-12 h-12 text-viking-gold/30 mx-auto mb-3" />
+                            <p className="font-bold">Nenhum treino realizado ainda.</p>
+                            <p className="text-xs mt-1">Conclua sua primeira prova em "Treino Hoje" para iniciar seu histórico.</p>
                           </div>
-                          <div>
-                            <p className="text-sm font-black text-white">{sess.sessionName}</p>
-                            {sess.totalPlannedVolume !== undefined && sess.totalAchievedVolume !== undefined && (
-                              <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-viking-silver bg-black/30 px-2 py-1 rounded border border-viking-gold/5">
-                                <span>Volume de Trabalho:</span>
-                                <span className={sess.volumeDeficit && sess.volumeDeficit > 0 ? 'text-viking-gold' : 'text-green-400'}>
-                                  {sess.totalAchievedVolume} / {sess.totalPlannedVolume} reps realizada(s) 
-                                  {sess.volumeDeficit && sess.volumeDeficit > 0 ? ` (-${sess.volumeDeficit})` : ' (100%)'}
-                                </span>
-                              </div>
-                            )}
+                        );
+                      }
+
+                      const totalPagesCount = Math.ceil(totalSessionsCount / historyItemsPerPage) || 1;
+                      const validCurrentPage = Math.min(Math.max(1, historyPage), totalPagesCount);
+                      const paginatedSessions = allSessions.slice(
+                        (validCurrentPage - 1) * historyItemsPerPage,
+                        validCurrentPage * historyItemsPerPage
+                      );
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Controle de Exibição / Paginação Superior */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#0d0908]/80 rounded-xl border border-viking-gold/15 text-xs text-viking-silver">
+                            <div className="flex items-center gap-2">
+                              <span>Sessões por página:</span>
+                              <select
+                                value={historyItemsPerPage}
+                                onChange={(e) => {
+                                  setHistoryItemsPerPage(Number(e.target.value));
+                                  setHistoryPage(1);
+                                }}
+                                className="px-2 py-1 rounded bg-[#140e0c] border border-viking-gold/25 text-[#e0d3a8] text-[11px] font-bold outline-none focus:border-viking-gold cursor-pointer"
+                              >
+                                <option value={5}>5 por página</option>
+                                <option value={10}>10 por página</option>
+                                <option value={15}>15 por página</option>
+                                <option value={20}>20 por página</option>
+                                <option value={50}>50 por página</option>
+                              </select>
+                            </div>
+                            <div className="text-[10px] font-black uppercase text-viking-gold/85 tracking-wider">
+                              Exibindo {paginatedSessions.length} de {totalSessionsCount} treinos
+                            </div>
                           </div>
-                          
-                          <div className="space-y-2.5 border-t border-viking-gold/15 pt-2.5">
-                            {sess.exercises.map((ex, eidx) => (
-                              <div key={eidx} className="space-y-1">
-                                <div className="flex justify-between items-center text-xs">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-viking-silver font-medium">{ex.name}</span>
-                                    {ex.failed && (
-                                      <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
-                                      <span className="text-[10px] text-viking-silver font-mono">
-                                        {ex.achievedVolume}/{ex.plannedVolume} reps
-                                      </span>
-                                    )}
-                                    <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
-                                  </div>
+
+                          {/* Lista Paginada de Treinos */}
+                          <div className="space-y-4">
+                            {paginatedSessions.map((sess, idx) => (
+                              <div key={sess.id || idx} className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-viking-silver font-bold">{sess.date}</span>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    sess.avgRPE >= 9 
+                                      ? 'bg-red-950/40 text-red-400 border border-red-800/30' 
+                                      : sess.avgRPE >= 7.5
+                                      ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30'
+                                      : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30'
+                                  }`}>
+                                    RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
+                                  </span>
                                 </div>
-                                {ex.sets && ex.sets.length > 0 && (
-                                  <div className="pl-2.5 flex flex-wrap gap-1 text-[9px]">
-                                    {ex.sets.map((s, sidx) => (
-                                      <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono inline-flex items-center gap-1" title={s.note || ''}>
-                                        <span>S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong></span>
-                                        {s.note && <span className="text-[8px] text-viking-gold/60 truncate max-w-[100px] border-l border-viking-gold/20 pl-1 ml-1 leading-none" title={s.note}>{s.note}</span>}
+                                <div>
+                                  <p className="text-sm font-black text-white">{sess.sessionName}</p>
+                                  {sess.totalPlannedVolume !== undefined && sess.totalAchievedVolume !== undefined && (
+                                    <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-viking-silver bg-black/30 px-2 py-1 rounded border border-viking-gold/5">
+                                      <span>Volume de Trabalho:</span>
+                                      <span className={sess.volumeDeficit && sess.volumeDeficit > 0 ? 'text-viking-gold' : 'text-green-400'}>
+                                        {sess.totalAchievedVolume} / {sess.totalPlannedVolume} reps realizada(s) 
+                                        {sess.volumeDeficit && sess.volumeDeficit > 0 ? ` (-${sess.volumeDeficit})` : ' (100%)'}
                                       </span>
-                                    ))}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <div className="space-y-2.5 border-t border-viking-gold/15 pt-2.5">
+                                  {sess.exercises.map((ex, eidx) => (
+                                    <div key={eidx} className="space-y-1">
+                                      <div className="flex justify-between items-center text-xs">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-viking-silver font-medium">{ex.name}</span>
+                                          {ex.failed && (
+                                            <span className="text-[9px] bg-red-950 text-red-400 px-1 py-0.2 rounded font-black border border-red-900/40">FALHOU</span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          {ex.achievedVolume !== undefined && ex.plannedVolume !== undefined && (
+                                            <span className="text-[10px] text-viking-silver font-mono">
+                                              {ex.achievedVolume}/{ex.plannedVolume} reps
+                                            </span>
+                                          )}
+                                          <span className="text-viking-gold font-bold">RPE {ex.rpe}</span>
+                                        </div>
+                                      </div>
+                                      {ex.sets && ex.sets.length > 0 && (
+                                        <div className="pl-2.5 flex flex-wrap gap-1 text-[9px]">
+                                          {ex.sets.map((s, sidx) => (
+                                            <span key={sidx} className="bg-viking-gold/5 border border-viking-gold/15 rounded px-1.5 py-0.5 text-viking-silver font-mono inline-flex items-center gap-1" title={s.note || ''}>
+                                              <span>S{sidx + 1}: <strong className="text-white">{s.reps}r</strong> @ <strong className="text-viking-gold">{s.weight}kg</strong></span>
+                                              {s.note && <span className="text-[8px] text-viking-gold/60 truncate max-w-[100px] border-l border-viking-gold/20 pl-1 ml-1 leading-none" title={s.note}>{s.note}</span>}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {sess.compensationSuggestion && (
+                                  <div className="p-3 bg-viking-gold/5 rounded-xl border border-viking-gold/25 space-y-1.5 text-xs">
+                                    <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
+                                      <Zap className="w-3.5 h-3.5 text-viking-gold animate-bounce" /> Compensação de Volume Sugerida:
+                                    </p>
+                                    <p className="text-viking-silver leading-relaxed font-semibold whitespace-pre-line">
+                                      {sess.compensationSuggestion}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {sess.note && (
+                                  <div className="mt-3 p-2 rounded bg-black/40 border-l-2 border-viking-gold text-xs text-viking-silver italic">
+                                    "{sess.note}"
                                   </div>
                                 )}
                               </div>
                             ))}
                           </div>
 
-                          {sess.compensationSuggestion && (
-                            <div className="p-3 bg-viking-gold/5 rounded-xl border border-viking-gold/25 space-y-1.5 text-xs">
-                              <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
-                                <Zap className="w-3.5 h-3.5 text-viking-gold animate-bounce" /> Compensação de Volume Sugerida:
-                              </p>
-                              <p className="text-viking-silver leading-relaxed font-semibold whitespace-pre-line">
-                                {sess.compensationSuggestion}
-                              </p>
-                            </div>
-                          )}
+                          {/* Navegação Inferior de Página */}
+                          {totalPagesCount > 1 && (
+                            <div className="flex items-center justify-between pt-4 border-t border-viking-gold/15">
+                              <button
+                                type="button"
+                                disabled={validCurrentPage === 1}
+                                onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                                className="px-3 py-2 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-25 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+                              >
+                                <ArrowLeft className="w-3.5 h-3.5" /> Anterior
+                              </button>
+                              
+                              <div className="flex items-center gap-1">
+                                {Array.from({ length: totalPagesCount }, (_, i) => i + 1).map((p) => {
+                                  if (totalPagesCount > 5 && Math.abs(p - validCurrentPage) > 1 && p !== 1 && p !== totalPagesCount) {
+                                    if (p === 2 && validCurrentPage > 3) return <span key={p} className="text-viking-silver/50 px-1 text-xs select-none">...</span>;
+                                    if (p === totalPagesCount - 1 && validCurrentPage < totalPagesCount - 2) return <span key={p} className="text-viking-silver/50 px-1 text-xs select-none">...</span>;
+                                    return null;
+                                  }
+                                  return (
+                                    <button
+                                      key={p}
+                                      onClick={() => setHistoryPage(p)}
+                                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                        p === validCurrentPage
+                                          ? 'bg-viking-gold/25 border border-viking-gold text-viking-gold'
+                                          : 'bg-black/20 border border-viking-gold/10 text-viking-silver hover:border-viking-gold/40 hover:text-white'
+                                      }`}
+                                    >
+                                      {p}
+                                    </button>
+                                  );
+                                })}
+                              </div>
 
-                          {sess.note && (
-                            <div className="mt-3 p-2 rounded bg-black/40 border-l-2 border-viking-gold text-xs text-viking-silver italic">
-                              "{sess.note}"
+                              <button
+                                type="button"
+                                disabled={validCurrentPage === totalPagesCount}
+                                onClick={() => setHistoryPage(prev => Math.min(totalPagesCount, prev + 1))}
+                                className="px-3 py-2 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 text-[#e0d3a8] disabled:opacity-25 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Próximo <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           )}
                         </div>
-                      ))
-                    )
-                  )}
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -9919,34 +10119,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       >
                         Salvar e Recalcular Pesos
                       </button>
-                      {/* Manual Backups */}
-                      <div className="pt-4 border-t border-viking-gold/15 space-y-2">
-                        <p className="text-[10px] font-black text-viking-gold uppercase tracking-widest">
-                          📂 Backups Manuais (Arquivos)
-                        </p>
-                        <button 
-                          onClick={handleBackupData}
-                          className="w-full py-2.5 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-[#e0d3a8] font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <Save className="w-4 h-4 shrink-0 text-viking-gold" /> Baixar Backup JSON
-                        </button>
-                        <div className="relative">
-                          <input 
-                            type="file" 
-                            accept=".json" 
-                            id="restore-backup-drawer-input" 
-                            className="hidden" 
-                            onChange={handleRestoreBackupData} 
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => document.getElementById('restore-backup-drawer-input')?.click()}
-                            className="w-full py-2.5 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-[#e0d3a8] font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                          >
-                            <Upload className="w-4 h-4 shrink-0 text-viking-gold" /> Upload de Backup JSON
-                          </button>
-                        </div>
-                      </div>
+
 
                       {/* Automated Backup System */}
                       <div className="pt-4 border-t border-viking-gold/15 space-y-3">

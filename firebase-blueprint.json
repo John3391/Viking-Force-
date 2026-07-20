@@ -134,6 +134,28 @@
         }
       },
       "required": ["id", "name"]
+    },
+    "SyncMetadata": {
+      "title": "SyncMetadata",
+      "description": "Timestamps of the latest global modifications to minimize read requests.",
+      "type": "object",
+      "properties": {
+        "programUpdatedAt": {
+          "type": "string"
+        },
+        "plansUpdatedAt": {
+          "type": "string"
+        },
+        "exercisesUpdatedAt": {
+          "type": "string"
+        },
+        "mobilityExercisesUpdatedAt": {
+          "type": "string"
+        },
+        "calendarEventsUpdatedAt": {
+          "type": "string"
+        }
+      }
     }
   },
   "firestore": {
@@ -144,6 +166,10 @@
     "config/program": {
       "schema": "TrainingProgram",
       "description": "The global training routine shared by recruits."
+    },
+    "config/metadata": {
+      "schema": "SyncMetadata",
+      "description": "Timestamps of the latest global modifications."
     },
     "config/plans": {
       "schema": {
