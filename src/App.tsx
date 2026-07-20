@@ -2909,6 +2909,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<string>(() => localStorage.getItem('viking_last_auto_backup_time') || '');
   const [isAutoBackingUp, setIsAutoBackingUp] = useState<boolean>(false);
   const [consecutiveBackupFailures, setConsecutiveBackupFailures] = useState<number>(0);
+  const [lastBackupError, setLastBackupError] = useState<string | null>(null);
   const [autoBackupHistory, setAutoBackupHistory] = useState<any[]>(() => {
     try {
       const historyStr = localStorage.getItem('viking_auto_backup_history');
@@ -3101,9 +3102,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
       console.log(`[Viking Force] Backup automático concluído (${isPeriodic ? 'Periódico' : 'Crítico'}).`);
       setConsecutiveBackupFailures(0);
-    } catch (err) {
+      setLastBackupError(null);
+    } catch (err: any) {
       console.error('[Viking Force] Falha ao realizar backup automático:', err);
       setConsecutiveBackupFailures(prev => prev + 1);
+      setLastBackupError(err.message || String(err));
     } finally {
       // Keep it true for at least 800ms for solid visual feedback
       setTimeout(() => {
@@ -5523,8 +5526,13 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </button>
 
                 {/* Auto Backup Cloud Indicator */}
-                <div 
-                  className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-[10px] font-black uppercase tracking-wider ${
+                <button 
+                  onClick={() => {
+                    setDrawerTitle('Console de Backup');
+                    setDrawerType('backupLogs');
+                    setDrawerOpen(true);
+                  }}
+                  className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-[10px] font-black uppercase tracking-wider cursor-pointer ${
                     isAutoBackingUp 
                       ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] animate-pulse' 
                       : 'border-viking-gold/15 bg-viking-dark text-viking-silver/65 hover:border-viking-gold/35'
@@ -5533,7 +5541,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <Cloud className={`w-3.5 h-3.5 shrink-0 transition-all ${isAutoBackingUp ? 'text-emerald-400 animate-pulse' : 'text-viking-gold/70'}`} />
                   <span>{isAutoBackingUp ? 'Salvando...' : 'Protegido'}</span>
-                </div>
+                </button>
 
                 <div className="hidden sm:flex items-center gap-3 bg-viking-dark py-1.5 pl-3 pr-4 rounded-xl border border-viking-gold/20">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-viking-gold-dark to-viking-gold p-[2px] shadow-[0_0_10px_rgba(212,175,55,0.2)]">
@@ -10796,6 +10804,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                         <button 
                           onClick={() => {
+                            setDrawerTitle(`Dashboard e Gráficos: ${s.name}`);
+                            setDrawerType('studentDashboard');
+                          }}
+                          className="p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <Activity className="w-4 h-4" /> <span className="text-xs font-bold uppercase tracking-wider">Ver Gráficos</span>
+                        </button>
+                        <button 
+                          onClick={() => {
                             setDrawerTitle(`Cardio & Corridas: ${s.name}`);
                             setDrawerType('studentCardio');
                           }}
@@ -11016,6 +11033,39 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         showToast(completed ? 'Meta marcada como concluída!' : 'Meta reaberta.', 'success');
                       }}
                     />
+                  );
+                })()}
+
+                {/* Dashboard & Gráficos do Aluno (Visão do Treinador) */}
+                {drawerType === 'studentDashboard' && (() => {
+                  const s = studentsData[editingStudentEmail];
+                  if (!s) return <p className="text-viking-silver">Atleta não encontrado.</p>;
+                  return (
+                    <div className="space-y-6">
+                      <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden">
+                        <div className="absolute right-4 top-4 text-viking-gold/5 pointer-events-none">
+                          <TrendingUp className="w-32 h-32" />
+                        </div>
+                        <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center gap-4">
+                          <div>
+                            <h2 className="text-xl sm:text-2xl font-viking-display text-viking-gold tracking-widest font-black uppercase">
+                              Análise de Desempenho
+                            </h2>
+                            <p className="text-xs sm:text-sm text-viking-silver mt-1">Evolução de Força e Volume de {s.name}</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <TotalSBDChart profile={s} />
+                        <OneRepMaxChart profile={s} />
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <VolumeChart profile={s} />
+                        <WeeklyVolumeLineChart profile={s} />
+                      </div>
+                    </div>
                   );
                 })()}
 
@@ -13967,6 +14017,72 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 )}
 
                 {/* 13. Lixeira Virtual Drawer */}
+                {/* Console de Backup / Logs */}
+                {drawerType === 'backupLogs' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="bg-[#140e0c]/85 border border-viking-gold/20 p-5 rounded-2xl relative overflow-hidden">
+                      <div className="flex items-center gap-3 mb-5 border-b border-viking-gold/15 pb-4">
+                        <Database className={`w-6 h-6 ${consecutiveBackupFailures > 0 ? 'text-red-400' : 'text-emerald-400'}`} />
+                        <div>
+                          <h3 className="font-viking-display text-sm font-black text-viking-gold uppercase tracking-wider">Status do Backup (Firebase)</h3>
+                          <p className="text-xs text-viking-silver mt-0.5">Diagnóstico da sincronização em nuvem</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="bg-[#0d0908] rounded-xl p-4 border border-viking-gold/10">
+                          <p className="text-[10px] text-viking-silver/60 uppercase font-bold tracking-widest mb-1">Última Tentativa de Sincronização</p>
+                          <p className="text-sm font-mono text-[#e0d3a8]">
+                            {lastAutoBackupTime 
+                              ? `${new Date(lastAutoBackupTime).toLocaleDateString('pt-BR')} às ${new Date(lastAutoBackupTime).toLocaleTimeString('pt-BR')}`
+                              : 'Nenhum backup realizado ainda.'}
+                          </p>
+                        </div>
+
+                        <div className="bg-[#0d0908] rounded-xl p-4 border border-viking-gold/10">
+                          <p className="text-[10px] text-viking-silver/60 uppercase font-bold tracking-widest mb-1">Status Atual</p>
+                          {isAutoBackingUp ? (
+                            <div className="flex items-center gap-2 text-viking-gold">
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span className="text-sm font-bold">Sincronizando agora...</span>
+                            </div>
+                          ) : consecutiveBackupFailures > 0 ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-red-400">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span className="text-sm font-bold">Falhou ({consecutiveBackupFailures} tentativa{consecutiveBackupFailures > 1 ? 's' : ''} seguida{consecutiveBackupFailures > 1 ? 's' : ''})</span>
+                              </div>
+                              {lastBackupError && (
+                                <div className="p-3 bg-red-950/20 border border-red-500/20 rounded-lg">
+                                  <p className="text-xs font-mono text-red-300 break-words">{lastBackupError}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-emerald-400">
+                              <CheckCircle className="w-4 h-4" />
+                              <span className="text-sm font-bold">Backup Seguro e Atualizado</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="pt-2">
+                          <button
+                            onClick={() => {
+                              showToast('Forçando backup manual...', 'info');
+                              requestImmediateAutoBackup();
+                            }}
+                            disabled={isAutoBackingUp}
+                            className="w-full p-3 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/20 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Cloud className="w-4 h-4" /> Forçar Sincronização Agora
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Trainer Settings */}
                 {drawerType === 'trainerSettings' && currentUser?.role === 'trainer' && (
                   <div className="space-y-6">

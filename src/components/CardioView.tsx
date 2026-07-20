@@ -118,9 +118,9 @@ export const CardioView: React.FC<CardioViewProps> = ({
       date: sessionDate,
       type: sessionType,
       durationMinutes: parseInt(duration),
-      distanceKm: distance ? parseFloat(distance) : undefined,
+      distanceKm: distance ? parseFloat(distance.replace(',', '.')) : undefined,
       intensity,
-      sprintSpeedKmh: sprintSpeed ? parseFloat(sprintSpeed) : undefined,
+      sprintSpeedKmh: sprintSpeed ? parseFloat(sprintSpeed.replace(',', '.')) : undefined,
       sprintTimeSeconds: sprintTime ? parseInt(sprintTime) : undefined,
       paceMinPerKm: pace || undefined,
       note: note || undefined
