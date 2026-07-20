@@ -264,3 +264,14 @@ export interface TrainingProtocol {
   program: TrainingProgram;
   createdAt: string;
 }
+
+export interface VikingBackup {
+  timestamp: string;
+  user: User | null;
+  studentsData: Record<string, StudentProfile>;
+  trainingProgram: TrainingProgram;
+  vikingPlans: VikingPlan[];
+  calendarEvents: CalendarEvent[];
+  dbExercises: DbExercise[];
+}
+

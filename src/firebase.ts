@@ -14,7 +14,7 @@ import {
   deleteDoc,
   onSnapshot
 } from 'firebase/firestore';
-import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, DbMobilityExercise, CalendarEvent } from './types';
+import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, DbMobilityExercise, CalendarEvent, VikingBackup } from './types';
 import { DEFAULT_STUDENTS, DEFAULT_PROGRAM } from './data';
 
 const firebaseConfig = {
@@ -652,7 +652,7 @@ export function generate500Exercises(): DbExercise[] {
 }
 
 /**
- * Fetch all custom/saved exercises from Firestore, seeding with defaults if empty.
+ * Fetch all custom/saved exercises from Firestore.
  */
 export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
   try {
@@ -663,32 +663,6 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
     snapshot.forEach(docSnap => {
       exercises.push(docSnap.data() as DbExercise);
     });
-
-    const all500 = generate500Exercises();
-
-    if (exercises.length < 500) {
-      console.log(`Seeding missing exercises to reach over 500. Current: ${exercises.length}, Generated: ${all500.length}`);
-      const existingIds = new Set(exercises.map(e => e.id));
-      const missing = all500.filter(ex => !existingIds.has(ex.id));
-
-      const chunkSize = 60;
-      for (let i = 0; i < missing.length; i += chunkSize) {
-        const chunk = missing.slice(i, i + chunkSize);
-        try {
-          await Promise.all(chunk.map(ex => setDoc(doc(db, 'exercises', ex.id), ex)));
-        } catch (e) {
-          console.warn("Falha ao semear lote de exercícios:", e);
-        }
-        console.log(`Seeded chunk ${i / chunkSize + 1} (${chunk.length} exercises)`);
-      }
-
-      const reSnapshot = await getDocs(colRef);
-      const updatedExercises: DbExercise[] = [];
-      reSnapshot.forEach(docSnap => {
-        updatedExercises.push(docSnap.data() as DbExercise);
-      });
-      return updatedExercises;
-    }
 
     return exercises;
   } catch (error) {
@@ -708,8 +682,8 @@ export async function fetchDbExercisesFromFirebase(): Promise<DbExercise[]> {
       errMessage.includes('permission-denied') ||
       errMessage.includes('Missing or insufficient permissions')
     ) {
-      console.warn("Firestore offline, instável ou sem permissão, gerando exercícios padrão:", error);
-      return generate500Exercises();
+      console.warn("Firestore offline, instável ou sem permissão para exercícios:", error);
+      return [];
     }
     handleFirestoreError(error, OperationType.LIST, 'exercises');
   }
@@ -864,4 +838,79 @@ export async function deleteCalendarEventFromFirebase(id: string): Promise<void>
     handleFirestoreError(error, OperationType.DELETE, `calendar_events/${id}`);
   }
 }
+
+/**
+ * Save automatic backup of trainer to Firestore.
+ */
+export async function saveTrainerAutoBackupToFirebase(backup: VikingBackup): Promise<void> {
+  if (!auth.currentUser || auth.currentUser.isAnonymous) {
+    console.log('[Viking Force] Cloud backup de Treinador ignorado: Usuário não autenticado ou sessão anônima.');
+    return;
+  }
+  try {
+    await setDoc(doc(db, 'config', 'auto_backup'), backup);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'config/auto_backup');
+  }
+}
+
+/**
+ * Fetch automatic backup of trainer from Firestore.
+ */
+export async function fetchTrainerAutoBackupFromFirebase(): Promise<VikingBackup | null> {
+  if (!auth.currentUser || auth.currentUser.isAnonymous) {
+    console.log('[Viking Force] Busca de backup de Treinador ignorada: Usuário não autenticado ou sessão anônima.');
+    return null;
+  }
+  try {
+    const docSnap = await getDoc(doc(db, 'config', 'auto_backup'));
+    if (docSnap.exists()) {
+      return docSnap.data() as VikingBackup;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'config/auto_backup');
+    return null;
+  }
+}
+
+/**
+ * Save student-specific automatic backup to Firestore.
+ */
+export async function saveStudentAutoBackupToFirebase(email: string, backupData: any): Promise<void> {
+  if (!auth.currentUser) {
+    console.log('[Viking Force] Cloud backup de Aluno ignorado: Usuário não autenticado.');
+    return;
+  }
+  try {
+    await setDoc(doc(db, 'students', `backup_${email}`), {
+      email,
+      timestamp: new Date().toISOString(),
+      backupData
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `students/backup_${email}`);
+  }
+}
+
+/**
+ * Fetch student-specific automatic backup from Firestore.
+ */
+export async function fetchStudentAutoBackupFromFirebase(email: string): Promise<any | null> {
+  if (!auth.currentUser) {
+    console.log('[Viking Force] Busca de backup de Aluno ignorada: Usuário não autenticado.');
+    return null;
+  }
+  try {
+    const docSnap = await getDoc(doc(db, 'students', `backup_${email}`));
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `students/backup_${email}`);
+    return null;
+  }
+}
+
 

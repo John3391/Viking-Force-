@@ -1,6 +1,6 @@
 import { CardioView } from './components/CardioView';
 import { PrCalculator } from './components/PrCalculator';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Dumbbell, 
@@ -64,7 +64,7 @@ import {
   Minimize2,
   Columns,
   Lock,
-  Calendar,
+  Calendar, Cloud, CloudLightning, RefreshCw,
   Users, Target,
   Camera,
   Image as ImageIcon,
@@ -80,7 +80,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
-import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent, TrainingProtocol, CardioSession, CardioGoal, CardioPrescription } from './types';
+import { User as UserType, TrainingProgram, StudentProfile, LoggedSession, Exercise, WarmupStep, MobilityStep, WilksTier, WILKS_LEVELS, VikingPlan, ChatMessage, GymLeaderboardEntry, DbExercise, DbMobilityExercise, CalendarEvent, TrainingProtocol, CardioSession, CardioGoal, CardioPrescription, VikingBackup } from './types';
 import { ProtocolsDrawer } from './components/ProtocolsDrawer';
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from './data';
 
@@ -197,7 +197,12 @@ import {
   auth,
   subscribeStudents,
   subscribeStudentProfile,
-  storage
+  storage,
+  generate500Exercises,
+  saveTrainerAutoBackupToFirebase,
+  fetchTrainerAutoBackupFromFirebase,
+  saveStudentAutoBackupToFirebase,
+  fetchStudentAutoBackupFromFirebase
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -241,6 +246,20 @@ function getYouTubeEmbedUrl(url: string | undefined): string | null {
     return `https://www.youtube.com/embed/${match[2]}`;
   }
   return null;
+}
+
+function mergeDbExercisesWithDefaults(remoteExs: DbExercise[]): DbExercise[] {
+  const defaults = generate500Exercises();
+  const mergedMap = new Map<string, DbExercise>();
+  defaults.forEach(ex => mergedMap.set(ex.id, ex));
+  if (Array.isArray(remoteExs)) {
+    remoteExs.forEach(ex => {
+      if (ex && ex.id) {
+        mergedMap.set(ex.id, ex);
+      }
+    });
+  }
+  return Array.from(mergedMap.values());
 }
 
 export default function App() {
@@ -353,6 +372,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [slideDirection, setSlideDirection] = useState<'forward' | 'backward'>('forward');
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [selectedDay, setSelectedDay] = useState<string>(() => localStorage.getItem('viking_last_day') || 'A');
+  const [trainerPreviewWeek, setTrainerPreviewWeek] = useState<number>(1);
+  const [trainerPreviewDay, setTrainerPreviewDay] = useState<string>('A');
   useEffect(() => { localStorage.setItem('viking_last_day', selectedDay); }, [selectedDay]);
   const [sessionRpeState, setSessionRpeState] = useState<Record<string, number>>({});
   const [exerciseFailureState, setExerciseFailureState] = useState<Record<string, { failed: boolean; actualReps: number; setsDone: number }>>({});
@@ -472,7 +493,16 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [prCelebration, setPrCelebration] = useState<{ lifts: string[] } | null>(null);
 
   // Exercises Database state
-  const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
+  const [dbExercises, setDbExercises] = useState<DbExercise[]>(() => {
+    const cached = localStorage.getItem('viking_db_exercises');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return generate500Exercises();
+  });
   const [dbMobilityExercises, setDbMobilityExercises] = useState<DbMobilityExercise[]>([]);
   const [dbExercisesLoading, setDbExercisesLoading] = useState<boolean>(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -992,9 +1022,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
         try {
           const remoteExs = await fetchDbExercisesFromFirebase();
-          if (remoteExs && remoteExs.length > 0) {
-            setDbExercises(remoteExs);
-            localStorage.setItem('viking_db_exercises', JSON.stringify(remoteExs));
+          if (remoteExs) {
+            const merged = mergeDbExercisesWithDefaults(remoteExs);
+            setDbExercises(merged);
+            localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
           }
         } catch (e) {
           console.warn("Using offline storage for exercises:", e);
@@ -1204,9 +1235,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
     try {
       const remoteExs = await fetchDbExercisesFromFirebase();
-      if (remoteExs && remoteExs.length > 0) {
-        setDbExercises(remoteExs);
-        localStorage.setItem('viking_db_exercises', JSON.stringify(remoteExs));
+      if (remoteExs) {
+        const merged = mergeDbExercisesWithDefaults(remoteExs);
+        setDbExercises(merged);
+        localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
       }
     } catch (e) {
       console.warn("Using offline storage for exercises:", e);
@@ -1656,9 +1688,37 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               doc.setLineWidth(0.3);
               doc.line(20, y + 7, 190, y + 7);
               
-              const intensityStr = typeof ex.intensity === 'number'
+              let intensityStr = typeof ex.intensity === 'number'
                 ? `${(ex.intensity * 100).toFixed(0)}%`
                 : ex.intensity || 'Livre';
+                
+              // Calculate target weight for PDF row
+              const exNameLower = (ex.name || '').toLowerCase();
+              let prValue = ex.baseWeight || null;
+              if (!prValue && profile.prs) {
+                if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                  prValue = profile.prs.squat;
+                } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                  prValue = profile.prs.bench;
+                } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                  prValue = profile.prs.deadlift;
+                }
+              }
+              let intensityRatio = 0;
+              if (typeof ex.intensity === 'number') {
+                intensityRatio = ex.intensity;
+              } else if (typeof ex.intensity === 'string') {
+                const parsed = parseFloat(ex.intensity.replace('%', ''));
+                if (!isNaN(parsed)) {
+                  intensityRatio = parsed > 1 ? parsed / 100 : parsed;
+                }
+              }
+              if (prValue && intensityRatio > 0) {
+                const finalCalculatedWeight = Math.round(prValue * intensityRatio);
+                intensityStr = `${intensityStr} (${finalCalculatedWeight} kg)`;
+              } else if (prValue && !intensityRatio) {
+                intensityStr = `${intensityStr} (${prValue} kg)`;
+              }
                 
               doc.setFont('helvetica', 'bold');
               doc.setTextColor(30, 30, 30);
@@ -2460,6 +2520,283 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Backup gerado com sucesso!', 'success');
+  };
+
+  const [lastAutoBackupTime, setLastAutoBackupTime] = useState<string>(() => localStorage.getItem('viking_last_auto_backup_time') || '');
+  const [isAutoBackingUp, setIsAutoBackingUp] = useState<boolean>(false);
+  const [consecutiveBackupFailures, setConsecutiveBackupFailures] = useState<number>(0);
+  const [autoBackupHistory, setAutoBackupHistory] = useState<any[]>(() => {
+    try {
+      const historyStr = localStorage.getItem('viking_auto_backup_history');
+      return historyStr ? JSON.parse(historyStr) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+
+  const isInitialMountRef = useRef(true);
+  const hasUnsavedChangesRef = useRef(false);
+  const autoBackupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const applyBackupData = async (backup: any) => {
+    if (!backup) throw new Error("Backup inválido ou vazio");
+    
+    showToast('Iniciando restauração de dados...', 'info');
+
+    // Check if it's a student-specific backup
+    if (backup.backupData && backup.email) {
+      const studentEmail = backup.email.toLowerCase();
+      const sData = backup.backupData;
+      if (sData.profile) {
+        const updatedStudents = {
+          ...studentsData,
+          [studentEmail]: sData.profile
+        };
+        setStudentsData(updatedStudents);
+        localStorage.setItem('viking_students', JSON.stringify(updatedStudents));
+        try {
+          await saveStudentToFirebase(studentEmail, sData.profile);
+        } catch (err) {
+          console.error("Erro ao sincronizar perfil do aluno no Firebase:", err);
+        }
+        showToast('Dados do aluno restaurados e sincronizados com sucesso!', 'success');
+        return;
+      }
+    }
+
+    // Standard full backup
+    if (backup.studentsData && typeof backup.studentsData === 'object') {
+      setStudentsData(backup.studentsData);
+      localStorage.setItem('viking_students', JSON.stringify(backup.studentsData));
+      
+      // Save each student to Firebase (async background)
+      for (const email of Object.keys(backup.studentsData)) {
+        try {
+          await saveStudentToFirebase(email, backup.studentsData[email]);
+        } catch (err) {
+          console.error(`Erro ao restaurar atleta ${email} no Firebase:`, err);
+        }
+      }
+    }
+
+    if (backup.trainingProgram) {
+      setTrainingProgram(backup.trainingProgram);
+      localStorage.setItem('viking_program', JSON.stringify(backup.trainingProgram));
+      try {
+        await saveProgramToFirebase(backup.trainingProgram);
+      } catch (err) {
+        console.error("Erro ao restaurar programa no Firebase:", err);
+      }
+    }
+
+    if (backup.vikingPlans && Array.isArray(backup.vikingPlans)) {
+      setVikingPlans(backup.vikingPlans);
+      localStorage.setItem('viking_plans', JSON.stringify(backup.vikingPlans));
+      try {
+        await savePlansToFirebase(backup.vikingPlans);
+      } catch (err) {
+        console.error("Erro ao restaurar planos no Firebase:", err);
+      }
+    }
+
+    if (backup.calendarEvents && Array.isArray(backup.calendarEvents)) {
+      setCalendarEvents(backup.calendarEvents);
+      localStorage.setItem('viking_calendar_events', JSON.stringify(backup.calendarEvents));
+      for (const ev of backup.calendarEvents) {
+        try {
+          await saveCalendarEventToFirebase(ev);
+        } catch (err) {
+          console.error(`Erro ao restaurar evento ${ev.id} no Firebase:`, err);
+        }
+      }
+    }
+
+    if (backup.dbExercises && Array.isArray(backup.dbExercises)) {
+      const merged = mergeDbExercisesWithDefaults(backup.dbExercises);
+      setDbExercises(merged);
+      localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
+      
+      const defaultsMap = new Map(generate500Exercises().map(ex => [ex.id, ex]));
+      for (const ex of backup.dbExercises) {
+        if (ex && ex.id && !defaultsMap.has(ex.id)) {
+          try {
+            await saveDbExerciseToFirebase(ex);
+          } catch (err) {
+            console.error(`Erro ao restaurar exercício customizado ${ex.name}:`, err);
+          }
+        }
+      }
+    }
+
+    showToast('Dados restaurados e sincronizados com a nuvem com sucesso!', 'success');
+  };
+
+  const triggerAutoBackup = useCallback(async (isPeriodic = false) => {
+    if (!currentUser) return;
+    setIsAutoBackingUp(true);
+
+    try {
+      const timestamp = new Date().toISOString();
+      const backup: VikingBackup = {
+        timestamp,
+        user: currentUser,
+        studentsData,
+        trainingProgram,
+        vikingPlans,
+        calendarEvents,
+        dbExercises
+      };
+
+      // 1. Save to local storage (latest backup)
+      const backupJson = JSON.stringify(backup);
+      localStorage.setItem('viking_auto_backup', backupJson);
+      localStorage.setItem('viking_last_auto_backup_time', timestamp);
+      setLastAutoBackupTime(timestamp);
+
+      // 2. Add to rolling history (max 3 backups)
+      setAutoBackupHistory(prev => {
+        const isDataIdentical = (b1: any, b2: any) => {
+          if (!b1 || !b2) return false;
+          return JSON.stringify({ ...b1, timestamp: '', user: null }) === JSON.stringify({ ...b2, timestamp: '', user: null });
+        };
+
+        if (prev.length > 0 && isDataIdentical(prev[0], backup)) {
+          return prev;
+        }
+
+        const newHistory = [backup, ...prev].slice(0, 3);
+        localStorage.setItem('viking_auto_backup_history', JSON.stringify(newHistory));
+        return newHistory;
+      });
+
+      // 3. Save to Firebase Cloud
+      const isTrainer = currentUser.role === 'trainer';
+      if (isTrainer) {
+        await saveTrainerAutoBackupToFirebase(backup);
+      } else {
+        const studentEmail = currentUser.email.toLowerCase();
+        const studentProfile = studentsData[studentEmail];
+        if (studentProfile) {
+          await saveStudentAutoBackupToFirebase(studentEmail, {
+            profile: studentProfile,
+            prs: studentProfile.prs,
+            sessions: studentProfile.sessions
+          });
+        }
+      }
+
+      console.log(`[Viking Force] Backup automático concluído (${isPeriodic ? 'Periódico' : 'Crítico'}).`);
+      setConsecutiveBackupFailures(0);
+    } catch (err) {
+      console.error('[Viking Force] Falha ao realizar backup automático:', err);
+      setConsecutiveBackupFailures(prev => prev + 1);
+    } finally {
+      // Keep it true for at least 800ms for solid visual feedback
+      setTimeout(() => {
+        setIsAutoBackingUp(false);
+      }, 800);
+    }
+  }, [currentUser, studentsData, trainingProgram, vikingPlans, calendarEvents, dbExercises]);
+
+  const requestImmediateAutoBackup = useCallback(() => {
+    if (autoBackupTimeoutRef.current) {
+      clearTimeout(autoBackupTimeoutRef.current);
+    }
+    autoBackupTimeoutRef.current = setTimeout(() => {
+      triggerAutoBackup(false);
+      hasUnsavedChangesRef.current = false;
+    }, 3000); // 3 seconds debounce
+  }, [triggerAutoBackup]);
+
+  // Track state changes to know when a backup is needed
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    hasUnsavedChangesRef.current = true;
+    requestImmediateAutoBackup();
+  }, [studentsData, trainingProgram, vikingPlans, calendarEvents, dbExercises, requestImmediateAutoBackup]);
+
+  // Periodic auto backup check
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const intervalId = setInterval(() => {
+      if (hasUnsavedChangesRef.current) {
+        triggerAutoBackup(true);
+        hasUnsavedChangesRef.current = false;
+      }
+    }, 120000); // Check every 2 minutes
+
+    return () => clearInterval(intervalId);
+  }, [currentUser, triggerAutoBackup]);
+
+  // Sync backup on close/beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (hasUnsavedChangesRef.current && currentUser) {
+        const timestamp = new Date().toISOString();
+        const backup: VikingBackup = {
+          timestamp,
+          user: currentUser,
+          studentsData,
+          trainingProgram,
+          vikingPlans,
+          calendarEvents,
+          dbExercises
+        };
+        localStorage.setItem('viking_auto_backup', JSON.stringify(backup));
+        localStorage.setItem('viking_last_auto_backup_time', timestamp);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentUser, studentsData, trainingProgram, vikingPlans, calendarEvents, dbExercises]);
+
+  const handleRestoreBackupData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const backup = JSON.parse(event.target?.result as string);
+        await applyBackupData(backup);
+      } catch (err: any) {
+        console.error("Erro ao importar backup:", err);
+        showToast('Falha ao restaurar backup. Verifique se o arquivo JSON é válido.', 'error');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleRestoreFromCloud = async () => {
+    if (!currentUser) return;
+    try {
+      showToast('Buscando backup automático na nuvem...', 'info');
+      const isTrainer = currentUser.role === 'trainer';
+      if (isTrainer) {
+        const backup = await fetchTrainerAutoBackupFromFirebase();
+        if (backup) {
+          await applyBackupData(backup);
+        } else {
+          showToast('Nenhum backup automático do Treinador foi encontrado na nuvem.', 'warning');
+        }
+      } else {
+        const studentEmail = currentUser.email.toLowerCase();
+        const cloudBackup = await fetchStudentAutoBackupFromFirebase(studentEmail);
+        if (cloudBackup) {
+          await applyBackupData(cloudBackup.backupData);
+        } else {
+          showToast('Nenhum backup automático deste Aluno foi encontrado na nuvem.', 'warning');
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao restaurar do Firebase:", err);
+      showToast('Falha ao buscar backup da nuvem.', 'error');
+    }
   };
 
   // --- DUE DATE HELPERS ---
@@ -4752,6 +5089,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <span>{isOnline ? 'Modo Online' : 'Modo Offline'}</span>
                 </button>
 
+                {/* Auto Backup Cloud Indicator */}
+                <div 
+                  className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-[10px] font-black uppercase tracking-wider ${
+                    isAutoBackingUp 
+                      ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] animate-pulse' 
+                      : 'border-viking-gold/15 bg-viking-dark text-viking-silver/65 hover:border-viking-gold/35'
+                  }`}
+                  title={isAutoBackingUp ? "Salvaguarda Viking: Salvando backup automático..." : "Salvaguarda Viking: Seus dados estão seguros na nuvem."}
+                >
+                  <Cloud className={`w-3.5 h-3.5 shrink-0 transition-all ${isAutoBackingUp ? 'text-emerald-400 animate-pulse' : 'text-viking-gold/70'}`} />
+                  <span>{isAutoBackingUp ? 'Salvando...' : 'Protegido'}</span>
+                </div>
+
                 <div className="hidden sm:flex items-center gap-3 bg-viking-dark py-1.5 pl-3 pr-4 rounded-xl border border-viking-gold/20">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-viking-gold-dark to-viking-gold p-[2px] shadow-[0_0_10px_rgba(212,175,55,0.2)]">
                     <div className="w-full h-full rounded-full bg-viking-darker flex items-center justify-center overflow-hidden">
@@ -6579,6 +6929,57 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
             animate={{ opacity: 1 }}
             className="space-y-6 relative z-10"
           >
+            {/* Sync Error Warning Alert */}
+            {consecutiveBackupFailures >= 3 && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-950/80 border border-red-500/30 rounded-3xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl backdrop-blur-md relative overflow-hidden"
+              >
+                <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 opacity-5 pointer-events-none">
+                  <AlertTriangle className="w-32 h-32 text-red-500" />
+                </div>
+                <div className="flex gap-3.5 items-start">
+                  <div className="p-3 rounded-2xl bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
+                    <CloudLightning className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="font-viking-display text-base font-black text-white tracking-wider flex items-center gap-1.5 uppercase">
+                      ⚠️ Falha de Sincronização de Backup
+                    </h3>
+                    <p className="text-viking-silver/85 text-xs mt-1 max-w-2xl leading-relaxed uppercase">
+                      O sistema tentou salvar seus dados na nuvem <strong className="text-white font-mono">{consecutiveBackupFailures} vezes consecutivas</strong> sem sucesso. Suas novas alterações estão seguras localmente neste navegador, mas podem não estar na nuvem do Firebase.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 pt-2 md:pt-0">
+                  <button
+                    onClick={() => triggerAutoBackup(false)}
+                    disabled={isAutoBackingUp}
+                    className="w-full md:w-auto px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(239,68,68,0.25)] active:scale-95 disabled:opacity-50"
+                  >
+                    {isAutoBackingUp ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0"></span>
+                        <span>Sincronizando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                        <span>Sincronizar Agora</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setConsecutiveBackupFailures(0)}
+                    className="px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-viking-silver hover:text-white border border-white/10 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Dispensar
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* Header Greeting */}
             <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl backdrop-blur-md relative overflow-hidden">
               <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
@@ -7801,6 +8202,48 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <Save className="w-4 h-4 shrink-0" /> Fazer Backup (JSON)
                 </button>
+                <div className="relative flex">
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    id="restore-backup-dashboard-input" 
+                    className="hidden" 
+                    onChange={handleRestoreBackupData} 
+                  />
+                  <button 
+                    onClick={() => document.getElementById('restore-backup-dashboard-input')?.click()}
+                    className="w-full p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 shrink-0" /> Restaurar Backup (JSON)
+                  </button>
+                </div>
+                <button 
+                  onClick={handleRestoreFromCloud}
+                  className="p-4 rounded-2xl bg-viking-dark hover:bg-viking-gold/10 border border-viking-gold/20 text-viking-gold font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Cloud className="w-4 h-4 shrink-0 text-viking-gold" /> Restaurar da Nuvem (Firebase)
+                </button>
+                <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-[#0d0908]/50 rounded-2xl border border-viking-gold/10 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-viking-gold uppercase tracking-widest flex items-center gap-1.5">
+                      🛡️ Proteção de Dados e Sincronização Viking
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      SALVAGUARDA AUTOMÁTICA ATIVA
+                    </span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <span className="text-viking-silver/70 uppercase text-[10px]">
+                      Última proteção automática: <strong className="font-mono text-emerald-400">{lastAutoBackupTime ? `${new Date(lastAutoBackupTime).toLocaleDateString('pt-BR')} às ${new Date(lastAutoBackupTime).toLocaleTimeString('pt-BR')}` : 'Aguardando primeira modificação...'}</strong>
+                    </span>
+                    <button 
+                      onClick={() => { triggerAutoBackup(false); showToast('Cópia de segurança atualizada com sucesso!', 'success'); }}
+                      className="px-3 py-1 rounded bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold hover:text-white border border-viking-gold/20 text-[10px] uppercase font-bold transition-all cursor-pointer"
+                    >
+                      Forçar Backup Agora
+                    </button>
+                  </div>
+                </div>
                 <button 
                   onClick={() => { setDrawerType('trash'); setDrawerTitle('Lixeira Virtual'); setDrawerOpen(true); }}
                   className="p-4 rounded-2xl bg-viking-dark hover:bg-red-950/20 border border-viking-gold/20 hover:border-viking-red/40 text-viking-silver hover:text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -9321,12 +9764,129 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       >
                         Salvar e Recalcular Pesos
                       </button>
-                      <button 
-                        onClick={handleBackupData}
-                        className="w-full py-3 mt-2 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-viking-gold font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <Save className="w-4 h-4 shrink-0" /> Fazer Backup de Dados (JSON)
-                      </button>
+                      {/* Manual Backups */}
+                      <div className="pt-4 border-t border-viking-gold/15 space-y-2">
+                        <p className="text-[10px] font-black text-viking-gold uppercase tracking-widest">
+                          📂 Backups Manuais (Arquivos)
+                        </p>
+                        <button 
+                          onClick={handleBackupData}
+                          className="w-full py-2.5 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-[#e0d3a8] font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <Save className="w-4 h-4 shrink-0 text-viking-gold" /> Baixar Backup JSON
+                        </button>
+                        <div className="relative">
+                          <input 
+                            type="file" 
+                            accept=".json" 
+                            id="restore-backup-drawer-input" 
+                            className="hidden" 
+                            onChange={handleRestoreBackupData} 
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => document.getElementById('restore-backup-drawer-input')?.click()}
+                            className="w-full py-2.5 bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/10 text-[#e0d3a8] font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Upload className="w-4 h-4 shrink-0 text-viking-gold" /> Upload de Backup JSON
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Automated Backup System */}
+                      <div className="pt-4 border-t border-viking-gold/15 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black text-viking-gold uppercase tracking-widest flex items-center gap-1.5">
+                            🛡️ Sistema de Backup Automático
+                          </p>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse">
+                            ATIVO
+                          </span>
+                        </div>
+                        
+                        <p className="text-[9px] text-viking-silver/70 leading-relaxed uppercase">
+                          Seus dados estão protegidos em tempo real na nuvem e localmente a cada mudança crítica ou a cada 2 minutos.
+                        </p>
+
+                        {/* Status Panel */}
+                        <div className="bg-black/40 rounded-xl border border-viking-gold/10 p-3 space-y-2">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-viking-silver/60">ÚLTIMA SINCRONIZAÇÃO</span>
+                            <span className="font-mono text-emerald-400 font-bold flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-emerald-500" />
+                              {lastAutoBackupTime 
+                                ? new Date(lastAutoBackupTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                                : 'Aguardando alteração...'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-viking-silver/60">MÉTODO</span>
+                            <span className="text-viking-gold font-bold">NUVEM + LOCALSTORAGE</span>
+                          </div>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              triggerAutoBackup(false);
+                              showToast('Backup automático forçado e concluído!', 'success');
+                            }}
+                            className="py-2 rounded-lg bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/40 text-viking-silver hover:text-white font-bold text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Save className="w-3 h-3 shrink-0" /> Salvar Agora
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={handleRestoreFromCloud}
+                            className="py-2 rounded-lg bg-[#0d0908] border border-viking-gold/20 hover:border-viking-gold/40 text-viking-silver hover:text-white font-bold text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Cloud className="w-3 h-3 shrink-0" /> Carregar Nuvem
+                          </button>
+                        </div>
+
+                        {/* History rollback (Last 3 auto saves) */}
+                        <div className="space-y-1.5">
+                          <p className="text-[9px] font-bold text-viking-silver/60 uppercase flex items-center gap-1">
+                            <History className="w-3 h-3" /> Histórico de Versões Locais
+                          </p>
+                          {autoBackupHistory.length === 0 ? (
+                            <p className="text-[9px] text-viking-silver/40 italic py-1">Nenhum ponto de restauração gerado ainda.</p>
+                          ) : (
+                            <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                              {autoBackupHistory.map((hb, hbIdx) => (
+                                <div key={hbIdx} className="flex items-center justify-between bg-black/25 rounded p-2 border border-viking-gold/5">
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] text-white font-mono font-bold truncate">
+                                      {new Date(hb.timestamp).toLocaleDateString('pt-BR')} {new Date(hb.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                    <p className="text-[8px] text-viking-silver/50 uppercase">
+                                      {hb.user?.role === 'trainer' ? '🛡️ Treinador' : '⚔️ Aluno'} • {Object.keys(hb.studentsData || {}).length} Atletas
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (confirm('Tem certeza que deseja restaurar esta versão automática? Seu estado atual será substituído.')) {
+                                        try {
+                                          await applyBackupData(hb);
+                                          showToast('Versão automática restaurada com sucesso!', 'success');
+                                        } catch (_) {
+                                          showToast('Falha ao restaurar versão selecionada.', 'error');
+                                        }
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-viking-gold/10 hover:bg-viking-gold text-viking-gold hover:text-viking-dark border border-viking-gold/25 font-black text-[8px] uppercase tracking-widest transition-all cursor-pointer"
+                                  >
+                                    Restaurar
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -9977,6 +10537,124 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         >
                           <Trash2 className="w-4 h-4" /> <span className="text-xs font-bold uppercase tracking-wider">Remover Guerreiro</span>
                         </button>
+                      </div>
+
+                      {/* Seção de Cargas Calculadas do Treino (User request: calcular e mostrar para o treinador os pesos já calculado) */}
+                      <div className="pt-4 border-t border-viking-gold/15 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-viking-gold uppercase tracking-widest flex items-center gap-1.5">
+                            🛡️ Cargas Prescritas Calculadas
+                          </p>
+                        </div>
+                        <p className="text-[10px] text-viking-silver/70 uppercase">
+                          Abaixo você confere em tempo real os pesos calculados para este guerreiro de acordo com a planilha de treinos e seus PRs cadastrados.
+                        </p>
+
+                        {/* Controles de Semana e Dia */}
+                        {(() => {
+                          const activeProg = s.customProgram || trainingProgram;
+                          const weeksAvailable = Object.keys(activeProg.weeks).map(Number).sort((a,b) => a-b);
+                          
+                          // Safe bounds for current selection
+                          const currentW = weeksAvailable.includes(trainerPreviewWeek) ? trainerPreviewWeek : (weeksAvailable[0] || 1);
+                          const daysMap = activeProg.weeks[currentW] || {};
+                          const daysAvailable = Object.keys(daysMap).sort();
+                          const currentD = daysAvailable.includes(trainerPreviewDay) ? trainerPreviewDay : (daysAvailable[0] || 'A');
+
+                          const exercisesList = daysMap[currentD] || [];
+
+                          return (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-viking-silver/60 uppercase mb-1">Semana</label>
+                                  <select 
+                                    value={currentW} 
+                                    onChange={(e) => setTrainerPreviewWeek(Number(e.target.value))}
+                                    className="w-full px-2 py-1.5 rounded bg-black/50 border border-viking-gold/25 text-viking-gold text-xs focus:outline-none cursor-pointer"
+                                  >
+                                    {weeksAvailable.map(wk => (
+                                      <option key={wk} value={wk}>Semana {wk}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] font-bold text-viking-silver/60 uppercase mb-1">Treino / Dia</label>
+                                  <select 
+                                    value={currentD} 
+                                    onChange={(e) => setTrainerPreviewDay(e.target.value)}
+                                    className="w-full px-2 py-1.5 rounded bg-black/50 border border-viking-gold/25 text-viking-gold text-xs focus:outline-none cursor-pointer"
+                                  >
+                                    {daysAvailable.map(day => (
+                                      <option key={day} value={day}>Treino {day}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Exercícios e pesos calculados */}
+                              <div className="bg-black/30 rounded-xl border border-viking-gold/10 p-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                {exercisesList.length === 0 ? (
+                                  <p className="text-[11px] text-viking-silver/50 italic text-center py-4">Nenhum exercício prescrito para este dia.</p>
+                                ) : (
+                                  exercisesList.map((ex, exIdx) => {
+                                    const exNameLower = (ex.name || '').toLowerCase();
+                                    let prValue = ex.baseWeight || null;
+                                    let prName = 'Carga Fixa';
+                                    if (!prValue && s.prs) {
+                                      if (exNameLower.includes('agachamento') || exNameLower.includes('squat')) {
+                                        prValue = s.prs.squat;
+                                        prName = `PR Squat (${s.prs.squat}kg)`;
+                                      } else if (exNameLower.includes('supino') || exNameLower.includes('bench')) {
+                                        prValue = s.prs.bench;
+                                        prName = `PR Bench (${s.prs.bench}kg)`;
+                                      } else if (exNameLower.includes('terra') || exNameLower.includes('deadlift')) {
+                                        prValue = s.prs.deadlift;
+                                        prName = `PR Deadlift (${s.prs.deadlift}kg)`;
+                                      }
+                                    }
+
+                                    let intensityRatio = 0;
+                                    if (typeof ex.intensity === 'number') {
+                                      intensityRatio = ex.intensity;
+                                    } else if (typeof ex.intensity === 'string') {
+                                      const parsed = parseFloat(ex.intensity.replace('%', ''));
+                                      if (!isNaN(parsed)) {
+                                        intensityRatio = parsed > 1 ? parsed / 100 : parsed;
+                                      }
+                                    }
+
+                                    const finalCalculatedWeight = (prValue && intensityRatio > 0) ? Math.round(prValue * intensityRatio) : prValue;
+                                    const intensityStr = typeof ex.intensity === 'number'
+                                      ? `${(ex.intensity * 100).toFixed(0)}%`
+                                      : ex.intensity || 'Livre';
+
+                                    return (
+                                      <div key={exIdx} className="flex items-center justify-between gap-2 py-1.5 border-b border-viking-gold/5 last:border-0 last:pb-0">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-white truncate">{ex.name}</p>
+                                          <p className="text-[9px] text-viking-silver/60">
+                                            {ex.sets}x{ex.reps} reps @ {intensityStr}
+                                            {prValue && prName !== 'Carga Fixa' && ` (${prName})`}
+                                          </p>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                          {finalCalculatedWeight ? (
+                                            <span className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-xs font-black">
+                                              ⚔️ {finalCalculatedWeight} kg
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] text-viking-silver/50 italic">Livre</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* 1RM Progress Chart (Evolução de PRs) */}
@@ -12435,8 +13113,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                 saveDbExerciseToFirebase(exerciseToSave).then(async () => {
                                   const updatedExs = await fetchDbExercisesFromFirebase();
                                   if (updatedExs) {
-                                    setDbExercises(updatedExs);
-                                    localStorage.setItem('viking_db_exercises', JSON.stringify(updatedExs));
+                                    const merged = mergeDbExercisesWithDefaults(updatedExs);
+                                    setDbExercises(merged);
+                                    localStorage.setItem('viking_db_exercises', JSON.stringify(merged));
                                   }
                                 }).catch(err => {
                                   console.error("Error in async Firestore save:", err);
