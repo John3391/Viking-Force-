@@ -71,6 +71,7 @@ import {
   Image as ImageIcon,
   Bell,
   Grid,
+  LayoutGrid,
   List,
   Info,
   GripVertical
@@ -225,6 +226,7 @@ import OneRepMaxChart from './components/OneRepMaxChart';
 import TotalSBDChart from './components/TotalSBDChart';
 import WilksScatterChart from './components/WilksScatterChart';
 import FinancialHealthChart from './components/FinancialHealthChart';
+import CompactListRow from './components/CompactListRow';
 import FailureSentinel from './components/FailureSentinel';
 import PatentTimeline from './components/PatentTimeline';
 import SbdImpactSimulator from './components/SbdImpactSimulator';
@@ -552,7 +554,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   
   
   const [navDropdownOpen, setNavDropdownOpen] = useState<boolean>(false);
-  const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'list'>('grid');
+  const [studentsLayoutMode, setStudentsLayoutMode] = useState<'grid' | 'compact' | 'list'>('grid');
   const [trainerRightTab, setTrainerRightTab] = useState<'activity' | 'prs' | 'events'>('activity');
   const [customLogo, setCustomLogo] = useState<string>(() => {
     return localStorage.getItem('viking_custom_logo') || '';
@@ -5012,10 +5014,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       </div>
  
       {/* --- RESPONSIVE HEADER --- */}
-      <nav className="sticky top-0 z-40 bg-[#0f0a08]/90 backdrop-blur-md border-b border-viking-gold/15 shadow-2xl">
+      <nav className="sticky top-0 z-40 bg-[#0f0a08]/95 backdrop-blur-xl border-b border-viking-gold/20 shadow-2xl">
         <div 
           key={activeTab + (drawerOpen ? '1' : '0') + (workoutModalOpen ? '1' : '0') + String(drawerType)}
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center relative z-10 w-full animate-fade-in gap-4"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex justify-between items-center relative z-10 w-full animate-fade-in gap-2 sm:gap-4"
         >
           
           {/* Logo */}
@@ -8452,7 +8454,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </button>
                   <button 
                     onClick={() => { setDrawerType('addStudent'); setDrawerTitle('Recrutar Novo Aluno'); setDrawerOpen(true); }}
-                    className="px-4 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-lg shadow-viking-gold/20 transition-all cursor-pointer"
+                    className="px-4 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] text-viking-dark font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-lg hover:shadow-xl hover:shadow-viking-gold/30 shadow-viking-gold/20 transition-all cursor-pointer"
                   >
                     <UserPlus className="w-4 h-4 shrink-0" /> Novo Guerreiro
                   </button>
@@ -8493,7 +8495,19 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     title="Modo Caixas"
                   >
                     <Grid className="w-4 h-4 shrink-0" />
-                    <span className="whitespace-nowrap">Caixas</span>
+                    <span className="whitespace-nowrap hidden sm:inline">Caixas</span>
+                  </button>
+                  <button
+                    onClick={() => setStudentsLayoutMode('compact')}
+                    className={`flex-1 md:flex-none px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      studentsLayoutMode === 'compact' 
+                        ? 'bg-viking-gold text-viking-dark font-black shadow-[0_0_15px_rgba(212,175,55,0.3)]' 
+                        : 'text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10'
+                    }`}
+                    title="Modo Compacto"
+                  >
+                    <LayoutGrid className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap hidden sm:inline">Compacto</span>
                   </button>
                   <button
                     onClick={() => setStudentsLayoutMode('list')}
@@ -8505,7 +8519,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     title="Modo Lista"
                   >
                     <List className="w-4 h-4 shrink-0" />
-                    <span className="whitespace-nowrap">Lista</span>
+                    <span className="whitespace-nowrap hidden sm:inline">Lista</span>
                   </button>
                 </div>
               </div>
@@ -8614,9 +8628,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                 return (
                   <div className={
-                    studentsLayoutMode === 'grid'
-                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-                      : "flex flex-col gap-2.5"
+                    studentsLayoutMode === 'compact'
+                      ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+                      : studentsLayoutMode === 'grid'
+                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                        : "flex flex-col gap-2.5"
                   }>
                     {filteredStudentEmails.map(email => {
                       const s = studentsData[email];
@@ -8630,6 +8646,101 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                       if (studentsLayoutMode === 'list') {
                         return (
+                          <div key={email} className="relative">
+                            {isBatchMode && (
+                                <div className="absolute top-4 left-4 z-10" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => setSelectedStudentEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+                                    className="text-viking-gold hover:text-white transition-colors cursor-pointer bg-[#140e0c] rounded-md"
+                                  >
+                                    {isSelected ? <CheckSquare className="w-5 h-5 text-viking-gold" /> : <Square className="w-5 h-5 text-viking-silver/40" />}
+                                  </button>
+                                </div>
+                            )}
+                            <div className={isBatchMode ? "pl-10" : ""}>
+                              <CompactListRow
+                                title={s.name}
+                                primaryMetric={email}
+                                status={obterStatusVencimento(s.dueDate || new Date().toISOString()).texto}
+                                statusClassName={obterStatusVencimento(s.dueDate || new Date().toISOString()).cor}
+                                details={
+                                  <div className="flex flex-col gap-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {/* Last RPE */}
+                                      <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
+                                        <span className="text-[9px] text-viking-silver/40 uppercase font-bold">Último RPE:</span>
+                                        {lastSess ? (
+                                          <span className={`font-bold text-[10px] flex items-center gap-0.5 ${
+                                            lastSess.avgRPE >= 9 ? 'text-red-400' : lastSess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
+                                          }`}>
+                                            <Activity className="w-3 h-3" /> {(lastSess.avgRPE || 0).toFixed(1)}
+                                          </span>
+                                        ) : (
+                                          <span className="text-viking-silver/40 text-[10px] italic">N/A</span>
+                                        )}
+                                      </div>
+
+                                      {/* Vencimento */}
+                                      <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
+                                        <span className="text-[9px] text-viking-silver/40 uppercase font-bold flex items-center gap-0.5"><Calendar className="w-3 h-3 text-viking-gold/60" /> Venc:</span>
+                                        <span className="text-[10px] font-black text-[#e0d3a8]">
+                                          {s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}
+                                        </span>
+                                      </div>
+
+                                      {/* Status de treino hoje */}
+                                      <div className="flex items-center gap-1.5 px-2 bg-[#140e0c] py-1.5 rounded-lg border border-viking-gold/10">
+                                        {hasTrainedToday ? (
+                                          <span className="inline-flex items-center gap-0.5 text-emerald-400 font-bold text-[10px]" title="Treino registrado hoje!">
+                                            <Check className="w-3.5 h-3.5" /> Hoje
+                                          </span>
+                                        ) : isPastPreferredTime ? (
+                                          <span className="inline-flex items-center gap-0.5 text-red-400 font-bold text-[10px] animate-pulse" title={`Horário de preferência (${preferredTime}) ultrapassado`}>
+                                            <AlertTriangle className="w-3 h-3 text-red-500" /> Atrasado
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-0.5 text-viking-silver/65 font-medium text-[10px]" title={`Horário preferencial às ${preferredTime}`}>
+                                            <Clock className="w-3.5 h-3.5" /> {preferredTime}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex justify-end items-center gap-2 mt-1">
+                                      {!isBatchMode && s.phone && (
+                                        <button
+                                          onClick={() => window.open(`https://wa.me/${s.phone?.replace(/\D/g, '')}`, '_blank')}
+                                          className="px-3 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-500 transition-all cursor-pointer shadow-sm flex items-center gap-2"
+                                          title="WhatsApp"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          <span className="text-[10px] font-bold uppercase tracking-wider">WhatsApp</span>
+                                        </button>
+                                      )}
+                                      {!isBatchMode && (
+                                        <button
+                                          onClick={() => {
+                                            setEditingStudentEmail(email);
+                                            setDrawerTitle(`Painel do Guerreiro: ${s.name}`);
+                                            setDrawerType('studentPanel');
+                                            setDrawerOpen(true);
+                                          }}
+                                          className="px-3 py-2 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/20 hover:border-viking-gold text-viking-gold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                        >
+                                          <span className="text-[10px] font-bold uppercase tracking-wider pl-1">Acessar Painel</span>
+                                          <ChevronRight className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                }
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      if (studentsLayoutMode === 'compact') {
+                        return (
                           <div 
                             key={email}
                             onClick={() => {
@@ -8642,119 +8753,70 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 setDrawerOpen(true);
                               }
                             }}
-                            className={`relative p-4 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 ${
+                            className={`relative p-3 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col gap-2 ${
                               isSelected 
                                 ? 'bg-viking-gold/10 border-viking-gold shadow-[0_0_12px_rgba(212,175,55,0.15)]'
                                 : 'bg-[#0d0908]/80 border-viking-gold/15 hover:border-viking-gold/40 hover:bg-[#140e0c]'
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              {isBatchMode ? (
-                                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                                  <button
-                                    onClick={() => setSelectedStudentEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
-                                    className="text-viking-gold hover:text-white transition-colors cursor-pointer"
-                                  >
-                                    {isSelected ? <CheckSquare className="w-5 h-5 text-viking-gold" /> : <Square className="w-5 h-5 text-viking-silver/40" />}
-                                  </button>
-                                </div>
-                              ) : null}
-
-                              <div className="min-w-0 flex-1 flex items-center gap-3">
-                                {s.photoUrl ? (
-                                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-viking-gold/30">
-                                    <img src={s.photoUrl} alt={s.name} className="w-full h-full object-cover" />
-                                  </div>
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0">
-                                    <User className="w-4 h-4 text-viking-gold" />
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-sm font-bold text-[#e0d3a8] hover:text-viking-gold transition-colors truncate">{s.name}</h4>
-                                    <span className="text-[10px] text-viking-silver/50 hidden sm:inline">•</span>
-                                    <span className="text-[10px] text-viking-silver/60 truncate hidden sm:inline">{email}</span>
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-0.5 text-[10px] text-viking-silver/50 sm:hidden">
-                                    <span>{email}</span>
-                                  </div>
-                                </div>
+                            {isBatchMode && (
+                              <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setSelectedStudentEmails(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+                                  className="text-viking-gold hover:text-white transition-colors cursor-pointer"
+                                >
+                                  {isSelected ? <CheckSquare className="w-4 h-4 text-viking-gold" /> : <Square className="w-4 h-4 text-viking-silver/40" />}
+                                </button>
                               </div>
+                            )}
+                            
+                            <div className="flex flex-col items-center text-center">
+                              {s.photoUrl ? (
+                                <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-viking-gold/30 mb-2">
+                                  <img src={s.photoUrl} alt={s.name} className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0 mb-2">
+                                  <User className="w-5 h-5 text-viking-gold" />
+                                </div>
+                              )}
+                              <h4 className="text-[11px] font-bold text-[#e0d3a8] line-clamp-1 w-full" title={s.name}>{s.name}</h4>
                             </div>
-
-                            <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
-                              {/* Status badge */}
-                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
-                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold">Plano:</span>
-                                <span className={`text-[10px] font-black uppercase ${obterStatusVencimento(s.dueDate || new Date().toISOString()).cor.replace('border', '')}`}>
+                            
+                            <div className="grid grid-cols-2 gap-1.5 mt-1">
+                              <div className="flex flex-col items-center bg-[#1a1210] p-1.5 rounded-lg border border-viking-gold/10">
+                                <span className="text-[8px] text-viking-silver/60 uppercase font-bold tracking-wider mb-0.5">Plano</span>
+                                <span className={`text-[9px] font-black uppercase ${obterStatusVencimento(s.dueDate || new Date().toISOString()).cor.replace('border', '')}`}>
                                   {obterStatusVencimento(s.dueDate || new Date().toISOString()).texto}
                                 </span>
                               </div>
-
-                              {/* Last RPE */}
-                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
-                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold">Último RPE:</span>
+                              <div className="flex flex-col items-center bg-[#1a1210] p-1.5 rounded-lg border border-viking-gold/10">
+                                <span className="text-[8px] text-viking-silver/60 uppercase font-bold tracking-wider mb-0.5">RPE</span>
                                 {lastSess ? (
-                                  <span className={`font-bold text-[10px] flex items-center gap-0.5 ${
+                                  <span className={`font-bold text-[9px] ${
                                     lastSess.avgRPE >= 9 ? 'text-red-400' : lastSess.avgRPE >= 7.5 ? 'text-amber-400' : 'text-emerald-400'
                                   }`}>
-                                    <Activity className="w-3 h-3" /> {(lastSess.avgRPE || 0).toFixed(1)}
+                                    {(lastSess.avgRPE || 0).toFixed(1)}
                                   </span>
                                 ) : (
-                                  <span className="text-viking-silver/40 text-[10px] italic">N/A</span>
-                                )}
-                              </div>
-
-                              {/* Vencimento */}
-                              <div className="flex items-center gap-1.5 bg-[#140e0c] px-2.5 py-1.5 rounded-lg border border-viking-gold/10">
-                                <span className="text-[9px] text-viking-silver/40 uppercase font-bold flex items-center gap-0.5"><Calendar className="w-3 h-3 text-viking-gold/60" /> Venc:</span>
-                                <span className="text-[10px] font-black text-[#e0d3a8]">
-                                  {s.dueDate ? s.dueDate.split('-').reverse().join('/') : 'N/A'}
-                                </span>
-                              </div>
-
-                              {/* Status de treino hoje */}
-                              <div className="flex items-center gap-1.5 px-2 bg-[#140e0c] py-1.5 rounded-lg border border-viking-gold/10">
-                                {hasTrainedToday ? (
-                                  <span className="inline-flex items-center gap-0.5 text-emerald-400 font-bold text-[10px]" title="Treino registrado hoje!">
-                                    <Check className="w-3.5 h-3.5" /> Hoje
-                                  </span>
-                                ) : isPastPreferredTime ? (
-                                  <span className="inline-flex items-center gap-0.5 text-red-400 font-bold text-[10px] animate-pulse" title={`Horário de preferência (${preferredTime}) ultrapassado`}>
-                                    <AlertTriangle className="w-3 h-3 text-red-500" /> Atrasado
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-0.5 text-viking-silver/65 font-medium text-[10px]" title={`Horário preferencial às ${preferredTime}`}>
-                                    <Clock className="w-3.5 h-3.5" /> {preferredTime}
-                                  </span>
+                                  <span className="text-viking-silver/40 text-[9px] italic">-</span>
                                 )}
                               </div>
                             </div>
-
-                            <div className="flex items-center gap-2 mt-2 md:mt-0 justify-end shrink-0" onClick={(e) => e.stopPropagation()}>
-                              {!isBatchMode && s.phone && (
-                                <button
-                                  onClick={() => window.open(`https://wa.me/${s.phone?.replace(/\D/g, '')}`, '_blank')}
-                                  className="p-2 rounded-lg bg-[#0d0908] hover:bg-emerald-500/10 border border-viking-gold/10 hover:border-emerald-500/30 text-emerald-500 transition-all cursor-pointer shadow-sm"
-                                  title="WhatsApp"
-                                >
-                                  <MessageCircle className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {!isBatchMode && (
-                                <button
-                                  onClick={() => {
-                                    setEditingStudentEmail(email);
-                                    setDrawerTitle(`Painel do Guerreiro: ${s.name}`);
-                                    setDrawerType('studentPanel');
-                                    setDrawerOpen(true);
-                                  }}
-                                  className="p-2 rounded-lg bg-[#0d0908] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold text-viking-gold transition-all cursor-pointer flex items-center gap-1"
-                                >
-                                  <span className="text-[10px] font-bold uppercase tracking-wider pl-1 hidden sm:inline">Acessar</span>
-                                  <ChevronRight className="w-3.5 h-3.5" />
-                                </button>
+                            
+                            <div className="flex items-center justify-center mt-1 pt-2 border-t border-viking-gold/10">
+                              {hasTrainedToday ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-400 font-bold text-[9px]">
+                                  <Check className="w-3 h-3" /> Hoje
+                                </span>
+                              ) : isPastPreferredTime ? (
+                                <span className="inline-flex items-center gap-1 text-red-400 font-bold text-[9px] animate-pulse">
+                                  <AlertTriangle className="w-3 h-3" /> Atrasado
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-viking-silver/65 font-medium text-[9px]">
+                                  <Clock className="w-3 h-3" /> {preferredTime}
+                                </span>
                               )}
                             </div>
                           </div>

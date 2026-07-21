@@ -180,6 +180,17 @@
   background-color: #dfdfdf;
 }
 
+/* Accessibility Focus States */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-viking-gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.2);
+}
+
 /* ==========================================================================
    SOLAR FORGE (LIGHT MODE) THEME OVERRIDES
    ========================================================================== */
