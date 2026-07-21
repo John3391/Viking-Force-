@@ -7591,7 +7591,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       "success",
                     );
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-[10px] font-black uppercase tracking-wider shadow-sm ${
                     theme === "solar"
                       ? "border-amber-500/40 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
                       : "border-viking-gold/25 bg-[#140e0c] text-viking-gold hover:text-white hover:border-viking-gold/40"
@@ -7665,7 +7665,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
 
                 {currentUser?.role === "student" && (
-                  <div className="flex gap-2">
+                  <div className="hidden sm:flex gap-2">
                     <button
                       onClick={() => {
                         setDrawerType("notifications");
@@ -7698,7 +7698,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
 
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-3.5 rounded-xl bg-viking-red/15 hover:bg-viking-red/30 text-white hover:text-viking-gold border border-viking-red/30 hover:border-viking-gold/40 transition-all font-medium text-xs cursor-pointer"
+                  className="hidden sm:flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-3.5 rounded-xl bg-viking-red/15 hover:bg-viking-red/30 text-white hover:text-viking-gold border border-viking-red/30 hover:border-viking-gold/40 transition-all font-medium text-xs cursor-pointer"
                   title="Sair do Salão"
                 >
                   <LogOut className="w-4 h-4" />
@@ -10986,7 +10986,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       )}
 
                       {overdueOrPending.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4 relative z-10">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4 relative z-10 grid-compact">
                           {overdueOrPending.map((student) => {
                             const isAtrasado = student.status === "Atrasado";
                             return (
@@ -10996,7 +10996,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   setPaymentFilter("pending_or_overdue");
                                   setSearchTerm(student.name);
                                 }}
-                                className={`p-3.5 rounded-2xl bg-[#0d0908]/85 border transition-all duration-200 relative group flex flex-col justify-between cursor-pointer ${
+                                className={`p-2 rounded-2xl bg-[#0d0908]/85 border transition-all duration-200 relative group flex flex-col justify-between cursor-pointer ${
                                   isAtrasado
                                     ? "border-red-500/20 hover:border-red-500/60 hover:bg-red-500/5"
                                     : "border-amber-500/20 hover:border-amber-500/60 hover:bg-amber-500/5"
@@ -11813,9 +11813,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <div
                     className={
                       studentsLayoutMode === "compact"
-                        ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+                        ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 grid-compact"
                         : studentsLayoutMode === "grid"
-                          ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-2"
+                          ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-2 grid-compact"
                           : "flex flex-col gap-2.5"
                     }
                   >
@@ -23951,6 +23951,60 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       <Settings className="w-4 h-4 text-viking-gold" />{" "}
                       Configurações do Sistema
                     </button>
+                  )}
+
+                  {/* Theme Toggle in Mobile Menu */}
+                  <button
+                    onClick={() => {
+                      const nextTheme = theme === "dark" ? "solar" : "dark";
+                      setTheme(nextTheme);
+                      localStorage.setItem("viking_theme", nextTheme);
+                    }}
+                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center justify-between cursor-pointer mt-2 border border-viking-gold/10"
+                  >
+                    <span className="flex items-center gap-2">
+                      {theme === "solar" ? (
+                        <Sun className="w-4 h-4 text-amber-500" />
+                      ) : (
+                        <Moon className="w-4 h-4 text-viking-gold" />
+                      )}
+                      {theme === "solar" ? "Tema: Forja Solar" : "Tema: Noturno"}
+                    </span>
+                  </button>
+
+                  {/* Student Options in Mobile Menu */}
+                  {currentUser?.role === "student" && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setDrawerType("notifications");
+                          setDrawerTitle("Avisos do Salão");
+                          setDrawerOpen(true);
+                        }}
+                        className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Bell className="w-4 h-4" /> Avisos e Notificações
+                        </span>
+                        {activeStudentProfile?.notifications?.some(
+                          (n) => !n.read,
+                        ) && (
+                          <span className="w-2.5 h-2.5 bg-red-500 rounded-full"></span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setDrawerType("settings");
+                          setDrawerTitle("Configurações de Força");
+                          setDrawerOpen(true);
+                        }}
+                        className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                      >
+                        <Settings className="w-4 h-4" /> Configurar Força (1RM)
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

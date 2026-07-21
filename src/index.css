@@ -385,3 +385,19 @@ textarea:focus-visible,
 }
 
 
+
+/* Grid Compact Utility */
+.grid-compact {
+  gap: 0.5rem !important;
+}
+.grid-compact > div {
+  padding: 0.75rem !important;
+}
+.grid-compact > div p,
+.grid-compact > div span,
+.grid-compact > div h3,
+.grid-compact > div h4,
+.grid-compact > div button {
+  font-size: 0.85em !important;
+  line-height: 1.2 !important;
+}
