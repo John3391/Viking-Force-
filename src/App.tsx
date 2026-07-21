@@ -6476,13 +6476,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setWorkoutModalOpen(false);
                     setNavDropdownOpen(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                     activeTab === "home" && !drawerOpen && !workoutModalOpen
-                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                       : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                   }`}
+                  title="Início"
                 >
-                  <Activity className="w-4 h-4" /> Início
+                  <Activity className="w-5 h-5" />
                 </button>
 
                 <button
@@ -6492,13 +6493,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setWorkoutModalOpen(false);
                     setNavDropdownOpen(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                     activeTab === "cardio" && !drawerOpen && !workoutModalOpen
-                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                       : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                   }`}
+                  title="Cardio"
                 >
-                  <Zap className="w-4 h-4" /> Cardio
+                  <Zap className="w-5 h-5" />
                 </button>
 
                 {currentUser?.role === "student" ? (
@@ -6523,13 +6525,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         setDrawerOpen(false);
                         setNavDropdownOpen(false);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer relative overflow-hidden ${
+                      className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer relative overflow-hidden ${
                         workoutModalOpen
-                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                           : activeStudentProfile?.workoutReady
                             ? "text-viking-gold bg-[#1a1210]/60 border border-viking-gold/40"
                             : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                       }`}
+                      title="Treino Hoje"
                       animate={
                         activeStudentProfile?.workoutReady && !workoutModalOpen
                           ? {
@@ -6538,7 +6541,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                 "0 0 15px rgba(212, 175, 55, 0.6)",
                                 "0 0 0px rgba(212, 175, 55, 0)",
                               ],
-                              scale: [1, 1.02, 1],
+                              scale: [1, 1.05, 1],
                             }
                           : {}
                       }
@@ -6549,12 +6552,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       }}
                     >
                       <Dumbbell
-                        className={`w-4 h-4 ${activeStudentProfile?.workoutReady && !workoutModalOpen ? "text-viking-gold animate-bounce" : ""}`}
+                        className={`w-5 h-5 ${activeStudentProfile?.workoutReady && !workoutModalOpen ? "text-viking-gold animate-bounce" : ""}`}
                       />
-                      Treino Hoje
                       {activeStudentProfile?.workoutReady &&
                         !workoutModalOpen && (
-                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-viking-gold shadow-[0_0_6px_#d4af37]" />
+                          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-viking-gold shadow-[0_0_6px_#d4af37]" />
                         )}
                     </motion.button>
                     <button
@@ -6579,13 +6581,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         setDrawerOpen(true);
                         setNavDropdownOpen(false);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                         drawerOpen && drawerType === "history"
-                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                           : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                       }`}
+                      title="Histórico"
                     >
-                      <History className="w-4 h-4" /> Histórico
+                      <History className="w-5 h-5" />
                     </button>
                   </>
                 ) : (
@@ -6598,13 +6601,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         setDrawerOpen(true);
                         setNavDropdownOpen(false);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                         drawerOpen && drawerType === "recentWorkouts"
-                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                          ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                           : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                       }`}
+                      title="Treinos Concluídos"
                     >
-                      <CheckCircle className="w-4 h-4" /> Treinos Concluídos
+                      <CheckCircle className="w-5 h-5" />
                     </button>
                   </>
                 )}
@@ -6634,13 +6638,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setDrawerOpen(true);
                     setNavDropdownOpen(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                     drawerOpen && drawerType === "exerciseLibrary"
-                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                       : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                   }`}
+                  title="Biblioteca de Exercícios"
                 >
-                  <BookOpen className="w-4 h-4" /> Biblioteca
+                  <BookOpen className="w-5 h-5" />
                 </button>
 
                 <button
@@ -6667,13 +6672,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     setDrawerOpen(true);
                     setNavDropdownOpen(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                     drawerOpen && drawerType === "ranking"
-                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                      ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                       : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                   }`}
+                  title="Ranking do Templo"
                 >
-                  <Trophy className="w-4 h-4" /> Classificação
+                  <Trophy className="w-5 h-5" />
                 </button>
 
                 {/* Dropdown for Secondary Tools */}
@@ -6683,7 +6689,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <button
                     onClick={() => setNavDropdownOpen(!navDropdownOpen)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`p-2 rounded-lg transition-all flex items-center justify-center cursor-pointer gap-1 ${
                       navDropdownOpen ||
                       ([
                         "rpeFeedback",
@@ -6693,14 +6699,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         "gmail",
                       ].includes(drawerType) &&
                         drawerOpen)
-                        ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)] font-bold"
+                        ? "text-viking-dark bg-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                         : "text-viking-silver hover:text-viking-gold hover:bg-viking-gold/10"
                     }`}
+                    title="Mais Opções"
                   >
-                    <span>Mais</span>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform duration-200 ${navDropdownOpen ? "rotate-180" : ""}`}
-                    />
+                    <MoreHorizontal className="w-5 h-5" />
                   </button>
 
                   <AnimatePresence>
@@ -11811,7 +11815,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       studentsLayoutMode === "compact"
                         ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
                         : studentsLayoutMode === "grid"
-                          ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 m-0 flex-col"
+                          ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-2"
                           : "flex flex-col gap-2.5"
                     }
                   >
