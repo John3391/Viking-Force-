@@ -12,7 +12,8 @@ import {
   collection, 
   getDocs, 
   deleteDoc,
-  onSnapshot
+  onSnapshot,
+  deleteField
 } from 'firebase/firestore';
 import { StudentProfile, TrainingProgram, VikingPlan, DbExercise, DbMobilityExercise, CalendarEvent, VikingBackup } from './types';
 import { DEFAULT_STUDENTS, DEFAULT_PROGRAM } from './data';
@@ -294,7 +295,28 @@ export async function saveStudentToFirebase(email: string, student: StudentProfi
     }
     
     console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} IS DIRTY (has changes). Proceeding with Firestore write.`);
-    await setDoc(doc(db, 'students', cleanEmail), student);
+    
+    if (cached) {
+      // Delta update logic
+      const delta: any = {};
+      const allKeys = new Set([...Object.keys(cached), ...Object.keys(student)]);
+      for (const key of allKeys) {
+        const studentVal = (student as any)[key];
+        const cachedVal = (cached as any)[key];
+        if (!deepEqual(cachedVal, studentVal)) {
+          if (studentVal === undefined) {
+             delta[key] = deleteField();
+          } else {
+             delta[key] = studentVal;
+          }
+        }
+      }
+      console.log(`[Firebase Delta] Updating fields for ${cleanEmail}: ${Object.keys(delta).join(', ')}`);
+      await setDoc(doc(db, 'students', cleanEmail), delta, { merge: true });
+    } else {
+      await setDoc(doc(db, 'students', cleanEmail), student);
+    }
+    
     // Keep cache synchronized with newly written data
     studentCache.set(cleanEmail, JSON.parse(JSON.stringify(student)));
   } catch (error) {

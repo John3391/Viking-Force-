@@ -277,3 +277,8 @@ export interface VikingBackup {
   dbExercises: DbExercise[];
 }
 
+
+export interface BackupErrorLog {
+  timestamp: string;
+  errorMessage: string;
+}

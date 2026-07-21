@@ -2918,6 +2918,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       return [];
     }
   });
+  const [backupErrorHistory, setBackupErrorHistory] = useState<any[]>(() => {
+    try {
+      const historyStr = localStorage.getItem('viking_backup_error_history');
+      return historyStr ? JSON.parse(historyStr) : [];
+    } catch (_) {
+      return [];
+    }
+  });
 
   const isInitialMountRef = useRef(true);
   const hasUnsavedChangesRef = useRef(false);
@@ -3106,7 +3114,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     } catch (err: any) {
       console.error('[Viking Force] Falha ao realizar backup automático:', err);
       setConsecutiveBackupFailures(prev => prev + 1);
-      setLastBackupError(err.message || String(err));
+      const errMsg = err.message || String(err);
+      setLastBackupError(errMsg);
+      setBackupErrorHistory(prev => {
+        const newLog = { timestamp: new Date().toISOString(), errorMessage: errMsg };
+        const newHistory = [newLog, ...prev].slice(0, 10);
+        localStorage.setItem('viking_backup_error_history', JSON.stringify(newHistory));
+        return newHistory;
+      });
     } finally {
       // Keep it true for at least 800ms for solid visual feedback
       setTimeout(() => {
@@ -3998,7 +4013,15 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     setExerciseWarmupState({});
     setSessionNote('');
     if (improvedLifts.length === 0) {
-      showToast('Sessão registrada com sucesso!', 'success');
+      setTimeout(() => {
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.5 },
+          colors: ['#d4af37', '#ffffff', '#e0d3a8']
+        });
+        showToast('Treino concluído com honra! Valhalla te aguarda!', 'success');
+      }, 200);
     }
   };
 
@@ -4955,7 +4978,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-viking-gold-dark/3 rounded-full blur-[100px] pointer-events-none z-0"></div>
       
       {/* --- TOAST STACK --- */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-full max-w-sm px-4">
         <AnimatePresence>
           {toasts.map(toast => (
             <motion.div
@@ -14078,6 +14101,23 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             <Cloud className="w-4 h-4" /> Forçar Sincronização Agora
                           </button>
                         </div>
+                        
+                        {backupErrorHistory.length > 0 && (
+                          <div className="bg-[#0d0908] rounded-xl p-4 border border-red-500/20 mt-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <p className="text-[10px] text-red-400/80 uppercase font-bold tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3 h-3" /> Histórico de Falhas (Últimas 10)</p>
+                              <button onClick={() => { setBackupErrorHistory([]); localStorage.removeItem('viking_backup_error_history'); }} className="text-[9px] text-viking-silver/50 hover:text-red-400 uppercase tracking-widest font-bold cursor-pointer">Limpar</button>
+                            </div>
+                            <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                              {backupErrorHistory.map((log, idx) => (
+                                <div key={idx} className="bg-red-950/20 border border-red-500/10 p-2.5 rounded-lg">
+                                  <p className="text-[10px] font-mono text-red-300/60 mb-1">{new Date(log.timestamp).toLocaleString('pt-BR')}</p>
+                                  <p className="text-xs font-mono text-red-300/90 break-words">{log.errorMessage}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -14432,7 +14472,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       {/* Confirm Session Modal (Moved to root level) */}
       <AnimatePresence>
         {confirmSessionModalOpen && pendingSession && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
