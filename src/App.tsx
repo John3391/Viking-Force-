@@ -1,5 +1,6 @@
 import { CardioView } from './components/CardioView';
 import { PrCalculator } from './components/PrCalculator';
+import { VikingWeatherWidget } from './components/VikingWeatherWidget';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -64,7 +65,7 @@ import {
   Minimize2,
   Columns,
   Lock,
-  Calendar, Cloud, CloudLightning, RefreshCw, BarChart3,
+  Calendar, Cloud, CloudLightning, RefreshCw, BarChart3, Sun, Moon,
   Users, Target,
   Camera,
   Image as ImageIcon,
@@ -223,6 +224,7 @@ import VolumeChart from './components/VolumeChart';
 import OneRepMaxChart from './components/OneRepMaxChart';
 import TotalSBDChart from './components/TotalSBDChart';
 import WilksScatterChart from './components/WilksScatterChart';
+import FinancialHealthChart from './components/FinancialHealthChart';
 import FailureSentinel from './components/FailureSentinel';
 import PatentTimeline from './components/PatentTimeline';
 import SbdImpactSimulator from './components/SbdImpactSimulator';
@@ -377,6 +379,12 @@ export default function App() {
   const [activeChartTab, setActiveChartTab] = useState<'volume' | 'weekly' | 'onerm' | 'totalsbd'>('volume');
   const [wilksRatios, setWilksRatios] = useState({ squat: 38, bench: 24, deadlift: 38 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  
+  // Theme state for Dark vs Solar Forge
+  const [theme, setTheme] = useState<'dark' | 'solar'>(() => {
+    const saved = localStorage.getItem('viking_theme');
+    return (saved === 'solar' || saved === 'dark') ? saved : 'dark';
+  });
   
   // Reuseable Drawer state
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
@@ -4972,7 +4980,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
   }, [drawerType, drawerOpen, editorProgram, editorWeek, editorDay, editorExercises, editingStudentEmail, studentsData, trainingProgram]);
 
   return (
-    <div className="min-h-screen bg-[#0d0908] text-[#e0d3a8] font-sans overflow-x-hidden pb-16 relative">
+    <div className={`min-h-screen ${theme === 'solar' ? 'theme-solar-forge bg-[#faf6eb] text-[#38241d]' : 'bg-[#0d0908] text-[#e0d3a8]'} font-sans overflow-x-hidden pb-16 relative`}>
       {/* Immersive backdrop glows */}
       <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-viking-gold/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
       <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-viking-gold-dark/3 rounded-full blur-[100px] pointer-events-none z-0"></div>
@@ -5039,9 +5047,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
             )}
             <div>
-              <span className="font-viking-display text-xl sm:text-2xl font-bold tracking-wider bg-gradient-to-r from-white via-viking-gold to-viking-gold-dark bg-clip-text text-transparent">
-                VIKING FORCE
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="font-viking-display text-xl sm:text-2xl font-bold tracking-wider bg-gradient-to-r from-white via-viking-gold to-viking-gold-dark bg-clip-text text-transparent">
+                  VIKING FORCE
+                </span>
+                {isAutoBackingUp && (
+                  <span className="inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.2)] select-none">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    Sincronizando...
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] text-viking-silver uppercase tracking-widest font-viking-medieval block">Salão de Powerlifting</p>
             </div>
           </div>
@@ -5546,6 +5562,39 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 >
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
                   <span>{isOnline ? 'Modo Online' : 'Modo Offline'}</span>
+                </button>
+
+                {/* Theme Toggle Button (Forja Solar vs Noite de Valhalla) */}
+                <button
+                  onClick={() => {
+                    const nextTheme = theme === 'dark' ? 'solar' : 'dark';
+                    setTheme(nextTheme);
+                    localStorage.setItem('viking_theme', nextTheme);
+                    showToast(
+                      nextTheme === 'solar'
+                        ? 'Forja Solar ativada! Que o calor do sol guie seus treinos! ☀️🔥'
+                        : 'Noite de Valhalla restaurada! Que as sombras protejam seus recordes! 🌙⚔️',
+                      'success'
+                    );
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                    theme === 'solar'
+                      ? 'border-amber-500/40 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+                      : 'border-viking-gold/25 bg-[#140e0c] text-viking-gold hover:text-white hover:border-viking-gold/40'
+                  }`}
+                  title={theme === 'solar' ? "Alternar para Noite de Valhalla (Modo Escuro)" : "Alternar para Forja Solar (Modo Claro)"}
+                >
+                  {theme === 'solar' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-600 animate-pulse shrink-0" />
+                      <span>Forja Solar</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-viking-gold shrink-0" />
+                      <span>Noturno</span>
+                    </>
+                  )}
                 </button>
 
                 {/* Auto Backup Cloud Indicator */}
@@ -6917,31 +6966,90 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       </div>
                     </div>
 
+                    <VikingWeatherWidget />
+
                     {/* PERFORMANCE STATS */}
+                    {isAutoBackingUp && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="mb-3 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-center flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-[10px] font-black uppercase tracking-wider">Sincronizando dados com o servidor...</span>
+                      </motion.div>
+                    )}
+
                     <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
                       
-                      <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                        <Dumbbell className="w-6 h-6 text-viking-gold mx-auto mb-1.5" />
+                      <div className={`bg-[#1a1210]/60 border rounded-2xl p-4 text-center relative overflow-hidden shadow-md transition-all ${
+                        isAutoBackingUp 
+                          ? 'border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-950/5' 
+                          : 'border-viking-gold/15 hover:border-viking-gold/40'
+                      }`}>
+                        {isAutoBackingUp && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                            <Cloud className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                            <span className="text-[7px] text-emerald-400 font-bold uppercase tracking-wider">sync...</span>
+                          </div>
+                        )}
+                        <Dumbbell className={`w-6 h-6 mx-auto mb-1.5 transition-colors ${isAutoBackingUp ? 'text-emerald-400' : 'text-viking-gold'}`} />
                         <p className="text-base sm:text-lg font-black text-white">{calculateTotalVolume().toLocaleString('pt-BR')} kg</p>
                         <p className="text-[9px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Volume Acumulado</p>
                       </div>
 
-                      <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                        <Trophy className="w-6 h-6 text-viking-gold mx-auto mb-1.5" />
+                      <div className={`bg-[#1a1210]/60 border rounded-2xl p-4 text-center relative overflow-hidden shadow-md transition-all ${
+                        isAutoBackingUp 
+                          ? 'border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-950/5' 
+                          : 'border-viking-gold/15 hover:border-viking-gold/40'
+                      }`}>
+                        {isAutoBackingUp && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                            <Cloud className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                            <span className="text-[7px] text-emerald-400 font-bold uppercase tracking-wider">sync...</span>
+                          </div>
+                        )}
+                        <Trophy className={`w-6 h-6 mx-auto mb-1.5 transition-colors ${isAutoBackingUp ? 'text-emerald-400' : 'text-viking-gold'}`} />
                         <p className="text-base sm:text-lg font-black text-white">
                           {(activeStudentProfile.prs?.squat || 0) > 0 ? '3' : '0'}
                         </p>
                         <p className="text-[9px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">PRs Ativos</p>
                       </div>
 
-                      <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                        <History className="w-6 h-6 text-viking-gold mx-auto mb-1.5" />
+                      <div className={`bg-[#1a1210]/60 border rounded-2xl p-4 text-center relative overflow-hidden shadow-md transition-all ${
+                        isAutoBackingUp 
+                          ? 'border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-950/5' 
+                          : 'border-viking-gold/15 hover:border-viking-gold/40'
+                      }`}>
+                        {isAutoBackingUp && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                            <Cloud className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                            <span className="text-[7px] text-emerald-400 font-bold uppercase tracking-wider">sync...</span>
+                          </div>
+                        )}
+                        <History className={`w-6 h-6 mx-auto mb-1.5 transition-colors ${isAutoBackingUp ? 'text-emerald-400' : 'text-viking-gold'}`} />
                         <p className="text-base sm:text-lg font-black text-white">{(activeStudentProfile.sessions || []).length}</p>
                         <p className="text-[9px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">Treinos Registrados</p>
                       </div>
 
-                      <div className="bg-[#1a1210]/60 border border-viking-gold/15 rounded-2xl p-4 text-center relative overflow-hidden shadow-md hover:border-viking-gold/40 transition-all">
-                        <Activity className="w-6 h-6 text-viking-gold mx-auto mb-1.5" />
+                      <div className={`bg-[#1a1210]/60 border rounded-2xl p-4 text-center relative overflow-hidden shadow-md transition-all ${
+                        isAutoBackingUp 
+                          ? 'border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-950/5' 
+                          : 'border-viking-gold/15 hover:border-viking-gold/40'
+                      }`}>
+                        {isAutoBackingUp && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-ping" />
+                            <Cloud className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                            <span className="text-[7px] text-emerald-400 font-bold uppercase tracking-wider">sync...</span>
+                          </div>
+                        )}
+                        <Activity className={`w-6 h-6 mx-auto mb-1.5 transition-colors ${isAutoBackingUp ? 'text-emerald-400' : 'text-viking-gold'}`} />
                         <p className="text-base sm:text-lg font-black text-white">{calculateAvgRpe()}</p>
                         <p className="text-[9px] text-viking-silver uppercase mt-1 tracking-widest font-viking-medieval">RPE Médio</p>
                       </div>
@@ -7675,6 +7783,12 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
               );
             })()}
+
+            {/* Financial Health Bar Chart Section */}
+            <FinancialHealthChart 
+              studentsData={studentsData} 
+              getPlanMonthlyEquivalent={getPlanMonthlyEquivalent} 
+            />
 
             {/* Coach Stats Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

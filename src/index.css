@@ -180,4 +180,197 @@
   background-color: #dfdfdf;
 }
 
+/* ==========================================================================
+   SOLAR FORGE (LIGHT MODE) THEME OVERRIDES
+   ========================================================================== */
+.theme-solar-forge {
+  color-scheme: light;
+  
+  --color-viking-silver: #615049;    /* Dark bronze/brown text */
+  --color-viking-gold: #c2950e;      /* Solar Forge rich gold */
+  --color-viking-gold-dark: #a37905; /* Deep solar bronze */
+  --color-viking-red: #c23b22;       /* Vibrant solar ember red */
+  
+  /* Retain standard dark color for text-viking-dark so buttons keep dark text */
+  --color-viking-dark: #1f110c;
+  
+  background-color: #faf6eb !important;
+  color: #3d241c !important;
+}
+
+/* Base text overrides */
+.theme-solar-forge p,
+.theme-solar-forge span,
+.theme-solar-forge label,
+.theme-solar-forge h1,
+.theme-solar-forge h2,
+.theme-solar-forge h3,
+.theme-solar-forge h4,
+.theme-solar-forge h5,
+.theme-solar-forge h6,
+.theme-solar-forge th,
+.theme-solar-forge td,
+.theme-solar-forge li,
+.theme-solar-forge div:not([class*="bg-red-"]):not([class*="bg-emerald-"]):not([class*="bg-amber-"]):not([class*="bg-viking-gold"]):not([class*="bg-viking-red"]) {
+  text-shadow: none !important;
+}
+
+/* Substring matches for hardcoded deep backgrounds -> warm Solar cream */
+.theme-solar-forge [class*="bg-[#0d0908]"] {
+  background-color: #faf6eb !important;
+}
+.theme-solar-forge [class*="bg-[#0a0706]"] {
+  background-color: #f5eed8 !important;
+}
+.theme-solar-forge [class*="bg-[#0f0908]"] {
+  background-color: #faf6eb !important;
+}
+.theme-solar-forge [class*="bg-[#100a09]"] {
+  background-color: #f7f1dd !important;
+}
+
+/* Hardcoded card/panel backgrounds -> warm forge sand/gold-tan */
+.theme-solar-forge [class*="bg-[#140e0c]"] {
+  background-color: #f3edd8 !important;
+}
+.theme-solar-forge [class*="bg-[#1a1210]"] {
+  background-color: #e9e0c5 !important;
+}
+.theme-solar-forge [class*="bg-[#1c1210]"] {
+  background-color: #e6dac0 !important;
+}
+.theme-solar-forge [class*="bg-[#1d1613]"] {
+  background-color: #ebdcb9 !important;
+}
+.theme-solar-forge [class*="bg-viking-dark"] {
+  background-color: #f3edd8 !important;
+}
+.theme-solar-forge [class*="bg-viking-darker"] {
+  background-color: #faf6eb !important;
+}
+
+/* Semi-transparent overlays -> warm translucent filters */
+.theme-solar-forge [class*="bg-black/40"],
+.theme-solar-forge [class*="bg-[#0d0908]/40"],
+.theme-solar-forge [class*="bg-[#140e0c]/40"],
+.theme-solar-forge [class*="bg-[#1a1210]/60"] {
+  background-color: rgba(225, 215, 190, 0.45) !important;
+  backdrop-filter: blur(12px) !important;
+}
+.theme-solar-forge [class*="bg-[#0f0a08]/98"],
+.theme-solar-forge [class*="bg-[#140e0c]/98"] {
+  background-color: rgba(250, 246, 235, 0.98) !important;
+}
+.theme-solar-forge [class*="bg-[#0f0a08]/90"] {
+  background-color: rgba(250, 246, 235, 0.92) !important;
+}
+
+/* Hardcoded high-contrast light text -> elegant dark bronze-brown */
+.theme-solar-forge [class*="text-[#e0d3a8]"] {
+  color: #4a3227 !important;
+}
+.theme-solar-forge [class*="text-white"] {
+  color: #24130d !important;
+}
+.theme-solar-forge [class*="text-viking-silver"] {
+  color: #615049 !important;
+}
+.theme-solar-forge [class*="text-[#c0b7a8]"] {
+  color: #615049 !important;
+}
+
+/* Preserve original text-white inside buttons, primary badges, and alerts */
+.theme-solar-forge [class*="bg-red-"],
+.theme-solar-forge [class*="bg-emerald-"],
+.theme-solar-forge [class*="bg-amber-"],
+.theme-solar-forge [class*="bg-viking-gold"],
+.theme-solar-forge [class*="bg-viking-red"],
+.theme-solar-forge [class*="bg-gradient-to-"],
+.theme-solar-forge button[class*="bg-"],
+.theme-solar-forge .bg-red-600,
+.theme-solar-forge .bg-emerald-600 {
+  color: #ffffff !important;
+}
+.theme-solar-forge [class*="bg-red-"] *,
+.theme-solar-forge [class*="bg-emerald-"] *,
+.theme-solar-forge [class*="bg-amber-"] *,
+.theme-solar-forge [class*="bg-viking-gold"] *,
+.theme-solar-forge [class*="bg-viking-red"] *,
+.theme-solar-forge [class*="bg-gradient-to-"] *,
+.theme-solar-forge button[class*="bg-"] * {
+  color: #ffffff !important;
+}
+
+/* Explicit text overrides for white text inside buttons to guarantee contrast */
+.theme-solar-forge button span[class*="text-white"],
+.theme-solar-forge button p[class*="text-white"],
+.theme-solar-forge a[class*="bg-"] *,
+.theme-solar-forge button[class*="bg-"] span,
+.theme-solar-forge button[class*="bg-"] p {
+  color: #ffffff !important;
+}
+
+/* Logo/branding - make it vibrant deep bronze/gold on Solar theme */
+.theme-solar-forge .font-viking-display {
+  background: linear-gradient(to right, #452115, #b58807) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Glass panel background adjustments */
+.theme-solar-forge .glass-panel {
+  background: rgba(253, 251, 244, 0.6) !important;
+  border-color: rgba(194, 149, 14, 0.25) !important;
+}
+.theme-solar-forge .glass-panel-hover:hover {
+  background: rgba(253, 251, 244, 0.85) !important;
+  border-color: rgba(194, 149, 14, 0.45) !important;
+}
+
+/* Borders -> solid clean golden bronze outlines */
+.theme-solar-forge [class*="border-viking-gold/15"] {
+  border-color: rgba(194, 149, 14, 0.28) !important;
+}
+.theme-solar-forge [class*="border-viking-gold/20"] {
+  border-color: rgba(194, 149, 14, 0.38) !important;
+}
+.theme-solar-forge [class*="border-viking-gold/40"] {
+  border-color: rgba(194, 149, 14, 0.6) !important;
+}
+.theme-solar-forge [class*="border-viking-gold/10"] {
+  border-color: rgba(194, 149, 14, 0.18) !important;
+}
+.theme-solar-forge [class*="border-[#2a1e1b]"] {
+  border-color: rgba(194, 149, 14, 0.22) !important;
+}
+
+/* Inputs, Textareas & Selection fields */
+.theme-solar-forge input,
+.theme-solar-forge select,
+.theme-solar-forge textarea {
+  background-color: #fffdfa !important;
+  color: #24130d !important;
+  border-color: rgba(194, 149, 14, 0.35) !important;
+}
+.theme-solar-forge input::placeholder,
+.theme-solar-forge textarea::placeholder {
+  color: #8c7b73 !important;
+}
+.theme-solar-forge .search-input-viking {
+  background-color: #fffdfa !important;
+  color: #24130d !important;
+  border-color: rgba(194, 149, 14, 0.35) !important;
+}
+
+/* Scrollbar theme adjustments */
+.theme-solar-forge ::-webkit-scrollbar-track {
+  background: #fdfaf2;
+}
+.theme-solar-forge ::-webkit-scrollbar-thumb {
+  background: rgba(194, 149, 14, 0.45);
+}
+.theme-solar-forge ::-webkit-scrollbar-thumb:hover {
+  background: rgba(194, 149, 14, 0.7);
+}
+
 
