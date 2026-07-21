@@ -89,7 +89,6 @@ import {
   HardDrive,
   MoreVertical,
   MoreHorizontal,
-  Edit,
   Database,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -587,6 +586,8 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [drawerTitle, setDrawerTitle] = useState<string>("");
   const [drawerType, setDrawerType] = useState<string>(""); // 'history' | 'ranking' | 'plans' | 'settings' | 'addStudent' | 'whatsapp' | 'payments' | 'rpeFeedback' | 'editProgram' | 'whatsappSettings'
+  const [viewingStudentEmail, setViewingStudentEmail] = useState<string>("");
+  const [viewingStudentName, setViewingStudentName] = useState<string>("");
   const [trainingProtocols, setTrainingProtocols] = useState<
     TrainingProtocol[]
   >(() => {
@@ -11002,7 +11003,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     : "border-amber-500/20 hover:border-amber-500/60 hover:bg-amber-500/5"
                                 }`}
                               >
-                                <div>
+                                <div className="space-y-1">
                                   <div className="flex justify-between items-start gap-2">
                                     <p className="font-extrabold text-sm text-white group-hover:text-viking-gold transition-colors truncate">
                                       {student.name}
@@ -12587,17 +12588,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6 space-y-5"
               >
                 {/* 1. History Drawer */}
-                {drawerType === "history" && activeStudentProfile && (
-                  <WorkoutHistory
-                    activeStudentProfile={activeStudentProfile}
-                    studentsData={studentsData}
-                    handleDownloadPDF={handleDownloadPDF}
-                    handleDownloadMonthlySummaryPDF={
-                      handleDownloadMonthlySummaryPDF
-                    }
-                    drawerContentRef={drawerContentRef}
-                  />
-                )}
+                {drawerType === "history" &&
+                  (() => {
+                    const profileToView = currentUser?.role === "trainer" && viewingStudentEmail ? studentsData[viewingStudentEmail] : activeStudentProfile;
+                    if (!profileToView) return null;
+                    return (
+                      <WorkoutHistory
+                        activeStudentProfile={profileToView}
+                        studentsData={studentsData}
+                        handleDownloadPDF={handleDownloadPDF}
+                        handleDownloadMonthlySummaryPDF={
+                          handleDownloadMonthlySummaryPDF
+                        }
+                        drawerContentRef={drawerContentRef}
+                      />
+                    );
+                  })()}
 
                 {/* Calendar Drawer */}
                 {drawerType === "calendar" && (
@@ -23663,18 +23669,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               exit={{ x: "100%" }}
               className="fixed top-0 right-0 h-full w-4/5 max-w-sm bg-[#140e0c]/98 border-l border-viking-gold/25 p-6 z-50 md:hidden flex flex-col justify-between backdrop-blur-xl"
             >
-              <div className="space-y-6">
-                <div className="flex justify-between items-center pb-4 border-b border-viking-gold/15">
-                  <span className="font-viking-display text-viking-gold font-bold">
-                    MENU DO GUERREIRO
-                  </span>
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="text-viking-silver hover:text-viking-gold cursor-pointer"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
+              <div className="flex justify-between items-center pb-4 border-b border-viking-gold/15 shrink-0">
+                <span className="font-viking-display text-viking-gold font-bold">
+                  MENU DO GUERREIRO
+                </span>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-viking-silver hover:text-viking-gold cursor-pointer"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-hide pr-2 py-4 space-y-6">
 
                 <div className="flex flex-col gap-2">
                   <button
@@ -24009,7 +24016,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-viking-gold/15">
+              <div className="pt-6 mt-4 shrink-0 border-t border-viking-gold/15 relative z-10 bg-[#140e0c]/98">
                 <button
                   onClick={handleLogout}
                   className="w-full py-3 bg-viking-red/10 hover:bg-viking-red/25 text-[#f87171] border border-viking-red/20 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
