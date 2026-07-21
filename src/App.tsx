@@ -12069,7 +12069,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               </div>
                             </div>
 
-                            <div className="flex flex-col gap-1.5 mt-auto">
+                            <div className="flex flex-col space-y-1 mt-auto">
                               <div className="grid grid-cols-2 gap-1.5">
                                 <div className="flex flex-col items-center justify-center bg-[#1a1210] p-1 rounded-md border border-viking-gold/10">
                                   <span className="text-[7px] text-viking-silver/60 uppercase font-bold tracking-widest mb-0.5">
@@ -12148,7 +12148,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                               setDrawerOpen(true);
                             }
                           }}
-                          className={`relative p-4 rounded-2xl border transition-all cursor-pointer shadow-md flex flex-col gap-2.5 ${
+                          className={`relative p-3 rounded-2xl border transition-all cursor-pointer shadow-md flex flex-col space-y-1 ${
                             isSelected
                               ? "bg-viking-gold/10 border-viking-gold shadow-[0_0_15px_rgba(212,175,55,0.2)]"
                               : "bg-[#0d0908]/80 border-viking-gold/20 hover:border-viking-gold/50 hover:bg-[#140e0c]"
@@ -12156,7 +12156,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         >
                           {isBatchMode && (
                             <div
-                              className="absolute top-4 right-4 z-10"
+                              className="absolute top-3 right-3 z-10"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
@@ -12178,9 +12178,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             </div>
                           )}
                           <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3 pr-6">
+                            <div className="flex items-center gap-2 pr-6">
                               {s.photoUrl ? (
-                                <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-viking-gold/30">
+                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border-2 border-viking-gold/30">
                                   <img
                                     src={s.photoUrl}
                                     alt={s.name}
@@ -12188,8 +12188,8 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                   />
                                 </div>
                               ) : (
-                                <div className="w-10 h-10 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0">
-                                  <User className="w-5 h-5 text-viking-gold" />
+                                <div className="w-8 h-8 rounded-full bg-viking-darker border border-viking-gold/20 flex items-center justify-center shrink-0">
+                                  <User className="w-4 h-4 text-viking-gold" />
                                 </div>
                               )}
                               <div className="flex flex-col min-w-0">
@@ -12285,7 +12285,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             )}
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div className="grid grid-cols-3 gap-1.5 mt-0.5">
                             <div className="bg-[#1a1210] p-2 rounded-xl border border-viking-gold/10">
                               <p className="text-[9px] text-viking-silver/60 uppercase font-bold tracking-wider mb-1">
                                 Status Plano
@@ -12335,7 +12335,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between mt-1 pt-3 border-t border-viking-gold/10">
+                          <div className="flex items-center justify-between pt-2 border-t border-viking-gold/10">
                             {hasTrainedToday ? (
                               <span
                                 className="inline-flex items-center gap-1 text-emerald-400 font-bold text-[10px]"
@@ -23684,16 +23684,6 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               <div className="flex-1 overflow-y-auto scrollbar-hide pr-2 py-4 space-y-6">
 
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => {
-                      setActiveTab("home");
-                      setMobileMenuOpen(false);
-                    }}
-                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <Activity className="w-4 h-4" /> Painel Geral
-                  </button>
-
                   {currentUser?.role === "student" ? (
                     <>
                       <motion.button
