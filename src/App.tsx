@@ -727,6 +727,30 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [workoutViewMode, setWorkoutViewMode] = useState<"list" | "slide">(
     "slide",
   );
+  const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
+  const [autoBackupFrequency, setAutoBackupFrequency] = useState<
+    "daily" | "weekly" | "monthly"
+  >(
+    () =>
+      (localStorage.getItem("viking_backup_frequency") as
+        | "daily"
+        | "weekly"
+        | "monthly") || "weekly",
+  );
+
+  const handleSetBackupFrequency = (freq: "daily" | "weekly" | "monthly") => {
+    setAutoBackupFrequency(freq);
+    localStorage.setItem("viking_backup_frequency", freq);
+    const labels = {
+      daily: "Diário",
+      weekly: "Semanal",
+      monthly: "Mensal",
+    };
+    showToast(
+      `Frequência de backup automático alterada para: ${labels[freq]}`,
+      "success",
+    );
+  };
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
   const [slideDirection, setSlideDirection] = useState<"forward" | "backward">(
     "forward",
@@ -735,6 +759,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [selectedDay, setSelectedDay] = useState<string>(
     () => localStorage.getItem("viking_last_day") || "A",
   );
+
   const [trainerPreviewWeek, setTrainerPreviewWeek] = useState<number>(1);
   const [trainerPreviewDay, setTrainerPreviewDay] = useState<string>("A");
   useEffect(() => {
@@ -1176,6 +1201,50 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
         },
       }
     : null;
+
+  // Keyboard shortcuts for Focus Mode (ArrowLeft, ArrowRight, Escape)
+  useEffect(() => {
+    if (!workoutModalOpen || !isFocusMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const list =
+        (activeStudentProfile?.customProgram || trainingProgram).weeks[
+          selectedWeek
+        ]?.[selectedDay] || [];
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSlideDirection("backward");
+        setCurrentExerciseIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setSlideDirection("forward");
+        setCurrentExerciseIndex((prev) => Math.min(list.length - 1, prev + 1));
+      } else if (e.key === "Escape") {
+        setIsFocusMode(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    workoutModalOpen,
+    isFocusMode,
+    selectedWeek,
+    selectedDay,
+    activeStudentProfile,
+    trainingProgram,
+  ]);
 
   useEffect(() => {
     localStorage.setItem("viking_plans", JSON.stringify(vikingPlans));
@@ -3154,6 +3223,374 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     } catch (err) {
       console.error(err);
       showToast("Erro ao exportar PDF Mensal.", "error");
+    }
+  };
+
+  const handleDownloadAnnualSummaryPDF = (profile: StudentProfile) => {
+    try {
+      const doc = new jsPDF();
+      const pageHeight = doc.internal.pageSize.height;
+      const pageWidth = doc.internal.pageSize.width;
+
+      // Header Banner
+      doc.setFillColor(13, 9, 8);
+      doc.rect(0, 0, pageWidth, 38, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(197, 160, 89);
+      doc.text("VIKING FORCE", 20, 20);
+
+      doc.setFontSize(11);
+      doc.setTextColor(220, 210, 180);
+      doc.text("RELATÓRIO CONSOLIDADO DE DESEMPENHO ANUAL", 20, 29);
+
+      doc.setDrawColor(197, 160, 89);
+      doc.setLineWidth(1);
+      doc.line(20, 38, pageWidth - 20, 38);
+
+      // Student info & Date
+      let y = 48;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Guerreiro(a):", 20, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(profile.name, 48, y);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Plano:", 120, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(profile.plan || "Ativo", 138, y);
+
+      y += 6;
+      doc.setFont("helvetica", "bold");
+      doc.text("Ano de Referência:", 20, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${new Date().getFullYear()}`, 58, y);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Data de Emissão:", 120, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(new Date().toLocaleDateString("pt-BR"), 153, y);
+
+      y += 10;
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.5);
+      doc.line(20, y, pageWidth - 20, y);
+      y += 10;
+
+      // 1. STATS OVERVIEW BOXES
+      const sessions = profile.sessions || [];
+      const totalSessionsCount = sessions.length;
+
+      let totalVolume = 0;
+      let totalRpeSum = 0;
+      let rpeCount = 0;
+
+      sessions.forEach((sess) => {
+        totalVolume += sess.totalAchievedVolume || 0;
+        if (sess.avgRPE && !isNaN(sess.avgRPE) && sess.avgRPE > 0) {
+          totalRpeSum += sess.avgRPE;
+          rpeCount++;
+        }
+      });
+
+      const avgRpeAnnual = rpeCount > 0 ? (totalRpeSum / rpeCount).toFixed(1) : "N/A";
+      const totalCardioSessions = profile.cardioSessions?.length || 0;
+
+      // Box 1: Sessions & Volume & RPE
+      doc.setFillColor(248, 245, 238);
+      doc.rect(20, y, pageWidth - 40, 26, "F");
+      doc.setDrawColor(197, 160, 89);
+      doc.rect(20, y, pageWidth - 40, 26, "S");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(197, 160, 89);
+      doc.text("MÉTRICAS GERAIS DO ANO", 25, y + 7);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(60, 60, 60);
+      doc.text(`Total de Sessões: ${totalSessionsCount}`, 25, y + 15);
+      doc.text(`Volume de Carga Total: ${totalVolume.toLocaleString("pt-BR")} kg`, 85, y + 15);
+      doc.text(`RPE Médio Anual: ${avgRpeAnnual}`, 150, y + 15);
+
+      doc.text(`Cardio Concluído: ${totalCardioSessions} sessões`, 25, y + 21);
+      const curSquat = profile.prs?.squat || 0;
+      const curBench = profile.prs?.bench || 0;
+      const curDeadlift = profile.prs?.deadlift || 0;
+      const curTotalSBD = curSquat + curBench + curDeadlift;
+      doc.text(`Total SBD Atual: ${curTotalSBD} kg`, 85, y + 21);
+
+      y += 34;
+
+      // 2. EVOLUÇÃO DE RECORDES PESSOAIS (PRs)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(13, 9, 8);
+      doc.text("1. EVOLUÇÃO E PROGRESSÃO DE RECORDE PESSOAL (PRs)", 20, y);
+      y += 6;
+
+      const prevSquat = profile.prevPrs?.squat || 0;
+      const prevBench = profile.prevPrs?.bench || 0;
+      const prevDeadlift = profile.prevPrs?.deadlift || 0;
+      const prevTotalSBD = prevSquat + prevBench + prevDeadlift;
+
+      const deltaSquat = curSquat - prevSquat;
+      const deltaBench = curBench - prevBench;
+      const deltaDeadlift = curDeadlift - prevDeadlift;
+      const deltaTotal = curTotalSBD - prevTotalSBD;
+
+      // PR Table Header
+      doc.setFillColor(13, 9, 8);
+      doc.rect(20, y, pageWidth - 40, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(197, 160, 89);
+      doc.text("LIFT / MOVIMENTO", 23, y + 5);
+      doc.text("INICIAL (PREV)", 80, y + 5);
+      doc.text("ATUAL (RECORD)", 120, y + 5);
+      doc.text("EVOLUÇÃO (DELTA)", 160, y + 5);
+      y += 7;
+
+      const prRows = [
+        { name: "Agachamento (Squat)", prev: prevSquat, curr: curSquat, delta: deltaSquat, isTotal: false },
+        { name: "Supino (Bench Press)", prev: prevBench, curr: curBench, delta: deltaBench, isTotal: false },
+        { name: "Levantamento Terra (Deadlift)", prev: prevDeadlift, curr: curDeadlift, delta: deltaDeadlift, isTotal: false },
+        { name: "TOTAL SBD", prev: prevTotalSBD, curr: curTotalSBD, delta: deltaTotal, isTotal: true },
+      ];
+
+      prRows.forEach((row, idx) => {
+        if (row.isTotal) {
+          doc.setFillColor(240, 235, 220);
+          doc.rect(20, y, pageWidth - 40, 7, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(13, 9, 8);
+        } else {
+          if (idx % 2 === 0) doc.setFillColor(250, 250, 250);
+          else doc.setFillColor(242, 242, 242);
+          doc.rect(20, y, pageWidth - 40, 6, "F");
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+        }
+
+        doc.setFontSize(8.5);
+        doc.text(row.name, 23, y + 4.5);
+        doc.text(row.prev > 0 ? `${row.prev} kg` : "-", 80, y + 4.5);
+        doc.text(row.curr > 0 ? `${row.curr} kg` : "-", 120, y + 4.5);
+
+        const deltaStr = row.delta > 0 ? `+${row.delta} kg` : row.delta < 0 ? `${row.delta} kg` : "0 kg";
+        if (row.delta > 0) doc.setTextColor(16, 124, 65);
+        else if (row.delta < 0) doc.setTextColor(180, 40, 40);
+        else doc.setTextColor(100, 100, 100);
+
+        doc.setFont("helvetica", "bold");
+        doc.text(deltaStr, 160, y + 4.5);
+
+        y += row.isTotal ? 8 : 6;
+      });
+
+      y += 8;
+
+      // 3. RESUMO MÊS A MÊS DO ANO
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(13, 9, 8);
+      doc.text("2. CONSOLIDADO DE DESEMPENHO MÊS A MÊS", 20, y);
+      y += 6;
+
+      const monthlyData: Record<
+        string,
+        {
+          sessions: number;
+          totalVolume: number;
+          totalRPE: number;
+          rpeCount: number;
+          maxSquat: number;
+          maxBench: number;
+          maxDeadlift: number;
+        }
+      > = {};
+
+      sessions.forEach((sess) => {
+        const parts = sess.date.split("/");
+        if (parts.length >= 3) {
+          const mm = parts[1].padStart(2, "0");
+          const yyyy = parts[2];
+          const monthYear = `${mm}/${yyyy}`;
+
+          if (!monthlyData[monthYear]) {
+            monthlyData[monthYear] = {
+              sessions: 0,
+              totalVolume: 0,
+              totalRPE: 0,
+              rpeCount: 0,
+              maxSquat: 0,
+              maxBench: 0,
+              maxDeadlift: 0,
+            };
+          }
+          const md = monthlyData[monthYear];
+          md.sessions++;
+          md.totalVolume += sess.totalAchievedVolume || 0;
+
+          if (sess.avgRPE !== undefined && !isNaN(sess.avgRPE) && sess.avgRPE > 0) {
+            md.totalRPE += sess.avgRPE;
+            md.rpeCount++;
+          }
+
+          if (sess.prsAtSession) {
+            if (sess.prsAtSession.squat && sess.prsAtSession.squat > md.maxSquat) md.maxSquat = sess.prsAtSession.squat;
+            if (sess.prsAtSession.bench && sess.prsAtSession.bench > md.maxBench) md.maxBench = sess.prsAtSession.bench;
+            if (sess.prsAtSession.deadlift && sess.prsAtSession.deadlift > md.maxDeadlift) md.maxDeadlift = sess.prsAtSession.deadlift;
+          }
+        }
+      });
+
+      const months = Object.keys(monthlyData).sort((a, b) => {
+        const [mA, yA] = a.split("/").map(Number);
+        const [mB, yB] = b.split("/").map(Number);
+        if (yA !== yB) return yB - yA;
+        return mB - mA;
+      });
+
+      if (months.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhum registro mensal de sessões encontrado.", 20, y);
+        y += 8;
+      } else {
+        doc.setFillColor(13, 9, 8);
+        doc.rect(20, y, pageWidth - 40, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(197, 160, 89);
+        doc.text("MÊS/ANO", 23, y + 5);
+        doc.text("SESSÕES", 60, y + 5);
+        doc.text("VOLUME (KG)", 95, y + 5);
+        doc.text("RPE MÉD.", 135, y + 5);
+        doc.text("MAIOR CARGA / PRS (S/B/D)", 160, y + 5);
+        y += 7;
+
+        months.forEach((month, idx) => {
+          if (y > pageHeight - 30) {
+            doc.addPage();
+            y = 20;
+          }
+
+          const md = monthlyData[month];
+          if (idx % 2 === 0) doc.setFillColor(252, 252, 252);
+          else doc.setFillColor(244, 244, 244);
+          doc.rect(20, y, pageWidth - 40, 6.5, "F");
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8);
+          doc.setTextColor(50, 50, 50);
+          doc.text(month, 23, y + 4.5);
+
+          doc.setFont("helvetica", "normal");
+          doc.text(`${md.sessions} treino(s)`, 60, y + 4.5);
+          doc.text(`${md.totalVolume.toLocaleString("pt-BR")} kg`, 95, y + 4.5);
+
+          const rpeAvgStr = md.rpeCount > 0 ? (md.totalRPE / md.rpeCount).toFixed(1) : "-";
+          doc.text(rpeAvgStr, 135, y + 4.5);
+
+          const prsStr = `${md.maxSquat > 0 ? md.maxSquat : "-"}/${md.maxBench > 0 ? md.maxBench : "-"}/${md.maxDeadlift > 0 ? md.maxDeadlift : "-"} kg`;
+          doc.text(prsStr, 160, y + 4.5);
+
+          y += 6.5;
+        });
+      }
+
+      y += 10;
+
+      // 4. HISTÓRICO DE SESSÕES INDIVIDUAIS
+      if (y > pageHeight - 40) {
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(13, 9, 8);
+      doc.text("3. HISTÓRICO DETALHADO DE SESSÕES DO ANO", 20, y);
+      y += 8;
+
+      if (sessions.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Nenhuma sessão registrada no período.", 20, y);
+      } else {
+        sessions.forEach((sess) => {
+          if (y > pageHeight - 35) {
+            doc.addPage();
+            y = 20;
+          }
+
+          doc.setFillColor(248, 245, 238);
+          doc.rect(20, y, pageWidth - 40, 7, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8.5);
+          doc.setTextColor(197, 160, 89);
+          doc.text(`[${sess.date}] ${sess.sessionName || "Treino"}`, 23, y + 5);
+
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(60, 60, 60);
+          doc.text(`RPE: ${sess.avgRPE ? sess.avgRPE.toFixed(1) : "N/A"} | Vol: ${sess.totalAchievedVolume || 0} kg`, pageWidth - 80, y + 5);
+
+          y += 9;
+
+          if (sess.exercises && sess.exercises.length > 0) {
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(80, 80, 80);
+
+            sess.exercises.forEach((ex) => {
+              if (y > pageHeight - 25) {
+                doc.addPage();
+                y = 20;
+              }
+
+              let setsDetail = "";
+              if (ex.sets && ex.sets.length > 0) {
+                setsDetail = ex.sets
+                  .map((s) => `${s.weight}kg x ${s.reps}`)
+                  .join(", ");
+              } else if (ex.achievedVolume) {
+                setsDetail = `Vol: ${ex.achievedVolume} kg`;
+              }
+
+              doc.text(`• ${ex.name}: ${setsDetail || "Concluído"} (RPE: ${ex.rpe || "N/A"})`, 26, y);
+              y += 5;
+            });
+          }
+
+          if (sess.note) {
+            if (y > pageHeight - 25) {
+              doc.addPage();
+              y = 20;
+            }
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(7.5);
+            doc.setTextColor(120, 100, 60);
+            doc.text(`Nota: "${sess.note}"`, 26, y);
+            y += 5;
+          }
+
+          y += 4;
+        });
+      }
+
+      const fileName = `viking_force_${profile.name.toLowerCase().replace(/\s+/g, "_")}_desempenho_anual.pdf`;
+      doc.save(fileName);
+      showToast("Relatório de Desempenho Anual exportado com sucesso!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Erro ao exportar Relatório Anual em PDF.", "error");
     }
   };
 
@@ -8452,6 +8889,41 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         Iniciar Treino
                       </button>
                       <button
+                        onClick={() => {
+                          if (
+                            activeStudentProfile.notifications &&
+                            activeStudentProfile.notifications.length > 0
+                          ) {
+                            const latestPrescription =
+                              activeStudentProfile.notifications.find(
+                                (n) =>
+                                  n.message.includes("Novo treino") &&
+                                  n.actionData,
+                              );
+                            if (
+                              latestPrescription &&
+                              latestPrescription.actionData
+                            ) {
+                              setSelectedWeek(
+                                latestPrescription.actionData.week,
+                              );
+                              setSelectedDay(latestPrescription.actionData.day);
+                              setSessionRpeState({});
+                              setExerciseFailureState({});
+                            }
+                          }
+                          setIsFocusMode(true);
+                          setWorkoutViewMode("slide");
+                          setCurrentExerciseIndex(0);
+                          setWorkoutModalOpen(true);
+                        }}
+                        className="px-4 py-2.5 bg-viking-gold/20 hover:bg-viking-gold/30 text-viking-gold border border-viking-gold/40 hover:border-viking-gold text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                        title="Iniciar direto no Modo de Foco sem distrações"
+                      >
+                        <Target className="w-4 h-4 text-viking-gold" />
+                        Modo Foco
+                      </button>
+                      <button
                         onClick={async () => {
                           const updatedProfile = {
                             ...activeStudentProfile,
@@ -12774,7 +13246,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* 1. History Drawer */}
                 {drawerType === "history" &&
                   (() => {
-                    const profileToView = currentUser?.role === "trainer" && viewingStudentEmail ? studentsData[viewingStudentEmail] : activeStudentProfile;
+                    const profileToView = currentUser?.role === "trainer" && viewingStudentEmail ? (studentsData[viewingStudentEmail.toLowerCase()] || studentsData[viewingStudentEmail]) : activeStudentProfile;
                     if (!profileToView) return null;
                     return (
                       <WorkoutHistory
@@ -12783,6 +13255,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         handleDownloadPDF={handleDownloadPDF}
                         handleDownloadMonthlySummaryPDF={
                           handleDownloadMonthlySummaryPDF
+                        }
+                        handleDownloadAnnualSummaryPDF={
+                          handleDownloadAnnualSummaryPDF
                         }
                         drawerContentRef={drawerContentRef}
                       />
@@ -15650,7 +16125,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* Public Note / Parabenizar Panel */}
                 {drawerType === "publicNote" &&
                   (() => {
-                    const s = studentsData[activeNoteStudentEmail];
+                    const s = activeNoteStudentEmail ? (studentsData[activeNoteStudentEmail.toLowerCase()] || studentsData[activeNoteStudentEmail]) : null;
                     if (!s)
                       return (
                         <p className="text-sm text-viking-silver">
@@ -15746,7 +16221,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* 5.5 Student Action Panel */}
                 {drawerType === "studentPanel" &&
                   (() => {
-                    const s = studentsData[editingStudentEmail];
+                    const s = editingStudentEmail ? (studentsData[editingStudentEmail.toLowerCase()] || studentsData[editingStudentEmail]) : null;
                     if (!s)
                       return (
                         <p className="text-viking-silver">
@@ -16077,7 +16552,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* 5.6 Trainer's Student Cardio Prescription & Tracking */}
                 {drawerType === "studentCardio" &&
                   (() => {
-                    const s = studentsData[editingStudentEmail];
+                    const s = editingStudentEmail ? (studentsData[editingStudentEmail.toLowerCase()] || studentsData[editingStudentEmail]) : null;
                     if (!s)
                       return (
                         <p className="text-viking-silver">
@@ -16199,7 +16674,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 {/* Dashboard & Gráficos do Aluno (Visão do Treinador) */}
                 {drawerType === "studentDashboard" &&
                   (() => {
-                    const s = studentsData[editingStudentEmail];
+                    const s = editingStudentEmail ? (studentsData[editingStudentEmail.toLowerCase()] || studentsData[editingStudentEmail]) : null;
                     if (!s)
                       return (
                         <p className="text-viking-silver">
@@ -21174,64 +21649,159 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           snapshot completo dos dados da guilda na nuvem.
                         </p>
 
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                          <label className="text-xs font-bold text-viking-silver uppercase flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-viking-gold" />
+                            <span>Intervalo de Salvaguarda:</span>
+                          </label>
+                          <select
+                            value={autoBackupFrequency}
+                            onChange={(e) =>
+                              handleSetBackupFrequency(
+                                e.target.value as "daily" | "weekly" | "monthly",
+                              )
+                            }
+                            className="bg-[#140e0c] text-viking-gold border border-viking-gold/40 focus:border-viking-gold rounded-xl px-3 py-2 text-xs font-bold uppercase cursor-pointer outline-none shadow-md transition-colors hover:border-viking-gold"
+                          >
+                            <option value="daily">Diário (Todos os dias à meia-noite)</option>
+                            <option value="weekly">Semanal (Todo domingo às 00:00)</option>
+                            <option value="monthly">Mensal (Todo dia 1º do mês)</option>
+                          </select>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                           <button
-                            onClick={() =>
-                              showToast(
-                                "Frequência de backup alterada para: Diário",
-                                "success",
-                              )
-                            }
-                            className="px-4 py-3 bg-[#140e0c] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold/50 rounded-xl transition-all flex flex-col items-center gap-2"
+                            type="button"
+                            onClick={() => handleSetBackupFrequency("daily")}
+                            className={`px-4 py-3 bg-[#140e0c] rounded-xl transition-all flex flex-col items-center gap-2 cursor-pointer relative overflow-hidden ${
+                              autoBackupFrequency === "daily"
+                                ? "border-2 border-viking-gold bg-viking-gold/10 shadow-[0_0_15px_rgba(212,175,55,0.25)]"
+                                : "border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/5"
+                            }`}
                           >
-                            <span className="p-2 rounded-full bg-viking-gold/10 text-viking-gold">
+                            {autoBackupFrequency === "daily" && (
+                              <span className="absolute top-1.5 right-1.5 text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                Ativo
+                              </span>
+                            )}
+                            <span
+                              className={`p-2 rounded-full ${
+                                autoBackupFrequency === "daily"
+                                  ? "bg-viking-gold text-viking-dark font-bold"
+                                  : "bg-viking-gold/10 text-viking-gold"
+                              }`}
+                            >
                               <Calendar className="w-5 h-5" />
                             </span>
-                            <span className="text-xs font-bold text-white uppercase">
+                            <span
+                              className={`text-xs font-bold uppercase ${
+                                autoBackupFrequency === "daily"
+                                  ? "text-viking-gold"
+                                  : "text-white"
+                              }`}
+                            >
                               Diário
                             </span>
-                            <span className="text-[9px] text-viking-silver text-center">
-                              Snapshot todos os dias à meia-noite
+                            <span
+                              className={`text-[9px] text-center ${
+                                autoBackupFrequency === "daily"
+                                  ? "text-viking-gold/90 font-bold"
+                                  : "text-viking-silver"
+                              }`}
+                            >
+                              {autoBackupFrequency === "daily"
+                                ? "Ativo (Meia-noite)"
+                                : "Snapshot todos os dias"}
                             </span>
                           </button>
 
                           <button
-                            onClick={() =>
-                              showToast(
-                                "Frequência de backup alterada para: Semanal",
-                                "success",
-                              )
-                            }
-                            className="px-4 py-3 bg-[#140e0c] border-viking-gold bg-viking-gold/10 border-2 shadow-[0_0_10px_rgba(212,175,55,0.2)] rounded-xl transition-all flex flex-col items-center gap-2"
+                            type="button"
+                            onClick={() => handleSetBackupFrequency("weekly")}
+                            className={`px-4 py-3 bg-[#140e0c] rounded-xl transition-all flex flex-col items-center gap-2 cursor-pointer relative overflow-hidden ${
+                              autoBackupFrequency === "weekly"
+                                ? "border-2 border-viking-gold bg-viking-gold/10 shadow-[0_0_15px_rgba(212,175,55,0.25)]"
+                                : "border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/5"
+                            }`}
                           >
-                            <span className="p-2 rounded-full bg-viking-gold text-viking-dark">
+                            {autoBackupFrequency === "weekly" && (
+                              <span className="absolute top-1.5 right-1.5 text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                Ativo
+                              </span>
+                            )}
+                            <span
+                              className={`p-2 rounded-full ${
+                                autoBackupFrequency === "weekly"
+                                  ? "bg-viking-gold text-viking-dark font-bold"
+                                  : "bg-viking-gold/10 text-viking-gold"
+                              }`}
+                            >
                               <Clock className="w-5 h-5" />
                             </span>
-                            <span className="text-xs font-bold text-viking-gold uppercase">
+                            <span
+                              className={`text-xs font-bold uppercase ${
+                                autoBackupFrequency === "weekly"
+                                  ? "text-viking-gold"
+                                  : "text-white"
+                              }`}
+                            >
                               Semanal
                             </span>
-                            <span className="text-[9px] text-viking-gold/70 text-center">
-                              Ativo (Domingos)
+                            <span
+                              className={`text-[9px] text-center ${
+                                autoBackupFrequency === "weekly"
+                                  ? "text-viking-gold/90 font-bold"
+                                  : "text-viking-silver"
+                              }`}
+                            >
+                              {autoBackupFrequency === "weekly"
+                                ? "Ativo (Domingos)"
+                                : "Snapshot aos domingos"}
                             </span>
                           </button>
 
                           <button
-                            onClick={() =>
-                              showToast(
-                                "Frequência de backup alterada para: Mensal",
-                                "success",
-                              )
-                            }
-                            className="px-4 py-3 bg-[#140e0c] hover:bg-viking-gold/10 border border-viking-gold/20 hover:border-viking-gold/50 rounded-xl transition-all flex flex-col items-center gap-2"
+                            type="button"
+                            onClick={() => handleSetBackupFrequency("monthly")}
+                            className={`px-4 py-3 bg-[#140e0c] rounded-xl transition-all flex flex-col items-center gap-2 cursor-pointer relative overflow-hidden ${
+                              autoBackupFrequency === "monthly"
+                                ? "border-2 border-viking-gold bg-viking-gold/10 shadow-[0_0_15px_rgba(212,175,55,0.25)]"
+                                : "border border-viking-gold/20 hover:border-viking-gold/50 hover:bg-viking-gold/5"
+                            }`}
                           >
-                            <span className="p-2 rounded-full bg-viking-gold/10 text-viking-gold">
+                            {autoBackupFrequency === "monthly" && (
+                              <span className="absolute top-1.5 right-1.5 text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                Ativo
+                              </span>
+                            )}
+                            <span
+                              className={`p-2 rounded-full ${
+                                autoBackupFrequency === "monthly"
+                                  ? "bg-viking-gold text-viking-dark font-bold"
+                                  : "bg-viking-gold/10 text-viking-gold"
+                              }`}
+                            >
                               <Database className="w-5 h-5" />
                             </span>
-                            <span className="text-xs font-bold text-white uppercase">
+                            <span
+                              className={`text-xs font-bold uppercase ${
+                                autoBackupFrequency === "monthly"
+                                  ? "text-viking-gold"
+                                  : "text-white"
+                              }`}
+                            >
                               Mensal
                             </span>
-                            <span className="text-[9px] text-viking-silver text-center">
-                              Dia 1 de cada mês
+                            <span
+                              className={`text-[9px] text-center ${
+                                autoBackupFrequency === "monthly"
+                                  ? "text-viking-gold/90 font-bold"
+                                  : "text-viking-silver"
+                              }`}
+                            >
+                              {autoBackupFrequency === "monthly"
+                                ? "Ativo (1º de cada mês)"
+                                : "Snapshot dia 1º de cada mês"}
                             </span>
                           </button>
                         </div>
@@ -21751,6 +22321,31 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Focus Mode Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isFocusMode;
+                      setIsFocusMode(next);
+                      if (next) setWorkoutViewMode("slide");
+                      showToast(
+                        next
+                          ? "🎯 Modo de Foco Ativado! Exibindo apenas o exercício atual sem distrações."
+                          : "Modo Padrão Restaurado.",
+                        "info",
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer ${
+                      isFocusMode
+                        ? "bg-viking-gold text-viking-dark border-viking-gold shadow-[0_0_12px_rgba(212,175,55,0.6)] font-black"
+                        : "bg-viking-gold/10 hover:bg-viking-gold/20 border-viking-gold/30 text-viking-gold hover:text-white"
+                    }`}
+                    title={isFocusMode ? "Sair do Modo de Foco" : "Ativar Modo de Foco"}
+                  >
+                    <Target className="w-4 h-4 shrink-0" />
+                    <span>{isFocusMode ? "Sair do Foco" : "Modo Foco 🎯"}</span>
+                  </button>
+
                   {/* Export Session Button */}
                   <button
                     type="button"
@@ -21808,7 +22403,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               </div>
               <div className="flex-1 overflow-y-auto md:overflow-hidden px-4 py-6 sm:px-6 sm:py-8 pb-36 md:p-0 space-y-5 md:space-y-0 md:flex md:flex-row">
                 {/* Left Column (Settings, timer, progress, notes) */}
-                <div className="flex flex-col space-y-5 md:space-y-6 w-full md:w-[360px] md:min-w-[360px] md:border-r md:border-viking-gold/15 md:p-6 md:overflow-y-auto h-full scrollbar-thin scrollbar-thumb-viking-gold/25 scrollbar-track-transparent">
+                <div className={`flex flex-col space-y-5 md:space-y-6 w-full md:w-[360px] md:min-w-[360px] md:border-r md:border-viking-gold/15 md:p-6 md:overflow-y-auto h-full scrollbar-thin scrollbar-thumb-viking-gold/25 scrollbar-track-transparent ${isFocusMode ? "hidden" : ""}`}>
                   {/* Workout Selector */}
                   <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                     <p className="text-xs text-viking-gold font-bold uppercase tracking-wider">
@@ -21903,25 +22498,40 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                     <div className="flex gap-1.5 bg-black/40 p-1 rounded-lg border border-viking-gold/10 self-start sm:self-auto shrink-0">
                       <button
                         type="button"
-                        onClick={() => setWorkoutViewMode("list")}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer ${workoutViewMode === "list" ? "bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]" : "text-viking-silver hover:text-viking-gold"}`}
+                        onClick={() => {
+                          setIsFocusMode(false);
+                          setWorkoutViewMode("list");
+                        }}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer ${!isFocusMode && workoutViewMode === "list" ? "bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]" : "text-viking-silver hover:text-viking-gold"}`}
                       >
                         Lista Completa
                       </button>
                       <button
                         type="button"
                         onClick={() => {
+                          setIsFocusMode(false);
+                          setWorkoutViewMode("slide");
+                          setCurrentExerciseIndex(0);
+                        }}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${!isFocusMode && workoutViewMode === "slide" ? "bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]" : "text-viking-silver hover:text-viking-gold"}`}
+                      >
+                        Modo Slide
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFocusMode(true);
                           setWorkoutViewMode("slide");
                           setCurrentExerciseIndex(0);
                           showToast(
-                            "Modo de Foco Ativado! Deslize ou use os botões para avançar.",
+                            "🎯 Modo de Foco Ativado! Apenas o exercício atual será exibido.",
                             "info",
                           );
                         }}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${workoutViewMode === "slide" ? "bg-[#d4af37] text-black font-black shadow-[0_0_8px_rgba(212,175,55,0.4)]" : "text-viking-silver hover:text-viking-gold"}`}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${isFocusMode ? "bg-viking-gold text-viking-dark font-black shadow-[0_0_12px_rgba(212,175,55,0.6)]" : "text-viking-silver hover:text-viking-gold"}`}
                       >
-                        <Sparkles className="w-3 h-3 text-current animate-pulse" />{" "}
-                        Modo Slide Foco
+                        <Target className="w-3 h-3 text-current animate-pulse" />{" "}
+                        Modo Foco 🎯
                       </button>
                     </div>
                   </div>
@@ -22172,16 +22782,117 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             trainingProgram
                           ).weeks[selectedWeek]?.[selectedDay] || [];
                         const filteredList =
-                          workoutViewMode === "list"
+                          workoutViewMode === "list" && !isFocusMode
                             ? list
                             : [list[currentExerciseIndex]].filter(Boolean);
 
                         return (
-                          <div
-                            className={`space-y-4 relative w-full flex flex-col transition-all duration-300 ${workoutViewMode === "slide" ? "min-h-[500px] sm:min-h-[420px]" : ""}`}
-                            style={{ perspective: "1200px" }}
-                            onTouchStart={(e) => {
-                              if (workoutViewMode !== "slide") return;
+                          <div className="space-y-4 relative w-full flex flex-col">
+                            {/* Focus Mode Banner */}
+                            {isFocusMode && (
+                              <div className="mb-2 p-4 rounded-2xl bg-[#0d0908] border-2 border-viking-gold/40 shadow-[0_0_20px_rgba(212,175,55,0.2)] space-y-3 animate-fade-in">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-viking-gold/15 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="relative flex h-3 w-3 shrink-0">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-viking-gold opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-viking-gold"></span>
+                                    </span>
+                                    <h4 className="text-xs sm:text-sm font-black text-viking-gold uppercase tracking-widest flex items-center gap-1.5">
+                                      <Target className="w-4 h-4 text-viking-gold shrink-0" />
+                                      MODO DE FOCO ATIVO
+                                    </h4>
+                                    <span className="text-[10px] bg-viking-gold/15 text-viking-gold border border-viking-gold/30 px-2.5 py-0.5 rounded-full font-bold ml-1">
+                                      EXERCÍCIO {currentExerciseIndex + 1} DE {list.length}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsFocusMode(false);
+                                      showToast("Modo de Foco desativado", "info");
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/30 text-viking-silver hover:text-viking-gold text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer self-end sm:self-auto"
+                                  >
+                                    <X className="w-3.5 h-3.5" /> Sair do Foco
+                                  </button>
+                                </div>
+
+                                {/* Integrated Viking Rest Timer in Focus Mode */}
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#140e0c]/90 p-3 rounded-xl border border-viking-gold/20">
+                                  <div className="flex items-center gap-2">
+                                    <Timer className="w-4 h-4 text-viking-gold animate-spin-slow shrink-0" />
+                                    <span className="text-xs font-bold text-viking-silver uppercase">Descanso:</span>
+                                    <span className={`font-mono text-xl font-black ${restTimerRemaining <= 10 && restTimerActive ? "text-red-400 animate-pulse" : "text-viking-gold"}`}>
+                                      {`${Math.floor(restTimerRemaining / 60).toString().padStart(2, "0")}:${(restTimerRemaining % 60).toString().padStart(2, "0")}`}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => setRestTimerRemaining((prev) => Math.max(0, prev - 30))}
+                                      className="px-2.5 py-1 bg-black/50 hover:bg-viking-gold/10 border border-viking-gold/20 rounded text-[10px] font-bold text-viking-silver hover:text-viking-gold cursor-pointer"
+                                    >
+                                      -30s
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setRestTimerActive(!restTimerActive)}
+                                      className="px-3 py-1 bg-viking-gold/20 hover:bg-viking-gold/30 border border-viking-gold/30 rounded text-[10px] font-black text-viking-gold flex items-center gap-1 cursor-pointer"
+                                    >
+                                      {restTimerActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                      {restTimerActive ? "Pausar" : "Iniciar"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setRestTimerRemaining((prev) => prev + 30)}
+                                      className="px-2.5 py-1 bg-black/50 hover:bg-viking-gold/10 border border-viking-gold/20 rounded text-[10px] font-bold text-viking-silver hover:text-viking-gold cursor-pointer"
+                                    >
+                                      +30s
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRestTimerRemaining(90);
+                                        setRestTimerActive(false);
+                                      }}
+                                      className="p-1 bg-black/50 hover:bg-viking-gold/10 border border-viking-gold/20 rounded text-viking-silver hover:text-viking-gold cursor-pointer"
+                                      title="Resetar 90s"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] text-viking-silver/60">
+                                  <span>💡 Use as setas (←/→) ou deslize a tela para navegar pelos exercícios.</span>
+                                  <div className="flex gap-1.5 items-center">
+                                    {list.map((_, i) => (
+                                      <button
+                                        key={i}
+                                        type="button"
+                                        onClick={() => {
+                                          setSlideDirection(i > currentExerciseIndex ? "forward" : "backward");
+                                          setCurrentExerciseIndex(i);
+                                        }}
+                                        className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                                          i === currentExerciseIndex
+                                            ? "bg-viking-gold scale-125 shadow-[0_0_10px_rgba(212,175,55,0.8)]"
+                                            : "bg-viking-silver/20 hover:bg-viking-gold/40"
+                                        }`}
+                                        title={`Exercício ${i + 1}`}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            <div
+                              className={`space-y-4 relative w-full flex flex-col transition-all duration-300 ${workoutViewMode === "slide" || isFocusMode ? "min-h-[480px] sm:min-h-[400px]" : ""}`}
+                              style={{ perspective: "1200px" }}
+                              onTouchStart={(e) => {
+                                if (workoutViewMode !== "slide" && !isFocusMode) return;
                               const tagName = (
                                 e.target as HTMLElement
                               ).tagName.toLowerCase();
@@ -22356,6 +23067,25 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                             <span className="text-[8px] bg-viking-gold text-viking-dark font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                                               Foco Principal
                                             </span>
+                                          )}
+                                          {!isFocusMode && workoutViewMode === "list" && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setIsFocusMode(true);
+                                                setWorkoutViewMode("slide");
+                                                setCurrentExerciseIndex(idx);
+                                                showToast(
+                                                  `🎯 Modo de Foco ativado para: ${ex.name}`,
+                                                  "info",
+                                                );
+                                              }}
+                                              className="px-2.5 py-1 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/20 border border-viking-gold/30 text-viking-gold hover:text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ml-auto"
+                                              title="Focar apenas neste exercício"
+                                            >
+                                              <Target className="w-3.5 h-3.5 text-viking-gold shrink-0" />
+                                              <span>Modo Foco</span>
+                                            </button>
                                           )}
                                           {workoutViewMode === "slide" && (
                                             <div className="flex gap-1.5 ml-auto">
@@ -23817,9 +24547,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               </motion.div>
                             )}
                           </div>
-                        );
-                      })()
-                    )}
+                        </div>
+                      );
+                    })()
+                  )}
                   </div>
                 </div>{" "}
                 {/* Close Right Column */}

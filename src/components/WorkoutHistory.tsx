@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  History, FileDown, Calendar, Activity, Users, Dumbbell, Zap, ArrowLeft, ArrowRight
+  History, FileDown, Calendar, Activity, Users, Dumbbell, Zap, ArrowLeft, ArrowRight, Award
 } from 'lucide-react';
 import { StudentProfile } from '../types';
 
@@ -10,6 +10,7 @@ interface WorkoutHistoryProps {
   studentsData: Record<string, StudentProfile>;
   handleDownloadPDF: (student: StudentProfile) => void;
   handleDownloadMonthlySummaryPDF: (student: StudentProfile) => void;
+  handleDownloadAnnualSummaryPDF?: (student: StudentProfile) => void;
   drawerContentRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -18,6 +19,7 @@ export function WorkoutHistory({
   studentsData, 
   handleDownloadPDF, 
   handleDownloadMonthlySummaryPDF,
+  handleDownloadAnnualSummaryPDF,
   drawerContentRef
 }: WorkoutHistoryProps) {
   const [historyTab, setHistoryTab] = useState<'list' | 'comparison'>('list');
@@ -61,21 +63,30 @@ export function WorkoutHistory({
       </div>
 
       {historyTab === 'list' && (
-        <>
+        <div className="space-y-2">
           <button 
             onClick={() => handleDownloadPDF(activeStudentProfile)}
-            className="w-full py-3 px-4 rounded-xl bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/40 hover:border-viking-gold text-viking-gold font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            className="w-full py-2.5 px-4 rounded-xl bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/40 hover:border-viking-gold text-viking-gold font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
-            <FileDown className="w-4.5 h-4.5" /> Exportar Relatório em PDF
+            <FileDown className="w-4 h-4" /> Exportar Sessões em PDF
           </button>
           
           <button 
             onClick={() => handleDownloadMonthlySummaryPDF(activeStudentProfile)}
-            className="w-full py-3 px-4 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            className="w-full py-2.5 px-4 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
-            <Calendar className="w-4.5 h-4.5" /> Resumo Mensal Consolidado (PDF)
+            <Calendar className="w-4 h-4" /> Resumo Mensal Consolidado (PDF)
           </button>
-        </>
+
+          {handleDownloadAnnualSummaryPDF && (
+            <button 
+              onClick={() => handleDownloadAnnualSummaryPDF(activeStudentProfile)}
+              className="w-full py-3 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 hover:border-amber-500 text-amber-300 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            >
+              <Award className="w-4.5 h-4.5 text-amber-400" /> Desempenho Anual Consolidado (PDF)
+            </button>
+          )}
+        </div>
       )}
 
       {historyTab === 'comparison' && (() => {
