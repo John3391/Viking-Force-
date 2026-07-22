@@ -22,6 +22,7 @@ interface FailureSentinelProps {
   studentsData: Record<string, StudentProfile>;
   trainingProgram: TrainingProgram;
   onSaveProgram: (newProg: TrainingProgram) => void;
+  onSaveStudents: (newStudents: Record<string, StudentProfile>) => void;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -38,6 +39,7 @@ export default function FailureSentinel({
   studentsData,
   trainingProgram,
   onSaveProgram,
+  onSaveStudents,
   showToast
 }: FailureSentinelProps) {
   const [simulationMode, setSimulationMode] = useState<boolean>(false);
@@ -141,59 +143,82 @@ export default function FailureSentinel({
     const intensityReduction = isHighSeverity ? 0.075 : 0.05; // 7.5% or 5%
     const rpeReduction = isHighSeverity ? 1.0 : 0.5;
 
-    // Clone the training program to modify it
-    const clonedProgram = JSON.parse(JSON.stringify(trainingProgram)) as TrainingProgram;
-    let modifiedCount = 0;
-
-    // Loop through all weeks and days to find matching exercises
-    Object.keys(clonedProgram.weeks).forEach(weekStr => {
-      const weekNum = Number(weekStr);
-      const weekWorkout = clonedProgram.weeks[weekNum];
-      if (weekWorkout) {
-        ['A', 'B', 'C'].forEach(day => {
-          const exercises = weekWorkout[day] || [];
-          exercises.forEach((ex: Exercise) => {
-            if (ex.name.toLowerCase().trim() === stat.exerciseName.toLowerCase().trim()) {
-              // Adjust Intensity if it is a number
-              if (typeof ex.intensity === 'number') {
-                const oldIntensity = ex.intensity;
-                const newIntensity = Math.max(0.30, oldIntensity - intensityReduction);
-                ex.intensity = Number(newIntensity.toFixed(3));
-              } else if (typeof ex.intensity === 'string') {
-                // Try parsing string with %
-                const match = ex.intensity.match(/(\d+)%/);
-                if (match) {
-                  const percentValue = parseInt(match[1]);
-                  const newPercent = Math.max(30, percentValue - (intensityReduction * 100));
-                  ex.intensity = `${newPercent}% 1RM`;
+    // Helper to adjust a program
+    const adjustProgram = (prog: TrainingProgram): number => {
+      let mods = 0;
+      Object.keys(prog.weeks).forEach(weekStr => {
+        const weekNum = Number(weekStr);
+        const weekWorkout = prog.weeks[weekNum];
+        if (weekWorkout) {
+          ['A', 'B', 'C'].forEach(day => {
+            const exercises = weekWorkout[day] || [];
+            exercises.forEach((ex: Exercise) => {
+              if (ex.name.toLowerCase().trim() === stat.exerciseName.toLowerCase().trim()) {
+                // Adjust Intensity if it is a number
+                if (typeof ex.intensity === 'number') {
+                  const oldIntensity = ex.intensity;
+                  const newIntensity = Math.max(0.30, oldIntensity - intensityReduction);
+                  ex.intensity = Number(newIntensity.toFixed(3));
+                } else if (typeof ex.intensity === 'string') {
+                  // Try parsing string with %
+                  const match = ex.intensity.match(/(\d+)%/);
+                  if (match) {
+                    const percentValue = parseInt(match[1]);
+                    const newPercent = Math.max(30, percentValue - (intensityReduction * 100));
+                    ex.intensity = `${newPercent}% 1RM`;
+                  }
                 }
+
+                // Adjust target RPE
+                const oldRPE = ex.targetRPE || 8;
+                ex.targetRPE = Math.max(6, oldRPE - rpeReduction);
+
+                // Add a technique tip automatically
+                if (!ex.techniqueTips || !ex.techniqueTips.includes('Ajustado por falha')) {
+                  ex.techniqueTips = `⚠️ Ajustado por falha em periodização (-${(intensityReduction*100).toFixed(1)}% intensidade / -${rpeReduction} RPE). Foco extremo em controle excêntrico. ${ex.techniqueTips || ''}`.trim();
+                }
+                mods += 1;
               }
-
-              // Adjust target RPE
-              const oldRPE = ex.targetRPE || 8;
-              ex.targetRPE = Math.max(6, oldRPE - rpeReduction);
-
-              // Add a technique tip automatically
-              if (!ex.techniqueTips || !ex.techniqueTips.includes('Ajustado por falha')) {
-                ex.techniqueTips = `⚠️ Ajustado por falha em periodização (-${(intensityReduction*100).toFixed(1)}% intensidade / -${rpeReduction} RPE). Foco extremo em controle excêntrico. ${ex.techniqueTips || ''}`.trim();
-              }
-
-              modifiedCount += 1;
-            }
+            });
           });
-        });
+        }
+      });
+      return mods;
+    };
+
+    // Clone the base training program to modify it
+    const clonedProgram = JSON.parse(JSON.stringify(trainingProgram)) as TrainingProgram;
+    const modifiedCount = adjustProgram(clonedProgram);
+    
+    // Also adjust all custom programs for athletes (real-time for athletes)
+    let studentsModifiedCount = 0;
+    const updatedStudents = { ...studentsData };
+    Object.keys(updatedStudents).forEach(email => {
+      const student = updatedStudents[email];
+      if (student && student.customProgram) {
+        const clonedCustom = JSON.parse(JSON.stringify(student.customProgram)) as TrainingProgram;
+        const studentMods = adjustProgram(clonedCustom);
+        if (studentMods > 0) {
+          student.customProgram = clonedCustom;
+          studentsModifiedCount++;
+        }
       }
     });
 
-    if (modifiedCount > 0) {
-      onSaveProgram(clonedProgram);
+    if (modifiedCount > 0 || studentsModifiedCount > 0) {
+      if (modifiedCount > 0) {
+        onSaveProgram(clonedProgram);
+      }
+      if (studentsModifiedCount > 0) {
+        onSaveStudents(updatedStudents);
+      }
       showToast(
-        `Sentinela de Falhas: O exercício "${stat.exerciseName}" teve sua intensidade reduzida em ${(intensityReduction * 100).toFixed(1)}% e RPE alvo ajustado em -${rpeReduction} ponto(s) em ${modifiedCount} prescrição(ões) do programa!`,
+        `Sentinela de Falhas: O exercício "${stat.exerciseName}" teve sua intensidade reduzida e RPE alvo ajustado no programa base e em ${studentsModifiedCount} programa(s) personalizado(s) de atletas!`,
         'success'
       );
     } else {
       showToast(
-        `O exercício "${stat.exerciseName}" foi analisado, mas não foi encontrado no programa ativo atual (Semana/Dia) para alteração automática.`,
+        `O exercício "${stat.exerciseName}" foi analisado, mas não foi encontrado em nenhum programa ativo atual para alteração automática.`,
         'info'
       );
     }
@@ -302,7 +327,7 @@ export default function FailureSentinel({
                       </div>
                     </div>
 
-                    {/* Stats & Badge Indicator */}
+                    {/* Stats & Badge Indicator & Action */}
                     <div className="flex items-center justify-between md:justify-end gap-3.5">
                       <div className="text-right">
                         <span className="text-[10px] text-viking-silver/50 uppercase font-black tracking-widest block">Índice de Falhas</span>
@@ -319,8 +344,19 @@ export default function FailureSentinel({
                           </span>
                         </div>
                       </div>
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApplyAdjustment(stat);
+                        }}
+                        className="hidden md:flex px-3 py-1.5 rounded-lg bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[9px] uppercase tracking-wider items-center justify-center gap-1.5 shadow-md shadow-viking-gold/15 cursor-pointer transition-all duration-200"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Corrigir Carga
+                      </button>
 
-                      <div className="text-viking-gold/40">
+                      <div className="text-viking-gold/40 ml-2">
                         <ChevronRight className={`w-5 h-5 transform transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} />
                       </div>
                     </div>
@@ -386,17 +422,18 @@ export default function FailureSentinel({
                               </p>
                             </div>
 
-                            {/* CTA Action Buttons */}
+                            {/* CTA Action Buttons (Mobile or duplicated) */}
                             <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-viking-gold/10">
                               <button
-                                onClick={() => handleApplyAdjustment(stat)}
-                                className="w-full sm:w-auto px-4.5 py-2 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-viking-gold/15 cursor-pointer transition-all duration-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApplyAdjustment(stat);
+                                }}
+                                className="w-full sm:w-auto px-4.5 py-2 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-viking-gold/15 cursor-pointer transition-all duration-200 md:hidden"
                               >
                                 <Check className="w-4 h-4" />
-                                Aplicar Ajuste de Intensidade Automático
+                                Aplicar Ajuste Automático
                               </button>
-                              
-                              <span className="hidden sm:inline text-viking-silver/40 text-xs">|</span>
                               
                               <p className="text-[10px] text-viking-silver/60 italic text-center sm:text-left">
                                 Isso reescreverá a intensidade e RPE de todas as prescrições deste exercício no programa.

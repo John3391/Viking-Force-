@@ -10561,6 +10561,15 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               </div>
             </div>
 
+            {/* Failure Sentinel & Periodization Optimizer (Moved up per user request) */}
+            <FailureSentinel
+              studentsData={studentsData}
+              trainingProgram={trainingProgram}
+              onSaveProgram={saveProgramToDB}
+              onSaveStudents={saveStudentsToDB}
+              showToast={showToast}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column (Primary Ops & Finances) */}
               <div className="lg:col-span-8 space-y-6 flex flex-col">
@@ -11565,13 +11574,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                 </div>
               </div>
             </div>
-            {/* Failure Sentinel & Periodization Optimizer */}
-            <FailureSentinel
-              studentsData={studentsData}
-              trainingProgram={trainingProgram}
-              onSaveProgram={saveProgramToDB}
-              showToast={showToast}
-            />
 
             {/* List of Athletes Table Panel */}
             <div className="bg-[#1a1210]/90 border border-viking-gold/20 rounded-3xl p-6 overflow-hidden shadow-xl backdrop-blur-md">
@@ -23997,7 +23999,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 </div>
               </div>
 
-              <div className="pt-6 mt-4 shrink-0 border-t border-viking-gold/15 relative z-10 bg-[#140e0c]/98">
+              <div className="pt-6 mt-4 pb-24 shrink-0 border-t border-viking-gold/15 relative z-10 bg-[#140e0c]/98">
                 <button
                   onClick={handleLogout}
                   className="w-full py-3 bg-viking-red/10 hover:bg-viking-red/25 text-[#f87171] border border-viking-red/20 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
