@@ -11833,10 +11833,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       const preferredTime = s.preferredTime || "18:00";
                       const isPastPreferredTime = simulatedTime > preferredTime;
                       const isSelected = selectedStudentEmails.includes(email);
+                      const tooltipStats = [
+                        `${s.name}`,
+                        `Status: ${obterStatusVencimento(s.dueDate || new Date().toISOString()).texto}`,
+                        `Plano: ${s.plan || 'N/A'}`,
+                        `Treinos: ${s.sessions?.length || 0}`,
+                        lastSess ? `Último Treino: ${lastSess.date} (RPE: ${lastSess.avgRPE.toFixed(1)})` : 'Sem treinos recentes'
+                      ].join('\n');
 
                       if (studentsLayoutMode === "list") {
                         return (
-                          <div key={email} className="relative">
+                          <div key={email} className="relative" title={tooltipStats}>
                             {isBatchMode && (
                               <div
                                 className="absolute top-4 left-4 z-10"
@@ -12134,6 +12141,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                       return (
                         <div
                           key={email}
+                          title={tooltipStats}
                           onClick={() => {
                             if (isBatchMode) {
                               setSelectedStudentEmails((prev) =>
@@ -23950,24 +23958,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                     </button>
                   )}
 
-                  {/* Theme Toggle in Mobile Menu */}
-                  <button
-                    onClick={() => {
-                      const nextTheme = theme === "dark" ? "solar" : "dark";
-                      setTheme(nextTheme);
-                      localStorage.setItem("viking_theme", nextTheme);
-                    }}
-                    className="p-3 text-left rounded-xl text-[#e0d3a8]/80 hover:text-viking-gold hover:bg-viking-gold/5 text-sm font-semibold flex items-center justify-between cursor-pointer mt-2 border border-viking-gold/10"
-                  >
-                    <span className="flex items-center gap-2">
-                      {theme === "solar" ? (
-                        <Sun className="w-4 h-4 text-amber-500" />
-                      ) : (
-                        <Moon className="w-4 h-4 text-viking-gold" />
-                      )}
-                      {theme === "solar" ? "Tema: Forja Solar" : "Tema: Noturno"}
-                    </span>
-                  </button>
+                  
 
                   {/* Student Options in Mobile Menu */}
                   {currentUser?.role === "student" && (
