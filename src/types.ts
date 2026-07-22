@@ -152,10 +152,12 @@ export interface CardioPrescription {
 }
 
 export interface StudentProfile {
+  email?: string;
   name: string;
   plan: 'Mensal' | 'Trimestral' | 'Semestral' | 'Anual';
   status: 'Ativo' | 'Pendente' | 'Atrasado' | 'Pago';
   photoUrl?: string;
+  createdAt?: string;
   prs: {
     squat: number | null;
     bench: number | null;
@@ -178,6 +180,7 @@ export interface StudentProfile {
   competitionDate?: string;
   targetEventId?: string | null;
   targetEventName?: string | null;
+  targetWilks?: number;
   publicNote?: string | null;
   dueDate?: string | null;
   accessBlocked?: boolean;

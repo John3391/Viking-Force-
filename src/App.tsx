@@ -264,8 +264,10 @@ import WilksScatterChart from "./components/WilksScatterChart";
 import FinancialHealthChart from "./components/FinancialHealthChart";
 import CompactListRow from "./components/CompactListRow";
 import FailureSentinel from "./components/FailureSentinel";
+import InactiveStudentsAlert from "./components/InactiveStudentsAlert";
 import PatentTimeline from "./components/PatentTimeline";
 import SbdImpactSimulator from "./components/SbdImpactSimulator";
+import WilksGoalSelector from "./components/WilksGoalSelector";
 import WeeklyVolumeLineChart from "./components/WeeklyVolumeLineChart";
 import { VikingLogo } from "./components/VikingLogo";
 
@@ -568,7 +570,7 @@ export default function App() {
   >("overview");
   const [activeChartTab, setActiveChartTab] = useState<
     "volume" | "weekly" | "onerm" | "totalsbd"
-  >("volume");
+  >("onerm");
   const [wilksRatios, setWilksRatios] = useState({
     squat: 38,
     bench: 24,
@@ -8716,9 +8718,9 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         {/* Tabs selector */}
                         <div className="flex flex-wrap gap-1 bg-[#140e0c] border border-viking-gold/15 p-1 rounded-xl">
                           {[
+                            { id: "onerm", label: "📈 Evolução 1RM" },
                             { id: "volume", label: "Volume" },
                             { id: "weekly", label: "Carga Semanal" },
-                            { id: "onerm", label: "Evolução 1RM" },
                             { id: "totalsbd", label: "Total SBD" },
                           ].map((tb) => (
                             <button
@@ -10166,6 +10168,25 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             showToast={showToast}
                           />
 
+                          {/* Automatic Goal Selector */}
+                          <WilksGoalSelector
+                            studentProfile={activeStudentProfile}
+                            wilksRatios={wilksRatios}
+                            showToast={showToast}
+                            onSaveProfile={(updatedProfile) => {
+                              if (activeStudentProfile?.email) {
+                                saveStudentsToDB({
+                                  ...studentsData,
+                                  [activeStudentProfile.email]: updatedProfile,
+                                });
+                                saveStudentToFirebase(
+                                  activeStudentProfile.email,
+                                  updatedProfile,
+                                );
+                              }
+                            }}
+                          />
+
                           {/* 2. Interactive Wilks Goals Table */}
                           <div className="bg-[#1a1210]/95 border border-viking-gold/20 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md shadow-xl">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 pb-4 border-b border-viking-gold/15">
@@ -10567,6 +10588,18 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
               trainingProgram={trainingProgram}
               onSaveProgram={saveProgramToDB}
               onSaveStudents={saveStudentsToDB}
+              showToast={showToast}
+            />
+
+            {/* Inactive Students Alert (> 3 days without workout) */}
+            <InactiveStudentsAlert
+              studentsData={studentsData}
+              onMotivateStudent={(email, name) => {
+                setActiveChatStudentEmail(email);
+                setDrawerTitle(`Chat com ${name}`);
+                setDrawerType("chat");
+                setDrawerOpen(true);
+              }}
               showToast={showToast}
             />
 

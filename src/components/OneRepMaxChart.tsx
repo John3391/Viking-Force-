@@ -97,6 +97,27 @@ export default function OneRepMaxChart({ profile }: OneRepMaxChartProps) {
               deadlift = sObj.prsAtSession.deadlift;
             }
           }
+
+          // Also check exercises performed in session for max 1RM achieved
+          if (sObj.exercises && Array.isArray(sObj.exercises)) {
+            sObj.exercises.forEach((ex) => {
+              const exNameLower = (ex.name || '').toLowerCase();
+              const isSquat = exNameLower.includes('agach') || exNameLower.includes('squat');
+              const isBench = exNameLower.includes('supin') || exNameLower.includes('bench');
+              const isDeadlift = exNameLower.includes('terra') || exNameLower.includes('deadlift');
+
+              if (ex.sets && Array.isArray(ex.sets)) {
+                ex.sets.forEach((st) => {
+                  if (st.weight > 0 && st.reps > 0) {
+                    const est = st.reps <= 1 ? st.weight : Math.round(st.weight * (1 + st.reps / 30));
+                    if (isSquat && est > squat) squat = est;
+                    if (isBench && est > bench) bench = est;
+                    if (isDeadlift && est > deadlift) deadlift = est;
+                  }
+                });
+              }
+            });
+          }
         }
       }
 
