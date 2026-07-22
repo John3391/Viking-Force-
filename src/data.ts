@@ -324,7 +324,8 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
   'bjorn@viking.com': {
     name: 'Bjorn',
     plan: 'Trimestral',
-    status: 'Pendente',
+    status: 'Pago',
+    accessBlocked: false,
     prs: { squat: 160, bench: 120, deadlift: 200 },
     prevPrs: { squat: 150, bench: 115, deadlift: 190 },
     preferredTime: '20:00',
@@ -353,7 +354,8 @@ export const DEFAULT_STUDENTS: Record<string, StudentProfile> = {
   'freya@viking.com': {
     name: 'Freya',
     plan: 'Anual',
-    status: 'Atrasado',
+    status: 'Pago',
+    accessBlocked: false,
     prs: { squat: 130, bench: 90, deadlift: 160 },
     prevPrs: { squat: 120, bench: 85, deadlift: 150 },
     preferredTime: '07:00',

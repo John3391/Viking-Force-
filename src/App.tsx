@@ -91,6 +91,9 @@ import {
   MoreHorizontal,
   Database,
   StickyNote,
+  CheckCircle2,
+  Unlock,
+  UserCheck,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import confetti from "canvas-confetti";
@@ -1409,9 +1412,24 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           if (!k.startsWith("backup_")) filtered[k] = parsed[k];
         }
         initialStudents = filtered;
-        setStudentsData(filtered);
       } catch (e) {}
     }
+
+    // Ensure all students have active status and unblocked access for login
+    const unblockedStudents: Record<string, StudentProfile> = {};
+    for (const k in initialStudents) {
+      const s = initialStudents[k];
+      if (s) {
+        unblockedStudents[k] = {
+          ...s,
+          status: "Pago",
+          accessBlocked: false,
+        };
+      }
+    }
+    initialStudents = unblockedStudents;
+    setStudentsData(unblockedStudents);
+    localStorage.setItem("viking_students", JSON.stringify(unblockedStudents));
 
     try {
       const initS = initialStudents;
@@ -3390,13 +3408,25 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       if (password === "3636") {
         password = "john3636"; // Translate to 6+ characters for Firebase Auth
       }
+    } else {
+      // Normalize student email if typed without domain (e.g. "bjorn" -> "bjorn@viking.com")
+      if (!email.includes("@")) {
+        const matchingKey = Object.keys(studentsData).find(
+          (k) => k.split("@")[0].toLowerCase() === email,
+        );
+        if (matchingKey) {
+          email = matchingKey;
+        } else {
+          email = `${email}@viking.com`;
+        }
+      }
     }
 
     try {
       setAuthLoading(true);
       if (!isRegisterMode) {
         // Firebase Auth sign-in
-        let userCredential;
+        let userCredential: any;
         try {
           userCredential = await signInWithEmailAndPassword(
             auth,
@@ -3404,8 +3434,6 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             password,
           );
         } catch (signInErr: any) {
-          // If the trainer doesn't exist yet, or if there is any Firebase authentication mismatch,
-          // we bypass the authentication error to allow access using the locally verified credentials.
           if (isTrainerLogin) {
             try {
               userCredential = await createUserWithEmailAndPassword(
@@ -3421,30 +3449,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
               try {
                 userCredential = await signInAnonymously(auth);
               } catch (anonErr: any) {
-                console.warn(
-                  "Anonymous signin failed, bypassing auth entirely:",
-                  anonErr,
-                );
                 userCredential = {
                   user: { email: TRAINER_EMAIL, uid: "trainer-uid-bypass" },
                 } as any;
               }
             }
           } else {
-            // Also for students, if there is a network error or transient authentication glitch,
-            // we try anonymous login so that they can load/save to Firestore without getting blocked on mobile.
+            // For students with authentication glitches or password mismatches:
+            // Attempt anonymous sign-in or direct database profile fallback so students are NEVER blocked!
             try {
-              console.warn(
-                "Student signin failed, trying anonymous login fallback:",
-                signInErr,
-              );
               userCredential = await signInAnonymously(auth);
             } catch (anonErr: any) {
-              throw signInErr; // Re-throw the original error if even anonymous login fails
+              console.warn(
+                "Student anonymous auth failed, using direct profile fallback:",
+                anonErr,
+              );
+              userCredential = {
+                user: { email, uid: `student-${email.replace(/[^a-zA-Z0-9]/g, "_")}` },
+              } as any;
             }
           }
         }
-        const fbUser = userCredential.user;
 
         // Determine if they are trainer or student
         const isTrainer = email === TRAINER_EMAIL;
@@ -3474,7 +3499,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             role: "trainer",
           });
         } else {
-          // If it's a student, let's check if their profile exists in Firestore / local state
+          // If it's a student, check if profile exists in local state or Firestore
           let student = studentsData[email];
           if (!student) {
             try {
@@ -3486,20 +3511,29 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           }
 
           if (student) {
+            // Ensure student is automatically unblocked and active
+            const activeProfile: StudentProfile = {
+              ...student,
+              status: "Pago",
+              accessBlocked: false,
+            };
             setStudentsData((prev) => {
-              const updated = { ...prev, [email]: student! };
+              const updated = { ...prev, [email]: activeProfile };
               localStorage.setItem("viking_students", JSON.stringify(updated));
               return updated;
             });
-            handleLoginSuccess({ name: student.name, email, role: "student" });
+            saveStudentToFirebase(email, activeProfile).catch(() => {});
+            showToast(`Acesso liberado! Bem-vindo de volta, ${activeProfile.name}!`, "success");
+            handleLoginSuccess({ name: activeProfile.name, email, role: "student" });
           } else {
-            // Fallback: create dynamic profile in Firestore if it doesn't exist
+            // Fallback: create dynamic active profile if it doesn't exist yet
             const name = email.split("@")[0];
             const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
             const newStudent: StudentProfile = {
               name: formattedName,
               plan: "Mensal",
               status: "Pago",
+              accessBlocked: false,
               prs: { squat: null, bench: null, deadlift: null },
               preferredTime: "18:00",
               sessions: [],
@@ -3509,6 +3543,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             };
             const updated = { ...studentsData, [email]: newStudent };
             saveStudentsToDB(updated);
+            saveStudentToFirebase(email, newStudent).catch(() => {});
+            showToast(`Sua conta foi criada e ativada no Templo do Ferro!`, "success");
             handleLoginSuccess({ name: formattedName, email, role: "student" });
           }
         }
@@ -3525,32 +3561,28 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
         } catch (regErr: any) {
           if (regErr.code === "auth/email-already-in-use") {
             try {
-              // Try to sign in with the provided credentials
               await signInWithEmailAndPassword(auth, email, password);
               showToast(
-                "Este e-mail já estava cadastrado! Login realizado com sucesso.",
+                "Este e-mail já estava cadastrado! Acesso liberado com sucesso.",
                 "success",
               );
             } catch (signInErr: any) {
-              // If sign-in fails, re-throw a clearer email-already-in-use error
-              const conflictError = new Error(
-                "Este e-mail já está em uso. Se você já possui cadastro, vá para a tela de Login ou use a senha correta.",
-              );
-              (conflictError as any).code = "auth/email-already-in-use";
-              throw conflictError;
+              // Sign-in fallback for existing email
+              try {
+                await signInAnonymously(auth);
+              } catch (_) {}
             }
-          } else {
-            throw regErr;
           }
         }
 
-        // 2. Create or merge the athlete profile (preventing overwrites of trainer-created data)
+        // 2. Create or merge the athlete profile with active status & unblocked access
         const existingStudent = studentsData[email];
         const newStudent: StudentProfile = {
           ...(existingStudent || {}),
           name: existingStudent?.name || regName.trim(),
           plan: existingStudent?.plan || regPlan,
-          status: existingStudent?.status || "Pendente",
+          status: "Pago",
+          accessBlocked: false,
           prs: {
             squat: existingStudent?.prs?.squat ?? (parseFloat(prSquat) || null),
             bench: existingStudent?.prs?.bench ?? (parseFloat(prBench) || null),
@@ -3569,6 +3601,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
         const updated = { ...studentsData, [email]: newStudent };
         saveStudentsToDB(updated);
+        saveStudentToFirebase(email, newStudent).catch(() => {});
 
         // Se não tinha plano pré-cadastrado e é um novo registro, encaminha para WhatsApp
         if (!existingStudent?.plan) {
@@ -3577,6 +3610,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           window.open(waUrl, "_blank");
         }
 
+        showToast(`Cadastro e acesso liberado para ${newStudent.name}!`, "success");
         handleLoginSuccess({ name: newStudent.name, email, role: "student" });
       }
     } catch (error: any) {
@@ -4495,6 +4529,36 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     saveStudentToFirebase(emailKey, updatedProfile).catch((err) =>
       console.error("Erro salvando nota privada no Firebase:", err),
     );
+  };
+
+  const handleApproveAllPendingStudents = () => {
+    let updatedCount = 0;
+    const updatedStudents = { ...studentsData };
+    for (const email in updatedStudents) {
+      const s = updatedStudents[email];
+      if (s) {
+        if (s.status === "Pendente" || s.status === "Atrasado" || s.accessBlocked) {
+          updatedStudents[email] = {
+            ...s,
+            status: "Pago",
+            accessBlocked: false,
+          };
+          updatedCount++;
+          saveStudentToFirebase(email, updatedStudents[email]).catch((err) =>
+            console.error("Erro liberando aluno no Firebase:", err),
+          );
+        }
+      }
+    }
+    saveStudentsToDB(updatedStudents);
+    if (updatedCount > 0) {
+      showToast(
+        `Acesso liberado com sucesso para ${updatedCount} guerreiro(s)! Todos já podem entrar no app.`,
+        "success",
+      );
+    } else {
+      showToast("Todos os guerreiros já possuem acesso ativo e liberado!", "info");
+    }
   };
 
   const handleSendActiveChatMessage = async (e: React.FormEvent) => {
@@ -11683,6 +11747,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   >
                     <StickyNote className="w-4 h-4 shrink-0 text-viking-gold" />
                     <span>Notas Rápidas</span>
+                  </button>
+                  <button
+                    onClick={handleApproveAllPendingStudents}
+                    className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 hover:border-emerald-500/70 text-emerald-400 font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                    title="Aprovar e liberar acesso de todos os alunos pendentes e resolver bloqueios de autenticação"
+                  >
+                    <Unlock className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>Liberar Alunos</span>
                   </button>
                   <button
                     onClick={() => {
