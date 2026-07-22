@@ -5659,10 +5659,66 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     let totalPlannedVolume = 0;
     let totalAchievedVolume = 0;
 
+    const rpeIncoherences: string[] = [];
+    const alerts: string[] = [];
+    const exerciseAnalysisList: any[] = [];
+    let failedCount = 0;
+    let highRpeCount = 0;
+    let subOptimalRpeCount = 0;
+
     const exercisesLog = currentExercises.map((ex) => {
       const setsLogged = exerciseSetsState[ex.id] || [];
       const isFailed = !!exerciseFailureState[ex.id]?.failed;
       const plannedVol = ex.sets * ex.reps;
+      const rpe = sessionRpeState[ex.id] || 8;
+      const targetRPE = ex.targetRPE || 8;
+      const failedSetsDone = exerciseFailureState[ex.id]?.setsDone || 1;
+      const failedActualReps = exerciseFailureState[ex.id]?.actualReps || 1;
+
+      if (isFailed) failedCount++;
+      if (rpe >= 9.0) highRpeCount++;
+      if (rpe < 7.0) subOptimalRpeCount++;
+
+      let rpeStatus: "critico" | "elevado" | "otimo" | "suboptimo" = "otimo";
+      let rpeStatusLabel = "RPE Ótimo (RIR 2-3)";
+      if (rpe >= 9.5) {
+        rpeStatus = "critico";
+        rpeStatusLabel = "RPE Crítico (RIR 0)";
+      } else if (rpe >= 8.5) {
+        rpeStatus = "elevado";
+        rpeStatusLabel = "RPE Elevado (RIR 1)";
+      } else if (rpe >= 7.0) {
+        rpeStatus = "otimo";
+        rpeStatusLabel = "RPE Ótimo (RIR 2-3)";
+      } else {
+        rpeStatus = "suboptimo";
+        rpeStatusLabel = "RPE Sub-Ótimo (RIR ≥ 4)";
+      }
+
+      let rpeAnalysisNote = "";
+      if (isFailed) {
+        if (rpe < 8.0) {
+          const incMsg = `${ex.name}: Falha mecânica registrada na ${failedSetsDone}ª série (${failedActualReps}/${ex.reps} reps), porém o RPE foi reportado como baixos ${rpe}. Falha física equivale a RPE 9.5-10.`;
+          rpeIncoherences.push(incMsg);
+          rpeAnalysisNote = `⚠️ Incoerência: Falhou na ${failedSetsDone}ª série mas indicou RPE baixo (${rpe}).`;
+        } else {
+          rpeAnalysisNote = `⚠️ Falhou na ${failedSetsDone}ª série (${failedActualReps}/${ex.reps} reps). RPE ${rpe}.`;
+        }
+      } else {
+        if (rpe >= 9.5 && targetRPE <= 8) {
+          alerts.push(
+            `${ex.name}: Esforço limite (RPE ${rpe}) superou significativamente o alvo (${targetRPE}).`,
+          );
+          rpeAnalysisNote = `🔴 RPE ${rpe} muito elevado para o alvo (${targetRPE}). Alta sobrecarga.`;
+        } else if (rpe < 6.5 && targetRPE >= 8) {
+          alerts.push(
+            `${ex.name}: RPE ${rpe} abaixo do alvo (${targetRPE}). Sub-esforço ou carga leve.`,
+          );
+          rpeAnalysisNote = `📉 Carga leve para o alvo (${targetRPE}). Avaliar aumento de carga.`;
+        } else {
+          rpeAnalysisNote = `🎯 ${rpeStatusLabel}. Estímulo adequado.`;
+        }
+      }
 
       const doneSets = setsLogged.filter((s) => s.done);
       const achievedVol =
@@ -5671,19 +5727,35 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
             ? doneSets.reduce((sum, s) => sum + s.reps, 0)
             : setsLogged.reduce((sum, s) => sum + s.reps, 0)
           : isFailed
-            ? (exerciseFailureState[ex.id]?.setsDone || 1) * ex.reps +
-              (exerciseFailureState[ex.id]?.actualReps || 1)
+            ? failedSetsDone * ex.reps + failedActualReps
             : plannedVol;
 
       totalPlannedVolume += plannedVol;
       totalAchievedVolume += achievedVol;
 
+      exerciseAnalysisList.push({
+        exerciseName: ex.name,
+        rpe,
+        targetRPE,
+        status: rpeStatus,
+        statusLabel: rpeStatusLabel,
+        failed: isFailed,
+        failedSetsDone: isFailed ? failedSetsDone : undefined,
+        failedActualReps: isFailed ? failedActualReps : undefined,
+        analysisNote: rpeAnalysisNote,
+      });
+
       return {
         name: ex.name,
-        rpe: sessionRpeState[ex.id] || 8,
+        rpe,
         plannedVolume: plannedVol,
         achievedVolume: achievedVol,
         failed: isFailed,
+        failedSetsDone: isFailed ? failedSetsDone : undefined,
+        failedActualReps: isFailed ? failedActualReps : undefined,
+        targetRPE,
+        rpeStatus,
+        rpeAnalysisNote,
         sets:
           setsLogged.length > 0
             ? setsLogged.map((s) => ({
@@ -5722,6 +5794,55 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
         suggestions.join("\n");
     }
 
+    const recommendations: string[] = [];
+    if (failedCount > 0) {
+      recommendations.push(
+        `• ${failedCount} exercício(s) com falha registrada: Aplicar Back-off Sets com 15% a 20% a menos de carga na próxima semana.`,
+      );
+    }
+    if (highRpeCount >= 2) {
+      recommendations.push(
+        `• ${highRpeCount} exercício(s) com RPE ≥ 9.0: Assegurar descanso de 48h a 72h antes de repetir estímulo pesado.`,
+      );
+    }
+    if (subOptimalRpeCount >= 2) {
+      recommendations.push(
+        `• ${subOptimalRpeCount} exercício(s) com RPE < 7.0: Considerar progressão de carga (+2kg a +5kg) no próximo microciclo.`,
+      );
+    }
+    if (rpeIncoherences.length > 0) {
+      recommendations.push(
+        `• Incoerência de RPE/Falha detectada: Reorientar o aluno sobre a percepção de esforço (RIR/RPE).`,
+      );
+    }
+    if (recommendations.length === 0) {
+      recommendations.push(
+        "• Sessão equilibrada e alinhada com o RPE alvo. Manter a programação atual.",
+      );
+    }
+
+    let fatigueLevel: "alta" | "otima" | "moderada" = "otima";
+    let fatigueLabel = "🟡 Carga Ótima / Estímulo Eficiente";
+    if (avgRPE >= 9.0 || failedCount >= 2) {
+      fatigueLevel = "alta";
+      fatigueLabel = "🔴 Alta Fadiga Neuromuscular (Treino Extremo)";
+    } else if (avgRPE < 7.5 && failedCount === 0) {
+      fatigueLevel = "moderada";
+      fatigueLabel = "🟢 Carga Moderada / Sub-Esforço";
+    }
+
+    const rpeFailureAnalysis = {
+      fatigueLevel,
+      fatigueLabel,
+      failedCount,
+      highRpeCount,
+      subOptimalRpeCount,
+      rpeIncoherences,
+      alerts,
+      recommendations,
+      exerciseAnalysis: exerciseAnalysisList,
+    };
+
     const newSession: LoggedSession = {
       id:
         "session_" +
@@ -5737,6 +5858,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       totalAchievedVolume,
       volumeDeficit,
       compensationSuggestion: compensationSuggestion || null,
+      rpeFailureAnalysis,
       prsAtSession: {
         squat: activeStudentProfile.prs?.squat ?? null,
         bench: activeStudentProfile.prs?.bench ?? null,
@@ -9906,11 +10028,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         Dica: {ex.techniqueTips}
                                       </p>
                                     )}
-                                    {ex.trainerNote && (
-                                      <p className="text-[9px] text-[#e0d3a8] font-bold mt-1 flex items-start gap-1.5 bg-viking-gold/10 px-2 py-1 rounded border border-viking-gold/20">
-                                        <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                                    {(ex.quickNotes || ex.trainerNote) && (
+                                      <p className="text-[9px] text-[#e0d3a8] font-bold mt-1 flex items-start gap-1.5 bg-viking-gold/15 px-2 py-1 rounded border border-viking-gold/30 shadow-sm">
+                                        <Zap className="w-3 h-3 text-viking-gold shrink-0 mt-0.5 animate-pulse" />
                                         <span className="leading-tight">
-                                          Obs: {ex.trainerNote}
+                                          <strong className="text-viking-gold uppercase tracking-wider mr-1">
+                                            Nota do Treinador:
+                                          </strong>
+                                          {ex.quickNotes || ex.trainerNote}
                                         </span>
                                       </p>
                                     )}
@@ -18073,20 +18198,26 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <p className="text-xs text-viking-gold font-bold">
                                         {sess.sessionName}
                                       </p>
-                                      {sess.exercises?.some(
-                                        (ex) => ex.failed,
-                                      ) && (
-                                        <span
-                                          className="inline-flex items-center gap-1 bg-red-950/40 border border-red-500/30 px-1.5 py-0.5 rounded text-[9px] text-red-400 uppercase font-bold"
-                                          title="Houve falha em um ou mais exercícios"
-                                        >
-                                          <AlertTriangle className="w-3 h-3" />{" "}
-                                          Falha Registrada
+                                      {sess.rpeFailureAnalysis?.fatigueLabel ? (
+                                        <span className="text-[9px] bg-black/50 border border-viking-gold/20 px-1.5 py-0.5 rounded text-viking-silver font-bold uppercase">
+                                          {sess.rpeFailureAnalysis.fatigueLabel}
                                         </span>
+                                      ) : (
+                                        sess.exercises?.some(
+                                          (ex) => ex.failed,
+                                        ) && (
+                                          <span
+                                            className="inline-flex items-center gap-1 bg-red-950/40 border border-red-500/30 px-1.5 py-0.5 rounded text-[9px] text-red-400 uppercase font-bold"
+                                            title="Houve falha em um ou mais exercícios"
+                                          >
+                                            <AlertTriangle className="w-3 h-3" />{" "}
+                                            Falha Registrada
+                                          </span>
+                                        )
                                       )}
                                     </div>
                                     <span
@@ -18101,6 +18232,23 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       RPE Médio: {(sess.avgRPE || 0).toFixed(1)}
                                     </span>
                                   </div>
+
+                                  {/* RPE Incoherence & Monitoring Warnings in History */}
+                                  {sess.rpeFailureAnalysis?.rpeIncoherences &&
+                                    sess.rpeFailureAnalysis.rpeIncoherences
+                                      .length > 0 && (
+                                      <div className="p-2 bg-red-950/30 border border-red-500/30 rounded-lg text-[10px] text-red-300 space-y-1">
+                                        <p className="font-bold flex items-center gap-1 text-red-400 uppercase">
+                                          <AlertTriangle className="w-3 h-3" />
+                                          Aviso de Monitoramento RPE:
+                                        </p>
+                                        {sess.rpeFailureAnalysis.rpeIncoherences.map(
+                                          (inc, i) => (
+                                            <p key={i}>• {inc}</p>
+                                          ),
+                                        )}
+                                      </div>
+                                    )}
 
                                   {sess.totalPlannedVolume !== undefined &&
                                     sess.totalAchievedVolume !== undefined && (
@@ -18134,7 +18282,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                           <div className="flex items-center gap-1">
                                             <span>{e.name}</span>
                                             {e.failed && (
-                                              <span className="text-[8px] bg-red-950 text-red-400 font-bold px-1 rounded border border-red-900/40">
+                                              <span className="text-[8px] bg-red-950 text-red-400 font-bold px-1 rounded border border-red-900/40 uppercase">
                                                 FALHOU
                                               </span>
                                             )}
@@ -18158,6 +18306,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                             </strong>
                                           </div>
                                         </div>
+                                        {e.rpeAnalysisNote && (
+                                          <p className="text-[9px] text-viking-silver/70 italic">
+                                            {e.rpeAnalysisNote}
+                                          </p>
+                                        )}
                                         {e.sets && e.sets.length > 0 && (
                                           <div className="pl-2 flex flex-wrap gap-1 text-[9px]">
                                             {e.sets.map((s, sidx) => (
@@ -19152,23 +19305,81 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                         className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/20 text-[#e0d3a8] font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-silver/30 resize-none"
                                       />
                                     </div>
-                                    <div>
-                                      <label className="block text-[9px] font-bold text-viking-gold uppercase mb-1">
-                                        Observações do Treinador
-                                      </label>
+                                    <div className="bg-viking-gold/5 border border-viking-gold/30 p-3 rounded-xl space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <label className="block text-[10px] font-black text-viking-gold uppercase tracking-wider flex items-center gap-1.5">
+                                          <MessageSquare className="w-3.5 h-3.5 text-viking-gold" />
+                                          Notas Rápidas & Instruções do Treinador
+                                        </label>
+                                        <span className="text-[9px] text-viking-gold/80 font-bold bg-viking-gold/10 px-2 py-0.5 rounded border border-viking-gold/20">
+                                          Visível no treino do aluno
+                                        </span>
+                                      </div>
                                       <DebouncedTextarea
-                                        value={ex.trainerNote || ""}
-                                        onChange={(val: string) =>
+                                        value={
+                                          ex.quickNotes || ex.trainerNote || ""
+                                        }
+                                        onChange={(val: string) => {
+                                          handleEditorUpdateField(
+                                            originalIdx,
+                                            "quickNotes",
+                                            val,
+                                          );
                                           handleEditorUpdateField(
                                             originalIdx,
                                             "trainerNote",
                                             val,
-                                          )
-                                        }
-                                        placeholder="Ex: Fazer com band..."
+                                          );
+                                        }}
+                                        placeholder="Ex: foco na cadência (3s excêntrica), pausa no peito..."
                                         rows={2}
-                                        className="w-full px-3 py-1.5 rounded bg-black/40 border border-viking-gold/40 text-viking-gold font-medium text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none"
+                                        className="w-full px-3 py-1.5 rounded-lg bg-black/60 border border-viking-gold/40 text-viking-gold font-bold text-xs focus:outline-none focus:border-viking-gold focus:ring-1 focus:ring-viking-gold placeholder-viking-gold/30 resize-none"
                                       />
+                                      <div>
+                                        <span className="text-[9px] text-viking-silver/80 font-bold uppercase tracking-wider block mb-1">
+                                          Atalhos Rápidos de Prescrição:
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {[
+                                            "foco na cadência",
+                                            "pausa de 2s",
+                                            "até a falha técnica",
+                                            "pico de contração",
+                                            "cadência 3-0-1",
+                                            "sem lockout no topo",
+                                            "amplitude máxima",
+                                          ].map((preset) => (
+                                            <button
+                                              key={preset}
+                                              type="button"
+                                              onClick={() => {
+                                                const current =
+                                                  ex.quickNotes ||
+                                                  ex.trainerNote ||
+                                                  "";
+                                                const updated = current
+                                                  ? current.includes(preset)
+                                                    ? current
+                                                    : `${current} | ${preset}`
+                                                  : preset;
+                                                handleEditorUpdateField(
+                                                  originalIdx,
+                                                  "quickNotes",
+                                                  updated,
+                                                );
+                                                handleEditorUpdateField(
+                                                  originalIdx,
+                                                  "trainerNote",
+                                                  updated,
+                                                );
+                                              }}
+                                              className="px-2 py-0.5 rounded text-[9px] font-bold bg-black/60 border border-viking-gold/30 text-[#e0d3a8] hover:bg-viking-gold hover:text-[#140e0c] transition-all cursor-pointer shadow-sm active:scale-95"
+                                            >
+                                              + {preset}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="block text-[9px] font-bold text-viking-silver uppercase mb-1">
@@ -21385,6 +21596,17 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                         {ex.techniqueTips}
                                       </p>
                                     )}
+                                    {(ex.quickNotes || ex.trainerNote) && (
+                                      <p className="text-[11px] text-[#e0d3a8] font-bold leading-relaxed mt-1.5 bg-viking-gold/10 px-2.5 py-1.5 rounded-lg border border-viking-gold/25 flex items-center gap-1.5">
+                                        <Zap className="w-3.5 h-3.5 text-viking-gold shrink-0 animate-pulse" />
+                                        <span>
+                                          <strong className="text-viking-gold uppercase tracking-wider mr-1">
+                                            Nota do Treinador:
+                                          </strong>
+                                          {ex.quickNotes || ex.trainerNote}
+                                        </span>
+                                      </p>
+                                    )}
                                   </div>
 
                                   {currentUser?.role === "trainer" && (
@@ -22225,43 +22447,206 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       {/* Confirm Session Modal (Moved to root level) */}
       <AnimatePresence>
         {confirmSessionModalOpen && pendingSession && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-[#140e0c] p-6 rounded-2xl border border-viking-gold/20 shadow-2xl max-w-sm w-full"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-[#140e0c] p-5 sm:p-6 rounded-2xl border border-viking-gold/30 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-4"
             >
-              <h2 className="text-xl font-bold text-viking-gold mb-4">
-                Confirmar Treino
-              </h2>
-              <div className="space-y-2 text-sm text-[#e0d3a8] mb-6">
-                <p>Deseja finalizar e salvar esta sessão?</p>
-                <p>
-                  Volume Total:{" "}
-                  <span className="font-bold text-white">
-                    {pendingSession.totalAchievedVolume}
+              <div className="flex items-center justify-between border-b border-viking-gold/20 pb-3">
+                <div>
+                  <h2 className="text-lg font-black text-viking-gold uppercase tracking-wider flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-viking-gold shrink-0 animate-pulse" />
+                    Relatório de Finalização & Análise RPE
+                  </h2>
+                  <p className="text-[11px] text-viking-silver/80">
+                    {pendingSession.sessionName} • {pendingSession.date}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmSessionModalOpen(false)}
+                  className="p-1 rounded-lg text-viking-silver hover:text-white hover:bg-black/40 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Fatigue Status Banner */}
+              {pendingSession.rpeFailureAnalysis && (
+                <div
+                  className={`p-3 rounded-xl border flex items-center gap-3 ${
+                    pendingSession.rpeFailureAnalysis.fatigueLevel === "alta"
+                      ? "bg-red-950/40 border-red-500/40 text-red-200"
+                      : pendingSession.rpeFailureAnalysis.fatigueLevel ===
+                          "otima"
+                        ? "bg-viking-gold/10 border-viking-gold/30 text-viking-gold"
+                        : "bg-emerald-950/40 border-emerald-500/30 text-emerald-200"
+                  }`}
+                >
+                  <Activity className="w-5 h-5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide">
+                      {pendingSession.rpeFailureAnalysis.fatigueLabel}
+                    </p>
+                    <p className="text-[10px] opacity-80">
+                      Análise automatizada baseada na percepção de esforço e
+                      falhas.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Key Metrics Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-black/50 p-2.5 rounded-xl border border-viking-gold/15 text-center">
+                  <span className="text-[9px] uppercase font-bold text-viking-silver/70 block">
+                    RPE Médio
                   </span>
-                </p>
-                <p>
-                  RPE Médio:{" "}
-                  <span className="font-bold text-white">
+                  <span
+                    className={`text-lg font-black ${
+                      pendingSession.avgRPE >= 9
+                        ? "text-red-400"
+                        : pendingSession.avgRPE >= 7.5
+                          ? "text-viking-gold"
+                          : "text-emerald-400"
+                    }`}
+                  >
                     {pendingSession.avgRPE.toFixed(1)}
                   </span>
-                </p>
+                </div>
+                <div className="bg-black/50 p-2.5 rounded-xl border border-viking-gold/15 text-center">
+                  <span className="text-[9px] uppercase font-bold text-viking-silver/70 block">
+                    Volume Realizado
+                  </span>
+                  <span className="text-sm font-black text-white">
+                    {pendingSession.totalAchievedVolume}/
+                    {pendingSession.totalPlannedVolume}
+                  </span>
+                </div>
+                <div className="bg-black/50 p-2.5 rounded-xl border border-viking-gold/15 text-center">
+                  <span className="text-[9px] uppercase font-bold text-viking-silver/70 block">
+                    Falhas em Exercícios
+                  </span>
+                  <span
+                    className={`text-lg font-black ${
+                      (pendingSession.rpeFailureAnalysis?.failedCount || 0) > 0
+                        ? "text-red-400"
+                        : "text-emerald-400"
+                    }`}
+                  >
+                    {pendingSession.rpeFailureAnalysis?.failedCount || 0}
+                  </span>
+                </div>
               </div>
-              <div className="flex gap-3">
+
+              {/* Incoherences / Monitoring Alerts Callout */}
+              {((pendingSession.rpeFailureAnalysis?.rpeIncoherences &&
+                pendingSession.rpeFailureAnalysis.rpeIncoherences.length >
+                  0) ||
+                (pendingSession.rpeFailureAnalysis?.alerts &&
+                  pendingSession.rpeFailureAnalysis.alerts.length > 0)) && (
+                <div className="p-3 bg-red-950/30 border border-red-500/40 rounded-xl space-y-1.5 text-xs">
+                  <p className="text-[10px] font-black uppercase text-red-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                    Avisos de Monitoramento & Incoerências RPE:
+                  </p>
+                  <ul className="space-y-1 text-red-200 text-[11px] list-disc list-inside leading-relaxed">
+                    {pendingSession.rpeFailureAnalysis.rpeIncoherences?.map(
+                      (inc, idx) => (
+                        <li key={`inc_${idx}`}>{inc}</li>
+                      ),
+                    )}
+                    {pendingSession.rpeFailureAnalysis.alerts?.map(
+                      (alt, idx) => (
+                        <li key={`alt_${idx}`}>{alt}</li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Detailed Exercises RPE Breakdown */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black text-viking-gold uppercase tracking-wider flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-viking-gold" />
+                  Detalhamento de Exercícios & RPE
+                </h4>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {pendingSession.exercises.map((ex, exIdx) => (
+                    <div
+                      key={exIdx}
+                      className="p-2.5 bg-black/40 rounded-xl border border-viking-gold/10 space-y-1 text-xs"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-white flex items-center gap-1.5">
+                          {ex.name}
+                          {ex.failed && (
+                            <span className="text-[8px] bg-red-900/60 text-red-300 font-black px-1.5 py-0.5 rounded border border-red-500/40 uppercase">
+                              Falhou
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={`font-mono text-xs font-black px-2 py-0.5 rounded ${
+                            ex.rpe >= 9.5
+                              ? "bg-red-950 text-red-400 border border-red-800"
+                              : ex.rpe >= 8.5
+                                ? "bg-viking-gold/20 text-viking-gold border border-viking-gold/40"
+                                : ex.rpe >= 7.0
+                                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                                  : "bg-blue-950 text-blue-300 border border-blue-800"
+                          }`}
+                        >
+                          RPE {ex.rpe}
+                        </span>
+                      </div>
+                      {ex.rpeAnalysisNote && (
+                        <p className="text-[10px] text-viking-silver/80 italic">
+                          {ex.rpeAnalysisNote}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommendations Box */}
+              {pendingSession.rpeFailureAnalysis?.recommendations &&
+                pendingSession.rpeFailureAnalysis.recommendations.length >
+                  0 && (
+                  <div className="p-3 bg-viking-gold/5 border border-viking-gold/20 rounded-xl space-y-1.5 text-xs">
+                    <p className="text-[10px] font-black uppercase text-viking-gold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-viking-gold" />
+                      Recomendações do Oráculo Viking:
+                    </p>
+                    <div className="space-y-1 text-viking-silver text-[11px] leading-relaxed">
+                      {pendingSession.rpeFailureAnalysis.recommendations.map(
+                        (rec, rIdx) => (
+                          <p key={rIdx}>{rec}</p>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              {/* Modal Controls */}
+              <div className="flex gap-3 pt-2">
                 <button
+                  type="button"
                   onClick={() => setConfirmSessionModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg bg-black/40 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/60 transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl bg-black/50 border border-viking-gold/20 text-[#e0d3a8] hover:text-white hover:bg-black/70 transition-colors text-xs font-bold uppercase tracking-wider cursor-pointer"
                 >
-                  Cancelar
+                  Revisar Dados
                 </button>
                 <button
+                  type="button"
                   onClick={() => finalizeSession(pendingSession)}
-                  className="flex-1 py-2 rounded-lg bg-viking-gold text-[#140e0c] font-bold hover:brightness-110 transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-viking-gold-dark to-viking-gold text-viking-dark font-black hover:brightness-110 transition-all text-xs uppercase tracking-widest shadow-lg shadow-viking-gold/20 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Confirmar
+                  <Check className="w-4 h-4 shrink-0" />
+                  Confirmar & Salvar
                 </button>
               </div>
             </motion.div>
@@ -23253,15 +23638,15 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                         </div>
                                       </div>
                                     )}
-                                    {ex.trainerNote && (
-                                      <div className="mb-4 p-3 rounded-xl bg-viking-gold/10 border border-viking-gold/30 flex items-start gap-2.5 shadow-sm">
-                                        <Info className="w-4 h-4 text-viking-gold shrink-0 mt-0.5" />
+                                    {(ex.quickNotes || ex.trainerNote) && (
+                                      <div className="mb-4 p-3 rounded-xl bg-viking-gold/15 border border-viking-gold/40 flex items-start gap-2.5 shadow-md">
+                                        <Zap className="w-4.5 h-4.5 text-viking-gold shrink-0 mt-0.5 animate-pulse" />
                                         <div className="text-xs">
-                                          <span className="font-bold text-viking-gold uppercase tracking-wide">
-                                            Observações do Treinador:
+                                          <span className="font-extrabold text-viking-gold uppercase tracking-wider block mb-0.5">
+                                            Instrução / Nota Rápida do Treinador:
                                           </span>{" "}
-                                          <span className="text-[#e0d3a8] font-medium">
-                                            {ex.trainerNote}
+                                          <span className="text-white font-bold leading-relaxed">
+                                            {ex.quickNotes || ex.trainerNote}
                                           </span>
                                         </div>
                                       </div>

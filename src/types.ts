@@ -47,6 +47,7 @@ export interface Exercise {
   warmup?: WarmupStep[];
   techniqueTips?: string;
   trainerNote?: string;
+  quickNotes?: string;
   videoUrl?: string;
   videoBase64?: string;
   mobilityReminders?: string;
@@ -80,7 +81,34 @@ export interface LoggedExercise {
   plannedVolume?: number;
   achievedVolume?: number;
   failed?: boolean;
+  failedSetsDone?: number;
+  failedActualReps?: number;
+  targetRPE?: number;
+  rpeStatus?: 'critico' | 'elevado' | 'otimo' | 'suboptimo';
+  rpeAnalysisNote?: string;
   sets?: LoggedSet[];
+}
+
+export interface RpeFailureAnalysis {
+  fatigueLevel: 'alta' | 'otima' | 'moderada';
+  fatigueLabel: string;
+  failedCount: number;
+  highRpeCount: number;
+  subOptimalRpeCount: number;
+  rpeIncoherences: string[];
+  alerts: string[];
+  recommendations: string[];
+  exerciseAnalysis?: {
+    exerciseName: string;
+    rpe: number;
+    targetRPE?: number;
+    status: 'critico' | 'elevado' | 'otimo' | 'suboptimo';
+    statusLabel: string;
+    failed: boolean;
+    failedSetsDone?: number;
+    failedActualReps?: number;
+    analysisNote: string;
+  }[];
 }
 
 export interface LoggedSession {
@@ -94,6 +122,7 @@ export interface LoggedSession {
   totalAchievedVolume?: number;
   volumeDeficit?: number;
   compensationSuggestion?: string | null;
+  rpeFailureAnalysis?: RpeFailureAnalysis;
   prsAtSession?: {
     squat: number | null;
     bench: number | null;
