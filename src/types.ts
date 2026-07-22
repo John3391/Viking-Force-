@@ -243,6 +243,17 @@ export interface StudentProfile {
   customProgram?: TrainingProgram;
   customProgramName?: string;
   workoutReady?: boolean;
+  fcmToken?: string;
+  fcmEnabled?: boolean;
+  fcmTokenUpdatedAt?: number;
+  fcmPushPending?: {
+    id: string;
+    title: string;
+    body: string;
+    workoutName?: string;
+    timestamp: number;
+    delivered?: boolean;
+  } | null;
   isDeleted?: boolean;
   deletedAt?: string;
 }

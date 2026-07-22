@@ -252,6 +252,13 @@ import {
   fetchStudentAutoBackupFromFirebase,
   subscribeSyncMetadata,
 } from "./firebase";
+import {
+  registerFcmPushToken,
+  publishWorkoutFcmNotification,
+  sendNativePushNotification,
+  playVikingHornSound,
+  setupFcmForegroundListener,
+} from "./fcm";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   signInWithEmailAndPassword,
@@ -2050,6 +2057,81 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       }
     };
   }, []);
+
+  // Firebase Cloud Messaging (FCM) Push Notifications State & Auto-Sync
+  const [fcmPushStatus, setFcmPushStatus] = useState<"idle" | "enabled" | "denied" | "unsupported">("idle");
+  const [fcmWizardStep, setFcmWizardStep] = useState<number>(1);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "student") return;
+    const studentEmail = currentUser.email.toLowerCase().trim();
+    if (!studentEmail) return;
+
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        setFcmPushStatus("enabled");
+        registerFcmPushToken(studentEmail).catch((err) =>
+          console.warn("FCM registration error:", err),
+        );
+      } else if (Notification.permission === "denied") {
+        setFcmPushStatus("denied");
+      }
+    } else {
+      setFcmPushStatus("unsupported");
+    }
+
+    // FCM Foreground push messaging handler
+    setupFcmForegroundListener((title, body) => {
+      showToast(`${title}: ${body}`, "info");
+    });
+
+    // Cross-tab broadcast listener for instant FCM pushes
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && window.BroadcastChannel) {
+        bc = new BroadcastChannel("viking_fcm_push_channel");
+        bc.onmessage = (evt) => {
+          if (
+            evt.data?.type === "FCM_WORKOUT_PUBLISHED" &&
+            evt.data?.studentEmail === studentEmail
+          ) {
+            playVikingHornSound();
+            sendNativePushNotification(evt.data.title, evt.data.body);
+            showToast(`${evt.data.title} - ${evt.data.body}`, "info");
+          }
+        };
+      }
+    } catch (_) {}
+
+    return () => {
+      if (bc) bc.close();
+    };
+  }, [currentUser]);
+
+  // Real-time listener for pending FCM Push notifications on athlete profile
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "student" || !activeStudentProfile) return;
+    const pending = activeStudentProfile.fcmPushPending;
+    if (pending && !pending.delivered) {
+      playVikingHornSound();
+      sendNativePushNotification(pending.title, pending.body);
+      showToast(`${pending.title}: ${pending.body}`, "info");
+
+      const studentEmail = currentUser.email.toLowerCase().trim();
+      const updatedProfile = {
+        ...activeStudentProfile,
+        fcmPushPending: {
+          ...pending,
+          delivered: true,
+        },
+      };
+      setStudentsData((prev) => ({
+        ...prev,
+        [studentEmail]: updatedProfile,
+      }));
+      saveStudentToFirebase(studentEmail, updatedProfile).catch(() => {});
+    }
+  }, [activeStudentProfile?.fcmPushPending]);
 
   const checkPaymentReminders = (autoCheck = false) => {
     if (Object.keys(studentsData).length === 0) return;
@@ -6809,6 +6891,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
       setStudentsData(updatedStudents);
       localStorage.setItem("viking_students", JSON.stringify(updatedStudents));
       saveStudentToFirebase(email, updatedStudents[email]);
+
+      // Dispatch FCM Cloud Messaging Push Notification to Athlete
+      publishWorkoutFcmNotification(
+        email,
+        student.customProgramName || "Nova Ficha de Treino",
+        editorWeek,
+        editorDay
+      ).catch((err) => console.warn("FCM push publish notice:", err));
     }
 
     showToast(
@@ -20824,6 +20914,247 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 {/* 13. Notifications Drawer */}
                 {drawerType === "notifications" && activeStudentProfile && (
                   <div className="space-y-4">
+                    {/* FCM Push Notification Configuration Wizard */}
+                    <div className="p-4 rounded-2xl bg-[#1e1411]/90 border border-viking-gold/40 shadow-[0_0_20px_rgba(212,175,55,0.15)] space-y-4 relative overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-viking-gold/20 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`p-2.5 rounded-xl ${
+                              fcmPushStatus === "enabled"
+                                ? "bg-green-500/20 text-green-400 border border-green-500/40"
+                                : "bg-viking-gold/20 text-viking-gold border border-viking-gold/40"
+                            }`}
+                          >
+                            <Bell
+                              className={`w-5 h-5 ${
+                                fcmPushStatus === "enabled"
+                                  ? "animate-pulse"
+                                  : ""
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black uppercase text-viking-gold font-viking-display tracking-wide flex items-center gap-1.5">
+                              <span>Assistente FCM Push</span>
+                              <span className="text-[9px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 px-1.5 py-0.5 rounded font-mono">
+                                Step {fcmWizardStep}/3
+                              </span>
+                            </h4>
+                            <p className="text-[11px] text-viking-silver/80 mt-0.5">
+                              {fcmPushStatus === "enabled"
+                                ? "🔔 Notificações Ativas & Sincronizadas"
+                                : fcmPushStatus === "denied"
+                                ? "⚠️ Notificações Bloqueadas no Navegador"
+                                : "📲 Configuração Guiada de Notificações"}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            fcmPushStatus === "enabled"
+                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                              : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          }`}
+                        >
+                          {fcmPushStatus === "enabled"
+                            ? "Pronto"
+                            : "Pendente"}
+                        </span>
+                      </div>
+
+                      {/* Wizard Step Progress Header */}
+                      <div className="grid grid-cols-3 gap-1.5 text-center">
+                        <button
+                          onClick={() => setFcmWizardStep(1)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer text-[10px] font-bold uppercase tracking-wider ${
+                            fcmWizardStep === 1
+                              ? "bg-viking-gold/25 border-viking-gold text-viking-gold"
+                              : typeof window !== "undefined" &&
+                                "Notification" in window &&
+                                Notification.permission === "granted"
+                              ? "bg-green-500/10 border-green-500/30 text-green-400"
+                              : "bg-black/30 border-viking-gold/10 text-viking-silver/60"
+                          }`}
+                        >
+                          1. Permissão
+                        </button>
+                        <button
+                          onClick={() => setFcmWizardStep(2)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer text-[10px] font-bold uppercase tracking-wider ${
+                            fcmWizardStep === 2
+                              ? "bg-viking-gold/25 border-viking-gold text-viking-gold"
+                              : activeStudentProfile?.fcmToken
+                              ? "bg-green-500/10 border-green-500/30 text-green-400"
+                              : "bg-black/30 border-viking-gold/10 text-viking-silver/60"
+                          }`}
+                        >
+                          2. Token FCM
+                        </button>
+                        <button
+                          onClick={() => setFcmWizardStep(3)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer text-[10px] font-bold uppercase tracking-wider ${
+                            fcmWizardStep === 3
+                              ? "bg-viking-gold/25 border-viking-gold text-viking-gold"
+                              : "bg-black/30 border-viking-gold/10 text-viking-silver/60"
+                          }`}
+                        >
+                          3. Testar
+                        </button>
+                      </div>
+
+                      {/* Wizard Step Body */}
+                      <div className="bg-black/40 p-3 rounded-xl border border-viking-gold/20 space-y-3">
+                        {fcmWizardStep === 1 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-viking-gold">
+                              <span className="w-5 h-5 rounded-full bg-viking-gold/20 border border-viking-gold/50 flex items-center justify-center text-[10px]">
+                                1
+                              </span>
+                              <span>Passo 1: Permissão de Notificações</span>
+                            </div>
+                            <p className="text-[11px] text-viking-silver/80 leading-relaxed">
+                              Conceda acesso para o navegador exibir alertas
+                              instantâneos em sua tela sempre que o Treinador
+                              publicar um novo treino no Templo do Ferro.
+                            </p>
+                            <div className="pt-1 flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!currentUser?.email) return;
+                                  const token = await registerFcmPushToken(
+                                    currentUser.email,
+                                  );
+                                  if (token) {
+                                    setFcmPushStatus("enabled");
+                                    setFcmWizardStep(2);
+                                    showToast(
+                                      "Permissão concedida! Avançando para o registro do Token FCM...",
+                                      "success",
+                                    );
+                                  } else {
+                                    showToast(
+                                      "Verifique se o navegador permitiu as notificações e tente novamente.",
+                                      "warning",
+                                    );
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                Conceder Permissão & Continuar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {fcmWizardStep === 2 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-viking-gold">
+                              <span className="w-5 h-5 rounded-full bg-viking-gold/20 border border-viking-gold/50 flex items-center justify-center text-[10px]">
+                                2
+                              </span>
+                              <span>Passo 2: Vincular Token FCM no Firebase</span>
+                            </div>
+                            <p className="text-[11px] text-viking-silver/80 leading-relaxed">
+                              Gere e associe a chave de comunicação deste
+                              aparelho à sua conta no Firebase Firestore para
+                              receber envios direcionados do Treinador.
+                            </p>
+
+                            <div className="p-2 rounded bg-black/60 border border-viking-gold/15 font-mono text-[10px] text-viking-gold/90 truncate">
+                              {activeStudentProfile?.fcmToken
+                                ? `Token: ${activeStudentProfile.fcmToken.substring(
+                                    0,
+                                    32,
+                                  )}...`
+                                : "Token FCM ainda não vinculado."}
+                            </div>
+
+                            <div className="pt-1 flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!currentUser?.email) return;
+                                  const token = await registerFcmPushToken(
+                                    currentUser.email,
+                                  );
+                                  if (token) {
+                                    setFcmPushStatus("enabled");
+                                    setFcmWizardStep(3);
+                                    playVikingHornSound();
+                                    showToast(
+                                      "Token FCM vinculado ao Firebase com sucesso! Avançando para o teste.",
+                                      "success",
+                                    );
+                                  } else {
+                                    showToast(
+                                      "Não foi possível gerar o Token. Tente novamente.",
+                                      "error",
+                                    );
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                {activeStudentProfile?.fcmToken
+                                  ? "Re-Sincronizar Token FCM"
+                                  : "Gerar & Salvar Token FCM"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {fcmWizardStep === 3 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-viking-gold">
+                              <span className="w-5 h-5 rounded-full bg-viking-gold/20 border border-viking-gold/50 flex items-center justify-center text-[10px]">
+                                3
+                              </span>
+                              <span>
+                                Passo 3: Teste de Berrante & Push
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-viking-silver/80 leading-relaxed">
+                              Dispare uma notificação de teste em tempo real com
+                              alerta sonoro Viking para verificar se seu
+                              aparelho está pronto para a próxima ficha.
+                            </p>
+
+                            <div className="pt-1 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  playVikingHornSound();
+                                  sendNativePushNotification(
+                                    "⚔️ ALERTA PUSH FCM: TEMPLO DO FERRO!",
+                                    "Notificações instantâneas configuradas com sucesso! Bom treino!",
+                                  );
+                                  showToast(
+                                    "Notificação Push FCM de teste disparada com sucesso!",
+                                    "success",
+                                  );
+                                }}
+                                className="flex-1 px-3 py-2 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                📯 Disparar Push de Teste
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  playVikingHornSound();
+                                  showToast(
+                                    "Som de Berrante Viking executado!",
+                                    "info",
+                                  );
+                                }}
+                                className="px-3 py-2 bg-black/50 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                🔊 Testar Som
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {activeStudentProfile.notifications &&
                     activeStudentProfile.notifications.length > 0 ? (
                       <div className="space-y-3">
@@ -20969,6 +21300,13 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         }));
                         // Also update Firebase
                         saveStudentToFirebase(studentEmail, updatedStudent);
+
+                        // Dispatch FCM Cloud Messaging Push Notification
+                        publishWorkoutFcmNotification(
+                          studentEmail,
+                          protocol.name
+                        ).catch((err) => console.warn("FCM protocol push notice:", err));
+
                         showToast(
                           `Protocolo "${protocol.name}" aplicado com sucesso!`,
                           "success",
