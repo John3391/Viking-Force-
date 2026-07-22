@@ -151,6 +151,14 @@ export interface CardioPrescription {
   datePrescribed: string;
 }
 
+export interface TrainerQuickNote {
+  id: string;
+  text: string;
+  createdAt: string; // ISO String
+  category?: 'Lembrete' | 'Lesão / Cuidado' | 'Meta' | 'Técnica' | 'Financeiro';
+  priority?: 'low' | 'medium' | 'high';
+}
+
 export interface StudentProfile {
   email?: string;
   name: string;
@@ -182,6 +190,7 @@ export interface StudentProfile {
   targetEventName?: string | null;
   targetWilks?: number;
   publicNote?: string | null;
+  privateNotes?: TrainerQuickNote[];
   dueDate?: string | null;
   accessBlocked?: boolean;
   phone?: string;

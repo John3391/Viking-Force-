@@ -90,6 +90,7 @@ import {
   MoreVertical,
   MoreHorizontal,
   Database,
+  StickyNote,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import confetti from "canvas-confetti";
@@ -114,6 +115,7 @@ import {
   CardioGoal,
   CardioPrescription,
   VikingBackup,
+  TrainerQuickNote,
 } from "./types";
 import { ProtocolsDrawer } from "./components/ProtocolsDrawer";
 import { WorkoutHistory } from "./components/WorkoutHistory";
@@ -268,6 +270,7 @@ import InactiveStudentsAlert from "./components/InactiveStudentsAlert";
 import PatentTimeline from "./components/PatentTimeline";
 import SbdImpactSimulator from "./components/SbdImpactSimulator";
 import WilksGoalSelector from "./components/WilksGoalSelector";
+import TrainerQuickNotesModal from "./components/TrainerQuickNotesModal";
 import WeeklyVolumeLineChart from "./components/WeeklyVolumeLineChart";
 import { VikingLogo } from "./components/VikingLogo";
 
@@ -682,6 +685,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [activeNoteStudentEmail, setActiveNoteStudentEmail] =
     useState<string>("");
   const [publicNoteInput, setPublicNoteInput] = useState<string>("");
+
+  // Trainer Quick Notes Modal state
+  const [quickNotesModalOpen, setQuickNotesModalOpen] = useState<boolean>(false);
+  const [quickNotesStudentEmail, setQuickNotesStudentEmail] = useState<string>("");
 
   // Controlled inputs for student Settings (PRs)
   const [settingsSquat, setSettingsSquat] = useState<number>(0);
@@ -4464,6 +4471,30 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     saveStudentsToDB(updatedStudents);
     showToast("Nota pública de parabéns atualizada com sucesso!", "success");
     setDrawerOpen(false);
+  };
+
+  const handleSaveStudentPrivateNotes = (
+    studentEmail: string,
+    notes: TrainerQuickNote[],
+  ) => {
+    const emailKey = studentEmail.toLowerCase();
+    const student = studentsData[emailKey];
+    if (!student) return;
+
+    const updatedProfile: StudentProfile = {
+      ...student,
+      privateNotes: notes,
+    };
+
+    const updatedStudents = {
+      ...studentsData,
+      [emailKey]: updatedProfile,
+    };
+
+    saveStudentsToDB(updatedStudents);
+    saveStudentToFirebase(emailKey, updatedProfile).catch((err) =>
+      console.error("Erro salvando nota privada no Firebase:", err),
+    );
   };
 
   const handleSendActiveChatMessage = async (e: React.FormEvent) => {
@@ -11644,6 +11675,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   </button>
                   <button
                     onClick={() => {
+                      setQuickNotesStudentEmail("");
+                      setQuickNotesModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/30 hover:border-viking-gold/60 text-viking-gold font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                    title="Lembrete rápido sobre qualquer atleta (visível apenas para o treinador)"
+                  >
+                    <StickyNote className="w-4 h-4 shrink-0 text-viking-gold" />
+                    <span>Notas Rápidas</span>
+                  </button>
+                  <button
+                    onClick={() => {
                       setDrawerType("addStudent");
                       setDrawerTitle("Recrutar Novo Aluno");
                       setDrawerOpen(true);
@@ -12009,6 +12051,22 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       )}
                                       {!isBatchMode && (
                                         <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setQuickNotesStudentEmail(email);
+                                            setQuickNotesModalOpen(true);
+                                          }}
+                                          className="px-3 py-2 rounded-lg bg-viking-gold/15 hover:bg-viking-gold/30 border border-viking-gold/30 text-viking-gold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                          title="Notas rápidas do treinador sobre este atleta"
+                                        >
+                                          <StickyNote className="w-3.5 h-3.5 text-viking-gold" />
+                                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                                            Notas {s.privateNotes?.length ? `(${s.privateNotes.length})` : ""}
+                                          </span>
+                                        </button>
+                                      )}
+                                      {!isBatchMode && (
+                                        <button
                                           onClick={() => {
                                             setEditingStudentEmail(email);
                                             setDrawerTitle(
@@ -12273,6 +12331,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                       className="absolute right-0 top-full mt-1 w-36 bg-[#0d0908] border border-viking-gold/20 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.8)] overflow-hidden z-50 flex flex-col py-1"
                                       onClick={(e) => e.stopPropagation()}
                                     >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenStudentMenu(null);
+                                          setQuickNotesStudentEmail(email);
+                                          setQuickNotesModalOpen(true);
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-xs font-semibold text-viking-gold hover:bg-viking-gold/10 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <StickyNote className="w-3.5 h-3.5 text-viking-gold" /> Notas Rápidas
+                                      </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -21500,6 +21569,16 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           </div>
         )}
       </AnimatePresence>
+
+      {/* Trainer Quick Notes Modal */}
+      <TrainerQuickNotesModal
+        isOpen={quickNotesModalOpen}
+        onClose={() => setQuickNotesModalOpen(false)}
+        studentsData={studentsData}
+        initialStudentEmail={quickNotesStudentEmail}
+        onSaveNotes={handleSaveStudentPrivateNotes}
+        showToast={showToast}
+      />
 
       {/* Confirm Session Modal (Moved to root level) */}
       <AnimatePresence>
