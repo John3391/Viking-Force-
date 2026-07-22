@@ -286,6 +286,7 @@ export async function fetchStudentProfileFromFirebase(email: string): Promise<St
 export async function saveStudentToFirebase(email: string, student: StudentProfile): Promise<void> {
   try {
     const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return;
     
     // Dirty check: Compare proposed state with last-known Firestore state
     const cached = studentCache.get(cleanEmail);
@@ -294,28 +295,10 @@ export async function saveStudentToFirebase(email: string, student: StudentProfi
       return;
     }
     
-    console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} IS DIRTY (has changes). Proceeding with Firestore write.`);
+    console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} IS DIRTY (has changes). Writing to Firestore...`);
     
-    if (cached) {
-      // Delta update logic
-      const delta: any = {};
-      const allKeys = new Set([...Object.keys(cached), ...Object.keys(student)]);
-      for (const key of allKeys) {
-        const studentVal = (student as any)[key];
-        const cachedVal = (cached as any)[key];
-        if (!deepEqual(cachedVal, studentVal)) {
-          if (studentVal === undefined) {
-             delta[key] = deleteField();
-          } else {
-             delta[key] = studentVal;
-          }
-        }
-      }
-      console.log(`[Firebase Delta] Updating fields for ${cleanEmail}: ${Object.keys(delta).join(', ')}`);
-      await setDoc(doc(db, 'students', cleanEmail), delta, { merge: true });
-    } else {
-      await setDoc(doc(db, 'students', cleanEmail), student);
-    }
+    // Direct setDoc with merge: true ensures atomic, complete sync
+    await setDoc(doc(db, 'students', cleanEmail), student, { merge: true });
     
     // Keep cache synchronized with newly written data
     studentCache.set(cleanEmail, JSON.parse(JSON.stringify(student)));

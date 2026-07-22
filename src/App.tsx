@@ -1542,7 +1542,30 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       }
     }
 
-    // 2. Cloud Sync: Set up the auth listener. Fetch only when authenticated!
+    // 2. Cross-tab/Window Real-time Sync (Storage Event + BroadcastChannel)
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === "viking_students" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setStudentsData((prev) => ({ ...prev, ...parsed }));
+        } catch (_) {}
+      }
+    };
+    window.addEventListener("storage", handleStorageSync);
+
+    let bcSync: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && window.BroadcastChannel) {
+        bcSync = new BroadcastChannel("viking_force_sync");
+        bcSync.onmessage = (evt) => {
+          if (evt.data?.type === "STUDENTS_UPDATED" && evt.data?.data) {
+            setStudentsData((prev) => ({ ...prev, ...evt.data.data }));
+          }
+        };
+      }
+    } catch (_) {}
+
+    // 3. Cloud Sync: Set up the auth listener. Fetch only when authenticated!
     let unsubscribeStudents: (() => void) | null = null;
     let unsubscribeProgram: (() => void) | null = null;
 
@@ -2016,6 +2039,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     });
 
     return () => {
+      window.removeEventListener("storage", handleStorageSync);
+      if (bcSync) bcSync.close();
       unsubscribe();
       if (unsubscribeStudents) {
         unsubscribeStudents();
@@ -2262,33 +2287,54 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   };
 
   const saveStudentsToDB = (newStuds: Record<string, StudentProfile>) => {
-    // Identify modified, added or deleted profiles to minimize Firestore writes
     const prevStuds = studentsData;
 
+    // Normalize email keys to lowercase
+    const normalizedStuds: Record<string, StudentProfile> = {};
+    Object.keys(newStuds).forEach((email) => {
+      const cleanEmail = email.trim().toLowerCase();
+      if (cleanEmail) {
+        normalizedStuds[cleanEmail] = {
+          ...newStuds[email],
+          email: cleanEmail,
+        };
+      }
+    });
+
     // Save state and local storage instantly for fluid UI responsiveness
-    setStudentsData(newStuds);
-    localStorage.setItem("viking_students", JSON.stringify(newStuds));
+    setStudentsData(normalizedStuds);
+    localStorage.setItem("viking_students", JSON.stringify(normalizedStuds));
 
     // Async sync to Firestore
     // Deletion check
     Object.keys(prevStuds).forEach((email) => {
-      if (!newStuds[email]) {
-        deleteStudentFromFirebase(email).catch((err) =>
+      const cleanEmail = email.trim().toLowerCase();
+      if (!normalizedStuds[cleanEmail]) {
+        deleteStudentFromFirebase(cleanEmail).catch((err) =>
           console.error("Firebase delete athlete error:", err),
         );
       }
     });
 
     // Modification / addition check
-    Object.keys(newStuds).forEach((email) => {
-      const oldVal = prevStuds[email];
-      const newVal = newStuds[email];
+    Object.keys(normalizedStuds).forEach((cleanEmail) => {
+      const oldVal = prevStuds[cleanEmail];
+      const newVal = normalizedStuds[cleanEmail];
       if (!oldVal || JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        saveStudentToFirebase(email, newVal).catch((err) =>
+        saveStudentToFirebase(cleanEmail, newVal).catch((err) =>
           console.error("Firebase save athlete error:", err),
         );
       }
     });
+
+    // Broadcast student updates across tabs and windows for real-time trainer sync
+    try {
+      if (typeof window !== "undefined" && window.BroadcastChannel) {
+        const bc = new BroadcastChannel("viking_force_sync");
+        bc.postMessage({ type: "STUDENTS_UPDATED", data: normalizedStuds });
+        bc.close();
+      }
+    } catch (_) {}
   };
 
   const handleBatchUpdateStatus = (
@@ -5549,12 +5595,29 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       updatedProfile.prevPrs = prevPrs;
     }
 
+    const studentEmail = (
+      currentUser?.email ||
+      activeStudentProfile.email ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
     const updatedStudents = {
       ...studentsData,
-      [currentUser.email.toLowerCase()]: updatedProfile,
+      [studentEmail]: updatedProfile,
     };
 
     saveStudentsToDB(updatedStudents);
+
+    if (studentEmail) {
+      saveStudentToFirebase(studentEmail, updatedProfile).catch((err) =>
+        console.error(
+          "Direct Firebase save error on workout completion:",
+          err,
+        ),
+      );
+    }
 
     // Check for Wilks goal achievement
     const oldTotal =
