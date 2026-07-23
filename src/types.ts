@@ -254,6 +254,13 @@ export interface StudentProfile {
     timestamp: number;
     delivered?: boolean;
   } | null;
+  fcmPushErrors?: {
+    id: string;
+    timestamp: number;
+    title: string;
+    error: string;
+    code?: "EXPIRED_TOKEN" | "PERMISSION_DENIED" | "UNREGISTERED" | "DELIVERY_FAILED";
+  }[];
   isDeleted?: boolean;
   deletedAt?: string;
 }

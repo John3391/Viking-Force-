@@ -122,6 +122,7 @@ import {
 } from "./types";
 import { ProtocolsDrawer } from "./components/ProtocolsDrawer";
 import { WorkoutHistory } from "./components/WorkoutHistory";
+import { FcmDiagnosticModal } from "./components/FcmDiagnosticModal";
 import { DEFAULT_PROGRAM, DEFAULT_STUDENTS } from "./data";
 
 function DebouncedInput({ value, onChange, ...props }: any) {
@@ -258,6 +259,7 @@ import {
   sendNativePushNotification,
   playVikingHornSound,
   setupFcmForegroundListener,
+  logFcmPushError,
 } from "./fcm";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -699,6 +701,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   // Trainer Quick Notes Modal state
   const [quickNotesModalOpen, setQuickNotesModalOpen] = useState<boolean>(false);
   const [quickNotesStudentEmail, setQuickNotesStudentEmail] = useState<string>("");
+
+  // Trainer FCM Push Diagnostic Modal State
+  const [fcmDiagnosticModalOpen, setFcmDiagnosticModalOpen] = useState<boolean>(false);
+  const [fcmDiagnosticSearch, setFcmDiagnosticSearch] = useState<string>("");
+  const [fcmFilterStatus, setFcmFilterStatus] = useState<"all" | "active" | "expired" | "missing" | "error">("all");
 
   // Controlled inputs for student Settings (PRs)
   const [settingsSquat, setSettingsSquat] = useState<number>(0);
@@ -7651,6 +7658,17 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         <button
                           onClick={() => {
                             setWorkoutModalOpen(false);
+                            setFcmDiagnosticModalOpen(true);
+                            setNavDropdownOpen(false);
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 text-viking-gold hover:bg-viking-gold/15 transition-all cursor-pointer border border-viking-gold/20"
+                        >
+                          <Activity className="w-4 h-4 shrink-0 text-viking-gold animate-pulse" />{" "}
+                          Diagnóstico FCM Push
+                        </button>
+                        <button
+                          onClick={() => {
+                            setWorkoutModalOpen(false);
                             setDrawerType("trainerSettings");
                             setDrawerTitle("Configurações do Sistema");
                             setDrawerOpen(true);
@@ -12499,6 +12517,14 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <span>Notas Rápidas</span>
                   </button>
                   <button
+                    onClick={() => setFcmDiagnosticModalOpen(true)}
+                    className="px-4 py-2 bg-viking-gold/20 hover:bg-viking-gold/30 border border-viking-gold/40 hover:border-viking-gold/80 text-viking-gold font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                    title="Diagnóstico de Notificações Push FCM e Erros de Envio"
+                  >
+                    <Activity className="w-4 h-4 shrink-0 text-viking-gold animate-pulse" />
+                    <span>Diagnóstico Push FCM</span>
+                  </button>
+                  <button
                     onClick={handleApproveAllPendingStudents}
                     className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 hover:border-emerald-500/70 text-emerald-400 font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md"
                     title="Aprovar e liberar acesso de todos os alunos pendentes e resolver bloqueios de autenticação"
@@ -13163,6 +13189,16 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         className="w-full text-left px-3 py-2 text-xs font-semibold text-viking-gold hover:bg-viking-gold/10 flex items-center gap-2 transition-colors cursor-pointer"
                                       >
                                         <StickyNote className="w-3.5 h-3.5 text-viking-gold" /> Notas Rápidas
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenStudentMenu(null);
+                                          setFcmDiagnosticModalOpen(true);
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-xs font-semibold text-viking-gold hover:bg-viking-gold/10 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <Activity className="w-3.5 h-3.5 text-viking-gold" /> Status Push FCM
                                       </button>
                                       <button
                                         onClick={(e) => {
@@ -20912,9 +20948,38 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 )}
 
                 {/* 13. Notifications Drawer */}
-                {drawerType === "notifications" && activeStudentProfile && (
+                {drawerType === "notifications" && (
                   <div className="space-y-4">
-                    {/* FCM Push Notification Configuration Wizard */}
+                    {currentUser?.role === "trainer" && (
+                      <div className="p-4 rounded-2xl bg-[#1e1411]/90 border border-viking-gold/40 shadow-[0_0_20px_rgba(212,175,55,0.15)] space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase text-viking-gold font-viking-display tracking-wide flex items-center gap-1.5">
+                            <Activity className="w-4 h-4 text-viking-gold animate-pulse" />
+                            <span>Diagnóstico FCM Push da Guilda</span>
+                          </h4>
+                          <span className="text-[9px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 px-2 py-0.5 rounded font-mono font-bold">
+                            Painel do Treinador
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-viking-silver/80">
+                          Acesse o relatório de status de tokens FCM dos atletas, verifique erros de envio e notifique alunos sem token.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setDrawerOpen(false);
+                            setFcmDiagnosticModalOpen(true);
+                          }}
+                          className="w-full px-3 py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Abrir Modal de Diagnóstico de Push
+                        </button>
+                      </div>
+                    )}
+
+                    {activeStudentProfile && (
+                      <>
+                        {/* FCM Push Notification Configuration Wizard */}
                     <div className="p-4 rounded-2xl bg-[#1e1411]/90 border border-viking-gold/40 shadow-[0_0_20px_rgba(212,175,55,0.15)] space-y-4 relative overflow-hidden">
                       <div className="flex items-center justify-between border-b border-viking-gold/20 pb-3">
                         <div className="flex items-center gap-2.5">
@@ -21259,8 +21324,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         </p>
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
+              </div>
+            )}
 
                 {/* Protocolos Drawer */}
                 {drawerType === "protocols" && (
@@ -22262,6 +22329,33 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                 {drawerType === "trainerSettings" &&
                   currentUser?.role === "trainer" && (
                     <div className="space-y-6">
+                      {/* FCM Push Notification Diagnostic Card */}
+                      <div className="p-4 rounded-xl bg-[#1e1411]/90 border border-viking-gold/30 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
+                            <Activity className="w-4 h-4 text-viking-gold animate-pulse" />{" "}
+                            Diagnóstico FCM Push Notifications
+                          </h4>
+                          <span className="text-[10px] bg-viking-gold/20 text-viking-gold border border-viking-gold/40 px-2 py-0.5 rounded font-mono font-bold">
+                            Firebase FCM
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-viking-silver/80 leading-relaxed">
+                          Monitore tokens FCM expirados, verifique falhas de envio e dispare solicitações de re-ativação para os atletas da guilda.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDrawerOpen(false);
+                            setFcmDiagnosticModalOpen(true);
+                          }}
+                          className="w-full px-4 py-2.5 bg-gradient-to-r from-viking-gold-dark to-viking-gold hover:brightness-110 text-viking-dark text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <Zap className="w-4 h-4" />
+                          Abrir Modal de Diagnóstico FCM
+                        </button>
+                      </div>
+
                       <div className="p-4 rounded-xl bg-[#0d0908]/60 border border-viking-gold/15 space-y-3">
                         <h4 className="text-xs font-black uppercase tracking-widest text-viking-gold flex items-center gap-1.5">
                           <Clock className="w-4 h-4 text-viking-gold" />{" "}
@@ -22842,6 +22936,22 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
         studentsData={studentsData}
         initialStudentEmail={quickNotesStudentEmail}
         onSaveNotes={handleSaveStudentPrivateNotes}
+        showToast={showToast}
+      />
+
+      {/* Trainer FCM Push Notification Diagnostic Modal */}
+      <FcmDiagnosticModal
+        isOpen={fcmDiagnosticModalOpen}
+        onClose={() => setFcmDiagnosticModalOpen(false)}
+        studentsData={studentsData}
+        onUpdateStudent={(email, updated) => {
+          const cleanEmail = email.toLowerCase().trim();
+          const newStuds = {
+            ...studentsData,
+            [cleanEmail]: updated,
+          };
+          saveStudentsToDB(newStuds);
+        }}
         showToast={showToast}
       />
 

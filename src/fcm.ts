@@ -200,15 +200,66 @@ export async function setupFcmForegroundListener(onNotificationReceived: (title:
   }
 }
 
+// Record FCM Push notification delivery error on student profile in Firestore
+export async function logFcmPushError(
+  studentEmail: string,
+  errorTitle: string,
+  errorMessage: string,
+  code: "EXPIRED_TOKEN" | "PERMISSION_DENIED" | "UNREGISTERED" | "DELIVERY_FAILED" = "DELIVERY_FAILED"
+) {
+  const cleanEmail = studentEmail.trim().toLowerCase();
+  if (!cleanEmail) return;
+
+  try {
+    const studentRef = doc(db, 'students', cleanEmail);
+    const newErr = {
+      id: `err_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      timestamp: Date.now(),
+      title: errorTitle,
+      error: errorMessage,
+      code
+    };
+    // Save to Firestore
+    await updateDoc(studentRef, {
+      fcmPushErrors: [newErr]
+    }).catch(() => {});
+  } catch (err) {
+    console.warn("[FCM] Could not record push error log:", err);
+  }
+}
+
 // Trigger FCM Push notification record when Trainer publishes or updates a workout
 export async function publishWorkoutFcmNotification(
   studentEmail: string,
   workoutName: string,
   week?: number,
-  day?: string
+  day?: string,
+  existingStudentData?: any
 ) {
   const cleanEmail = studentEmail.trim().toLowerCase();
   if (!cleanEmail) return;
+
+  // Check if student token is missing or marked disabled
+  if (existingStudentData) {
+    if (!existingStudentData.fcmToken) {
+      await logFcmPushError(
+        cleanEmail,
+        `Token FCM Ausente para "${workoutName}"`,
+        `O atleta ${existingStudentData.name || cleanEmail} ainda não ativou o token FCM neste dispositivo.`,
+        "UNREGISTERED"
+      );
+    } else if (
+      existingStudentData.fcmTokenUpdatedAt &&
+      Date.now() - existingStudentData.fcmTokenUpdatedAt > 30 * 24 * 60 * 60 * 1000
+    ) {
+      await logFcmPushError(
+        cleanEmail,
+        `Token FCM Expirado (>30 dias) para "${workoutName}"`,
+        `O token de ${existingStudentData.name || cleanEmail} não é atualizado há mais de 30 dias e pode ter expirado.`,
+        "EXPIRED_TOKEN"
+      );
+    }
+  }
 
   const title = `⚔️ NOVA FICHA DE TREINO PUBLICADA!`;
   const body = week && day
@@ -230,6 +281,12 @@ export async function publishWorkoutFcmNotification(
     });
   } catch (err) {
     console.warn("[FCM] Could not store pending push payload in Firestore:", err);
+    await logFcmPushError(
+      cleanEmail,
+      `Falha no Envio de Push`,
+      `Não foi possível registrar o payload pendente no Firestore: ${err}`,
+      "DELIVERY_FAILED"
+    );
   }
 
   // 2. Broadcast via BroadcastChannel so if athlete has app open in another tab/window, it alerts immediately
