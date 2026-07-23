@@ -862,6 +862,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [whatsappSearch, setWhatsappSearch] = useState<string>("");
   const [billingFilterDelay, setBillingFilterDelay] = useState<number>(0);
   const [paymentsSearch, setPaymentsSearch] = useState<string>("");
+  const [paymentsStatusFilter, setPaymentsStatusFilter] = useState<
+    "all" | "Pago" | "Pendente" | "Atrasado"
+  >("all");
   const [selectedPaymentStudent, setSelectedPaymentStudent] = useState<
     string | null
   >(null);
@@ -6022,6 +6025,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       ...activeStudentProfile,
       sessions: [newSession, ...(activeStudentProfile.sessions || [])],
     };
+
+    // Auto-save completed session & student feedback immediately to DB & Firebase
+    const studentEmail = (
+      currentUser?.email ||
+      activeStudentProfile.email ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
+    if (studentEmail) {
+      const updatedStudents = {
+        ...studentsData,
+        [studentEmail]: updatedProfile,
+      };
+      setStudentsData(updatedStudents);
+      saveStudentsToDB(updatedStudents);
+      saveStudentToFirebase(studentEmail, updatedProfile).catch((err) =>
+        console.error("Erro no salvamento automático do treino no Firebase:", err)
+      );
+    }
 
     setPendingSession(newSession);
     setConfirmSessionModalOpen(true);
@@ -17828,119 +17852,233 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       </button>
                     </div>
 
-                    {/* Search Bar */}
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-3.5 w-3.5 text-viking-gold/60" />
+                    {/* Controles de Filtro e Busca */}
+                    <div className="flex flex-col sm:flex-row gap-2.5">
+                      {/* Campo de busca em tempo real */}
+                      <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Search className="h-3.5 w-3.5 text-viking-gold/60" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Buscar guerreiro por nome ou email..."
+                          value={paymentsSearch}
+                          onChange={(e) => setPaymentsSearch(e.target.value)}
+                          className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/80 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
+                        />
+                        {paymentsSearch && (
+                          <button
+                            onClick={() => setPaymentsSearch("")}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+                          >
+                            Limpar
+                          </button>
+                        )}
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Buscar guerreiro por nome ou email..."
-                        value={paymentsSearch}
-                        onChange={(e) => setPaymentsSearch(e.target.value)}
-                        className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/60 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
-                      />
-                      {paymentsSearch && (
-                        <button
-                          onClick={() => setPaymentsSearch("")}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-viking-silver hover:text-viking-gold transition-colors text-xs font-bold cursor-pointer"
+
+                      {/* Seletor de filtros por 'Status do Plano' */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-viking-gold/80 font-bold uppercase tracking-wider hidden sm:inline">
+                          Status:
+                        </span>
+                        <select
+                          value={paymentsStatusFilter}
+                          onChange={(e) =>
+                            setPaymentsStatusFilter(
+                              e.target.value as "all" | "Pago" | "Pendente" | "Atrasado",
+                            )
+                          }
+                          className="w-full sm:w-auto px-3 py-2 bg-[#0d0908]/80 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold text-xs text-viking-gold font-bold rounded-xl outline-none cursor-pointer transition-all"
                         >
-                          Limpar
-                        </button>
-                      )}
+                          <option value="all" className="bg-[#140e0c] text-white">
+                            Todos os Status
+                          </option>
+                          <option value="Pago" className="bg-[#140e0c] text-emerald-400">
+                            Pago
+                          </option>
+                          <option value="Pendente" className="bg-[#140e0c] text-amber-400">
+                            Pendente
+                          </option>
+                          <option value="Atrasado" className="bg-[#140e0c] text-red-400">
+                            Atrasado
+                          </option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
+                    {/* Tabela de Alunos / Financeira (#financialTable) */}
+                    <div id="financialTable" className="space-y-3">
                       {(() => {
                         const filtered = Object.keys(studentsData).filter(
                           (email) => {
                             const s = studentsData[email];
                             if (!s) return false;
+
+                            // Filter by Status
+                            if (
+                              paymentsStatusFilter !== "all" &&
+                              s.status !== paymentsStatusFilter
+                            ) {
+                              return false;
+                            }
+
+                            // Filter by search term
                             const term = paymentsSearch.toLowerCase().trim();
                             if (!term) return true;
                             return (
                               s.name.toLowerCase().includes(term) ||
-                              email.toLowerCase().includes(term)
+                              email.toLowerCase().includes(term) ||
+                              (s.plan && s.plan.toLowerCase().includes(term))
                             );
                           },
                         );
 
                         if (filtered.length === 0) {
                           return (
-                            <p className="text-center py-6 text-xs text-viking-silver/60">
-                              Nenhum guerreiro correspondente encontrado.
-                            </p>
+                            <div className="py-8 text-center text-viking-silver/60 bg-[#0d0908]/40 rounded-2xl border border-viking-gold/10">
+                              <Search className="w-8 h-8 mx-auto text-viking-silver/30 mb-2" />
+                              <p className="text-xs font-semibold text-viking-gold">
+                                Nenhum guerreiro encontrado
+                              </p>
+                              <p className="text-[11px] mt-0.5 text-viking-silver/50">
+                                {paymentsStatusFilter !== "all"
+                                  ? `Nenhum atleta com status "${paymentsStatusFilter}" para a busca atual.`
+                                  : `Nenhum atleta corresponde à busca "${paymentsSearch}".`}
+                              </p>
+                            </div>
                           );
                         }
 
                         return (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {filtered.map((email) => {
-                              const s = studentsData[email];
-                              return (
-                                <div
-                                  key={email}
-                                  onClick={() =>
-                                    setSelectedPaymentStudent(email)
-                                  }
-                                  className="p-3.5 rounded-2xl bg-[#0d0908]/65 hover:bg-[#1a1210]/95 border border-viking-gold/15 hover:border-viking-gold/40 transition-all duration-300 cursor-pointer flex flex-col justify-between gap-2.5 group relative shadow-md"
-                                >
-                                  <div className="flex justify-between items-start gap-2">
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-extrabold text-white group-hover:text-viking-gold transition-colors truncate">
-                                        {s.name}
-                                      </p>
-                                      <p className="text-[10px] text-viking-silver/50 truncate mt-0.5">
-                                        {email}
-                                      </p>
-                                    </div>
-                                    <span
-                                      className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${
-                                        s.status === "Pago"
-                                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                          : s.status === "Pendente"
-                                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                            : "bg-red-500/10 text-red-400 border-red-500/20"
-                                      }`}
-                                    >
-                                      {s.status}
-                                    </span>
-                                  </div>
+                          <div className="overflow-x-auto rounded-2xl border border-viking-gold/20 bg-[#0d0908]/80 shadow-md">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="border-b border-viking-gold/20 bg-viking-gold/10 text-viking-gold text-[10px] uppercase font-black tracking-wider">
+                                  <th className="p-3">Atleta</th>
+                                  <th className="p-3">Plano</th>
+                                  <th className="p-3">Valor</th>
+                                  <th className="p-3">Vencimento</th>
+                                  <th className="p-3 text-center">Status do Plano</th>
+                                  <th className="p-3 text-right">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-viking-gold/10 text-xs text-[#e0d3a8]">
+                                {filtered.map((email) => {
+                                  const s = studentsData[email];
+                                  const price = getPlanPrice(s.plan);
+                                  const phoneClean = (s.phone || "").replace(/\D/g, "");
+                                  const formattedDueDate = s.dueDate
+                                    ? s.dueDate.split("-").reverse().join("/")
+                                    : "N/A";
 
-                                  <div className="flex justify-between items-center text-[10px] bg-[#0d0908]/40 p-2 rounded-lg border border-viking-gold/5">
-                                    <span className="text-viking-silver/70 font-semibold truncate mr-2">
-                                      {s.plan}
-                                    </span>
-                                    <span className="font-extrabold text-white text-xs shrink-0">
-                                      R${" "}
-                                      {getPlanPrice(s.plan).toLocaleString(
-                                        "pt-BR",
-                                        {
+                                  const isOverdue = s.status === "Atrasado";
+                                  const isPending = s.status === "Pendente";
+
+                                  const customWaText = isOverdue
+                                    ? `Saudações, guerreiro ${s.name}! Identificamos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force encontra-se ATRASADA (Vencimento: ${formattedDueDate}). Por favor, regularize sua situação o quanto antes para manter seu acesso ativo aos treinos! 💪⚔️`
+                                    : `Saudações, guerreiro ${s.name}! Lembramos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force consta como PENDENTE de pagamento (Vencimento: ${formattedDueDate}). Por favor, envie o comprovante assim que possível! Qualquer dúvida estamos à disposição. 💪⚔️`;
+
+                                  const mailSubject = isOverdue
+                                    ? `Cobrança de Assinatura - Viking Force`
+                                    : `Lembrete de Pagamento - Viking Force`;
+
+                                  const mailBody = isOverdue
+                                    ? `Saudações, guerreiro ${s.name}!\n\nIdentificamos que a mensalidade do seu plano (${s.plan}) na Viking Force encontra-se ATRASADA (Vencimento: ${formattedDueDate}).\nPor favor, efetue o pagamento para manter seu acesso ativo aos treinos.\n\nAtenciosamente,\nEquipe Viking Force`
+                                    : `Saudações, guerreiro ${s.name}!\n\nLembramos que a mensalidade do seu plano (${s.plan}) na Viking Force consta como PENDENTE (Vencimento: ${formattedDueDate}).\nPor favor, envie o comprovante de pagamento assim que possível.\n\nAtenciosamente,\nEquipe Viking Force`;
+
+                                  return (
+                                    <tr
+                                      key={email}
+                                      onClick={() => setSelectedPaymentStudent(email)}
+                                      className="hover:bg-viking-gold/5 transition-colors cursor-pointer group"
+                                    >
+                                      <td className="p-3">
+                                        <p className="font-extrabold text-white group-hover:text-viking-gold transition-colors">
+                                          {s.name}
+                                        </p>
+                                        <p className="text-[10px] text-viking-silver/50 truncate max-w-[140px]">
+                                          {email}
+                                        </p>
+                                      </td>
+                                      <td className="p-3 font-semibold text-viking-silver/80 text-[11px]">
+                                        {s.plan}
+                                      </td>
+                                      <td className="p-3 font-extrabold text-white">
+                                        R${" "}
+                                        {price.toLocaleString("pt-BR", {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
-                                        },
-                                      )}
-                                    </span>
-                                  </div>
-
-                                  <div className="text-[9px] text-viking-gold/70 font-medium uppercase tracking-wider flex items-center justify-between border-t border-viking-gold/5 pt-2">
-                                    <span>
-                                      Vencimento:{" "}
-                                      {s.dueDate
-                                        ? s.dueDate
-                                            .split("-")
-                                            .reverse()
-                                            .join("/")
-                                        : "N/A"}
-                                    </span>
-                                    <span className="text-viking-silver/40 group-hover:text-viking-gold transition-all flex items-center gap-1 font-black">
-                                      Ações{" "}
-                                      <Settings className="w-3 h-3 text-viking-gold animate-spin-slow shrink-0" />
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                        })}
+                                      </td>
+                                      <td className="p-3 text-[11px] font-medium text-viking-gold/80">
+                                        {formattedDueDate}
+                                      </td>
+                                      <td className="p-3 text-center">
+                                        <span
+                                          className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border inline-block ${
+                                            s.status === "Pago"
+                                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                              : s.status === "Pendente"
+                                                ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                                                : "bg-red-500/10 text-red-400 border-red-500/25"
+                                          }`}
+                                        >
+                                          {s.status}
+                                        </span>
+                                      </td>
+                                      <td className="p-3 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          {(isOverdue || isPending) && (
+                                            <>
+                                              {phoneClean ? (
+                                                <a
+                                                  href={`https://wa.me/${phoneClean}?text=${encodeURIComponent(customWaText)}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  title={`Cobrança via WhatsApp (${s.name})`}
+                                                  className="p-1.5 rounded-lg bg-[#1ea453]/20 hover:bg-[#1ea453]/40 border border-[#1ea453]/40 text-[#1ea453] hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                                                >
+                                                  <MessageCircle className="w-3.5 h-3.5" />
+                                                </a>
+                                              ) : (
+                                                <button
+                                                  disabled
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  title="Telefone não cadastrado"
+                                                  className="p-1.5 rounded-lg bg-viking-dark border border-viking-gold/10 text-viking-silver/30 cursor-not-allowed flex items-center justify-center"
+                                                >
+                                                  <MessageCircle className="w-3.5 h-3.5 opacity-30" />
+                                                </button>
+                                              )}
+                                              <a
+                                                href={`mailto:${email}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                title={`Cobrança via E-mail (${s.name})`}
+                                                className="p-1.5 rounded-lg bg-viking-gold/10 hover:bg-viking-gold/25 border border-viking-gold/30 text-viking-gold hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                                              >
+                                                <Mail className="w-3.5 h-3.5" />
+                                              </a>
+                                            </>
+                                          )}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedPaymentStudent(email);
+                                            }}
+                                            className="px-2.5 py-1 rounded-lg bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/30 text-viking-gold font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1"
+                                          >
+                                            Gerenciar
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         );
                       })()}
@@ -18547,9 +18685,15 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                   )}
 
                                   {sess.note && (
-                                    <p className="text-xs text-viking-silver/80 italic mt-2 border-l-2 border-viking-gold pl-2">
-                                      "{sess.note}"
-                                    </p>
+                                    <div className="p-3 bg-viking-gold/10 border border-viking-gold/25 rounded-xl space-y-1">
+                                      <p className="text-[10px] text-viking-gold font-black uppercase tracking-wider flex items-center gap-1">
+                                        <MessageSquare className="w-3.5 h-3.5 text-viking-gold" />
+                                        Feedback do Atleta:
+                                      </p>
+                                      <p className="text-xs text-white italic font-medium leading-relaxed">
+                                        "{sess.note}"
+                                      </p>
+                                    </div>
                                   )}
 
                                   {sess.avgRPE >= 9 && (
@@ -18561,6 +18705,24 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       </span>
                                     </div>
                                   )}
+
+                                  <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-viking-gold/10">
+                                    <span className="text-[10px] text-viking-silver/60">
+                                      Atleta: <strong className="text-white">{student.name}</strong> ({student.email})
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        setViewingStudentEmail(student.email);
+                                        setViewingStudentName(student.name);
+                                        setDrawerTitle(`Mensagens com ${student.name}`);
+                                        setDrawerType("chat");
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg bg-viking-gold/15 hover:bg-viking-gold/25 border border-viking-gold/30 text-viking-gold font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                      Responder no Chat
+                                    </button>
+                                  </div>
                                 </div>
                               )),
                             )
