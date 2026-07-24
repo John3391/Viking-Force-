@@ -280,7 +280,6 @@ import CompactListRow from "./components/CompactListRow";
 import FailureSentinel from "./components/FailureSentinel";
 import InactiveStudentsAlert from "./components/InactiveStudentsAlert";
 import PatentTimeline from "./components/PatentTimeline";
-import SbdImpactSimulator from "./components/SbdImpactSimulator";
 import WilksGoalSelector from "./components/WilksGoalSelector";
 import TrainerQuickNotesModal from "./components/TrainerQuickNotesModal";
 import WeeklyVolumeLineChart from "./components/WeeklyVolumeLineChart";
@@ -541,12 +540,18 @@ export default function App() {
   const [regGender, setRegGender] = useState<"male" | "female">("male");
   const [regPreferredTime, setRegPreferredTime] = useState<string>("18:00");
   const [regPlan, setRegPlan] = useState<string>("Mensal");
-  const [simulatedTime, setSimulatedTime] = useState<string>(() => {
+  const [currentTime, setCurrentTime] = useState<string>(() => {
     const now = new Date();
-    const hours = String(now.getHours()).padStart(2, "0");
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Leaderboard configuration
   const [leaderboardTab, setLeaderboardTab] = useState<
@@ -1659,7 +1664,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
           if (role === "trainer") {
             unsubscribeStudents = subscribeStudents((remoteStudents) => {
-              if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+              if (remoteStudents) {
                 isSyncingFromCloudRef.current = true;
                 setStudentsData(remoteStudents);
                 localStorage.setItem(
@@ -1707,7 +1712,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           // Fallback to one-time fetch
           try {
             const remoteStudents = await fetchStudentsFromFirebase();
-            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+            if (remoteStudents) {
               setStudentsData(remoteStudents);
               localStorage.setItem(
                 "viking_students",
@@ -2097,7 +2102,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     const fallbackInterval = setInterval(async () => {
       try {
         const remoteStudents = await fetchStudentsFromFirebase();
-        if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+        if (remoteStudents) {
           setStudentsData((prev) => {
             const prevStr = JSON.stringify(prev);
             const currStr = JSON.stringify(remoteStudents);
@@ -2331,7 +2336,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     let syncSuccess = true;
     try {
       const remoteStudents = await fetchStudentsFromFirebase();
-      if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+      if (remoteStudents) {
         setStudentsData(remoteStudents);
         localStorage.setItem("viking_students", JSON.stringify(remoteStudents));
       }
@@ -4161,7 +4166,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
           // Automatically load all students from Firestore on trainer login
           try {
             const remoteStudents = await fetchStudentsFromFirebase();
-            if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+            if (remoteStudents) {
               setStudentsData(remoteStudents);
               localStorage.setItem(
                 "viking_students",
@@ -9962,7 +9967,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
                       {/* LEFT COLUMN: Core Workouts, Stats & Progress (8 cols on desktop) */}
                       <div className="lg:col-span-8 space-y-6 flex flex-col">
-                        {/* SENTINELA VIKING - SIMULATED NOTIFICATION ALERT & CONTROLS */}
+                        {/* SENTINELA VIKING - REAL NOTIFICATION ALERT */}
                         {(() => {
                           const todayString = new Date().toLocaleDateString(
                             "pt-BR",
@@ -9974,7 +9979,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           const preferredTime =
                             activeStudentProfile.preferredTime || "18:00";
                           const isPastPreferredTime =
-                            simulatedTime > preferredTime;
+                            currentTime > preferredTime;
                           const showAlert =
                             isPastPreferredTime && !hasTrainedToday;
 
@@ -10007,7 +10012,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                           </strong>{" "}
                                           e agora já são{" "}
                                           <strong className="text-red-300 font-black">
-                                            {simulatedTime}
+                                            {currentTime}
                                           </strong>
                                           !
                                         </p>
@@ -10026,18 +10031,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                         className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-red-500/20 text-center cursor-pointer"
                                       >
                                         🏋️ Iniciar Treino de Hoje
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setSimulatedTime("08:00");
-                                          showToast(
-                                            "Alerta silenciado (relógio ajustado para 08:00)",
-                                            "info",
-                                          );
-                                        }}
-                                        className="px-4 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/40 border border-red-500/20 hover:border-red-500/40 text-red-300 font-bold text-xs uppercase transition-all text-center cursor-pointer"
-                                      >
-                                        Silenciar
                                       </button>
                                     </div>
                                   </div>
@@ -10073,17 +10066,11 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                             </span>
                                           ) : (
                                             <span className="text-viking-silver/70 block mt-1.5">
-                                              Relógio simulado em{" "}
-                                              <strong className="text-white font-bold">
-                                                {simulatedTime}
-                                              </strong>
-                                              . Você tem até às{" "}
+                                              Você tem até às{" "}
                                               <strong className="text-viking-gold font-bold">
                                                 {preferredTime}
                                               </strong>{" "}
-                                              para treinar e registrar seu
-                                              esforço sem soar o berrante de
-                                              alerta.
+                                              para treinar e registrar seu esforço sem soar o berrante de alerta.
                                             </span>
                                           )}
                                         </p>
@@ -10091,107 +10078,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                                     </div>
                                   </div>
                                 )}
-                              </div>
-
-                              {/* Simulator Controls Widget */}
-                              <div className="md:col-span-5 bg-[#1a1210]/60 border border-viking-gold/15 rounded-3xl p-5 space-y-3 shadow-md flex flex-col justify-between">
-                                <div>
-                                  <div className="flex items-center gap-2 pb-2 border-b border-viking-gold/10">
-                                    <Settings className="w-4 h-4 text-viking-gold" />
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-[#e0d3a8] font-viking-display">
-                                      Simulador de Sentinela
-                                    </span>
-                                  </div>
-
-                                  <div className="space-y-3 pt-2">
-                                    <div className="flex items-center justify-between text-xs">
-                                      <span className="text-viking-silver/70 font-semibold">
-                                        Relógio:
-                                      </span>
-                                      <input
-                                        type="time"
-                                        value={simulatedTime}
-                                        onChange={(e) => {
-                                          const newTime = e.target.value;
-                                          setSimulatedTime(newTime);
-                                          if (
-                                            newTime > preferredTime &&
-                                            !hasTrainedToday
-                                          ) {
-                                            showToast(
-                                              "📯 O Berrante Viking soou! Treino pendente!",
-                                              "error",
-                                            );
-                                          }
-                                        }}
-                                        className="px-2 py-1 rounded bg-black/60 border border-viking-gold/25 text-viking-gold font-bold text-xs [color-scheme:dark] focus:outline-none focus:border-viking-gold"
-                                      />
-                                    </div>
-
-                                    {/* Fast selection presets */}
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                      <button
-                                        onClick={() => {
-                                          setSimulatedTime("08:00");
-                                          showToast(
-                                            "Relógio simulado: Manhã (08:00)",
-                                            "info",
-                                          );
-                                        }}
-                                        className="py-1 px-1.5 text-[9px] font-bold bg-[#0d0908]/80 hover:bg-viking-gold/10 border border-viking-gold/10 hover:border-viking-gold/30 rounded-lg text-viking-silver transition-all cursor-pointer text-center"
-                                      >
-                                        🌅 Manhã (08:00)
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          const [h, m] = preferredTime
-                                            .split(":")
-                                            .map(Number);
-                                          const newH = String(
-                                            (h + 1) % 24,
-                                          ).padStart(2, "0");
-                                          const newM = String(m).padStart(
-                                            2,
-                                            "0",
-                                          );
-                                          const target = `${newH}:${newM}`;
-                                          setSimulatedTime(target);
-                                          if (!hasTrainedToday) {
-                                            showToast(
-                                              "📯 Alerta soado! Horário preferencial ultrapassado!",
-                                              "error",
-                                            );
-                                          } else {
-                                            showToast(
-                                              `Relógio em ${target} (Treino de hoje já concluído!)`,
-                                              "success",
-                                            );
-                                          }
-                                        }}
-                                        className="py-1 px-1.5 text-[9px] font-bold bg-red-950/20 hover:bg-red-900/10 border border-red-500/10 hover:border-red-500/30 rounded-lg text-red-300 transition-all cursor-pointer text-center"
-                                      >
-                                        🚨 Atrasado (+1h)
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="pt-2 border-t border-viking-gold/10 flex justify-between items-center text-[9px]">
-                                  <span className="text-viking-silver/50">
-                                    Preferência:
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      setDrawerType("settings");
-                                      setDrawerTitle("Configurações de Força");
-                                      setDrawerOpen(true);
-                                    }}
-                                    className="text-viking-gold hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
-                                  >
-                                    <Edit className="w-2.5 h-2.5" /> Ajustar
-                                    para {preferredTime}
-                                  </button>
-                                </div>
                               </div>
                             </div>
                           );
@@ -11230,11 +11116,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                             showToast={showToast}
                           />
 
-                          {/* SBD Impact Simulator component */}
-                          <SbdImpactSimulator
-                            studentProfile={activeStudentProfile}
-                            showToast={showToast}
-                          />
 
                           {/* Automatic Goal Selector */}
                           <WilksGoalSelector
@@ -12961,7 +12842,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         (sess) => sess.date === todayString,
                       );
                       const preferredTime = s.preferredTime || "18:00";
-                      const isPastPreferredTime = simulatedTime > preferredTime;
+                      const isPastPreferredTime = currentTime > preferredTime;
                       const isSelected = selectedStudentEmails.includes(email);
                       const tooltipStats = [
                         `${s.name}`,
@@ -18552,6 +18433,16 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                     : "N/A";
 
                                   const daysOverdue = getDaysOverdue(s.dueDate, s.status);
+                                  const isPastDue = (() => {
+                                    if (!s.dueDate) return false;
+                                    const parts = s.dueDate.trim().split("-");
+                                    if (parts.length !== 3) return false;
+                                    const due = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    return due.getTime() < today.getTime();
+                                  })();
+                                  
                                   const isOverdueByDate = daysOverdue > 0 || s.status === "Atrasado";
                                   const isPending = s.status === "Pendente";
                                   const isOverdue = isOverdueByDate;
@@ -18573,8 +18464,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       key={email}
                                       onClick={() => setSelectedPaymentStudent(email)}
                                       className={`transition-colors cursor-pointer group border-b border-viking-gold/10 ${
-                                        isOverdueByDate
-                                          ? "bg-red-950/40 hover:bg-red-900/50 border-l-4 border-l-red-500 shadow-[inset_0_0_12px_rgba(239,68,68,0.2)]"
+                                        isPastDue
+                                          ? "bg-red-950/40 border-l-4 border-l-red-500"
                                           : "hover:bg-viking-gold/5"
                                       }`}
                                     >

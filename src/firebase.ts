@@ -426,13 +426,13 @@ export async function fetchProgramFromFirebase(): Promise<TrainingProgram> {
     if (programSnap.exists()) {
       return programSnap.data() as TrainingProgram;
     } else {
-      // Initialize with DEFAULT_PROGRAM
+      const emptyProgram: TrainingProgram = { weeks: {} };
       try {
-        await setDoc(programDocRef, DEFAULT_PROGRAM);
+        await setDoc(programDocRef, emptyProgram);
       } catch (e) {
-        console.warn("Falha ao salvar DEFAULT_PROGRAM no Firestore:", e);
+        console.warn("Falha ao salvar emptyProgram no Firestore:", e);
       }
-      return DEFAULT_PROGRAM;
+      return emptyProgram;
     }
   } catch (error) {
     const cached = localStorage.getItem('viking_program');
