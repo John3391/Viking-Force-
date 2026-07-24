@@ -865,6 +865,28 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const [paymentsStatusFilter, setPaymentsStatusFilter] = useState<
     "all" | "Pago" | "Pendente" | "Atrasado"
   >("all");
+  const [paymentsDelayDays, setPaymentsDelayDays] = useState<number>(0);
+  const [savedFinancialFilters, setSavedFinancialFilters] = useState<
+    Array<{
+      id: string;
+      name: string;
+      search: string;
+      status: "all" | "Pago" | "Pendente" | "Atrasado";
+      delayDays?: number;
+    }>
+  >(() => {
+    try {
+      const saved = localStorage.getItem("viking_saved_financial_filters");
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [
+      { id: "preset-1", name: "Pendentes", search: "", status: "Pendente", delayDays: 0 },
+      { id: "preset-2", name: "Atrasados > 7d", search: "", status: "Atrasado", delayDays: 7 },
+      { id: "preset-3", name: "Atrasados > 15d", search: "", status: "Atrasado", delayDays: 15 },
+    ];
+  });
+  const [showSaveFilterModal, setShowSaveFilterModal] = useState<boolean>(false);
+  const [newFilterNameInput, setNewFilterNameInput] = useState<string>("");
   const [selectedPaymentStudent, setSelectedPaymentStudent] = useState<
     string | null
   >(null);
@@ -5272,6 +5294,83 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     link.download = `resumo_financeiro_${new Date().toLocaleDateString("pt-BR").replace(/\//g, "_")}.csv`;
     link.click();
     showToast("Resumo financeiro exportado!", "success");
+  };
+
+  const handleQuickStatusChange = (
+    studentEmail: string,
+    newStatus: "Pago" | "Pendente" | "Atrasado",
+  ) => {
+    const cleanEmail = studentEmail.toLowerCase().trim();
+    const currentStudent = studentsData[cleanEmail];
+    if (!currentStudent) return;
+
+    if (currentStudent.status === newStatus) return;
+
+    const updatedStudent: StudentProfile = {
+      ...currentStudent,
+      status: newStatus,
+    };
+
+    saveStudentsToDB({
+      ...studentsData,
+      [cleanEmail]: updatedStudent,
+    });
+
+    showToast(
+      `Status do plano de ${currentStudent.name} alterado para "${newStatus}"!`,
+      "success",
+    );
+  };
+
+  const getDaysOverdue = (dueDateStr?: string, status?: string): number => {
+    if (!dueDateStr || status === "Pago") return 0;
+    const cleanDate = dueDateStr.trim();
+    const parts = cleanDate.split("-");
+    if (parts.length !== 3) return 0;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) return 0;
+
+    const due = new Date(year, month, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffTime = today.getTime() - due.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const handleSaveCurrentFilter = () => {
+    const trimmedName = newFilterNameInput.trim();
+    if (!trimmedName) {
+      showToast("Insira um nome para o filtro!", "warning");
+      return;
+    }
+    const newFilter = {
+      id: "filter-" + Date.now(),
+      name: trimmedName,
+      search: paymentsSearch,
+      status: paymentsStatusFilter,
+      delayDays: paymentsDelayDays,
+    };
+    const updated = [...savedFinancialFilters, newFilter];
+    setSavedFinancialFilters(updated);
+    try {
+      localStorage.setItem("viking_saved_financial_filters", JSON.stringify(updated));
+    } catch (_) {}
+    setNewFilterNameInput("");
+    setShowSaveFilterModal(false);
+    showToast(`Filtro "${trimmedName}" salvo com sucesso!`, "success");
+  };
+
+  const handleDeleteSavedFilter = (id: string) => {
+    const updated = savedFinancialFilters.filter((f) => f.id !== id);
+    setSavedFinancialFilters(updated);
+    try {
+      localStorage.setItem("viking_saved_financial_filters", JSON.stringify(updated));
+    } catch (_) {}
+    showToast("Filtro removido!", "info");
   };
 
   const isStudentPending = activeStudentProfile?.status === "Pendente";
@@ -17960,14 +18059,25 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                     {/* Contadores de Status / Badges Interativas */}
                     {(() => {
-                      const allStudentEntries = Object.keys(studentsData).map((email) => ({
-                        email,
-                        s: studentsData[email],
-                      }));
-                      const totalCount = allStudentEntries.length;
-                      const pagoCount = allStudentEntries.filter((item) => item.s?.status === "Pago").length;
-                      const pendenteCount = allStudentEntries.filter((item) => item.s?.status === "Pendente").length;
-                      const atrasadoCount = allStudentEntries.filter((item) => item.s?.status === "Atrasado").length;
+                      const rawSearchTerm = paymentsSearch.toLowerCase().trim();
+                      const searchTokens = rawSearchTerm.split(/\s+/).filter(Boolean);
+
+                      // Search filter applied to status counts dynamically
+                      const searchFilteredEntries = Object.keys(studentsData)
+                        .map((email) => {
+                          const s = studentsData[email];
+                          if (!s) return null;
+                          const formattedDueDate = s.dueDate ? s.dueDate.split("-").reverse().join("/") : "";
+                          const searchableText = `${s.name || ""} ${email} ${s.plan || ""} ${s.status || ""} ${s.dueDate || ""} ${formattedDueDate}`.toLowerCase();
+                          const matchesSearch = !rawSearchTerm || searchTokens.every((token) => searchableText.includes(token));
+                          return matchesSearch ? { email, s } : null;
+                        })
+                        .filter((item): item is { email: string; s: StudentProfile } => item !== null);
+
+                      const totalCount = searchFilteredEntries.length;
+                      const pagoCount = searchFilteredEntries.filter((item) => item.s.status === "Pago").length;
+                      const pendenteCount = searchFilteredEntries.filter((item) => item.s.status === "Pendente").length;
+                      const atrasadoCount = searchFilteredEntries.filter((item) => item.s.status === "Atrasado").length;
 
                       return (
                         <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
@@ -18086,17 +18196,256 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           </option>
                         </select>
                       </div>
+
+                      {/* Seletor de Intervalo de Atraso */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider hidden sm:inline flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-red-400 shrink-0 inline" />
+                          Atraso:
+                        </span>
+                        <select
+                          value={paymentsDelayDays}
+                          onChange={(e) => setPaymentsDelayDays(Number(e.target.value))}
+                          className={`w-full sm:w-auto px-3 py-2 bg-[#0d0908]/80 border text-xs font-bold rounded-xl outline-none cursor-pointer transition-all ${
+                            paymentsDelayDays > 0
+                              ? "border-red-500/60 text-red-400 bg-red-500/10 shadow-sm shadow-red-500/20"
+                              : "border-viking-gold/20 hover:border-viking-gold/45 text-viking-silver/80"
+                          }`}
+                        >
+                          <option value={0} className="bg-[#140e0c] text-white">
+                            Qualquer Prazo
+                          </option>
+                          <option value={1} className="bg-[#140e0c] text-red-400 font-bold">
+                            ⚠️ Atrasados (&gt; 0 dias)
+                          </option>
+                          <option value={7} className="bg-[#140e0c] text-red-400 font-bold">
+                            🚨 Atraso &gt; 7 dias
+                          </option>
+                          <option value={15} className="bg-[#140e0c] text-red-400 font-bold">
+                            🔥 Atraso &gt; 15 dias
+                          </option>
+                          <option value={30} className="bg-[#140e0c] text-red-400 font-bold">
+                            💀 Atraso &gt; 30 dias
+                          </option>
+                        </select>
+                      </div>
                     </div>
+
+                    {/* Botões Rápidos de Intervalo de Atraso */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
+                      <span className="text-[10px] font-extrabold text-viking-silver/60 uppercase shrink-0 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-red-400 shrink-0" />
+                        Filtro de Atraso:
+                      </span>
+                      {[
+                        { label: "Todos os Prazos", days: 0 },
+                        { label: "⚠️ Em Atraso (>0d)", days: 1 },
+                        { label: "🚨 > 7 Dias", days: 7 },
+                        { label: "🔥 > 15 Dias", days: 15 },
+                        { label: "💀 > 30 Dias", days: 30 },
+                      ].map((item) => (
+                        <button
+                          key={item.days}
+                          type="button"
+                          onClick={() => setPaymentsDelayDays(item.days)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all border shrink-0 cursor-pointer ${
+                            paymentsDelayDays === item.days
+                              ? "bg-red-500/25 text-red-400 border-red-500/60 ring-1 ring-red-500/40 shadow-red-500/20 shadow-sm"
+                              : "bg-[#0d0908]/60 text-viking-silver/70 border-viking-gold/15 hover:border-viking-gold/35 hover:text-white"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Componente de Filtros Salvos */}
+                    <div className="p-3 bg-[#0d0908]/90 border border-viking-gold/20 rounded-xl space-y-2.5 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-viking-gold uppercase tracking-wider">
+                          <Filter className="w-3.5 h-3.5 text-viking-gold" />
+                          <span>Filtros Salvos</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewFilterNameInput(
+                              paymentsStatusFilter !== "all"
+                                ? `${paymentsStatusFilter}${paymentsDelayDays > 0 ? " >" + paymentsDelayDays + "d" : ""}${paymentsSearch ? " - " + paymentsSearch : ""}`
+                                : paymentsDelayDays > 0
+                                  ? `Atrasados >${paymentsDelayDays}d`
+                                  : paymentsSearch || "Filtro Personalizado"
+                            );
+                            setShowSaveFilterModal(true);
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-bold text-viking-gold bg-viking-gold/10 hover:bg-viking-gold/25 border border-viking-gold/30 hover:border-viking-gold/50 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Salvar Filtro Atual</span>
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {savedFinancialFilters.map((f) => {
+                          const isActive =
+                            paymentsSearch === f.search &&
+                            paymentsStatusFilter === f.status &&
+                            paymentsDelayDays === (f.delayDays || 0);
+
+                          return (
+                            <div
+                              key={f.id}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                                isActive
+                                  ? "bg-viking-gold/25 text-viking-gold border-viking-gold/60 ring-1 ring-viking-gold/40 shadow-viking-gold/20"
+                                  : "bg-[#140e0c]/80 text-viking-silver/80 border-viking-gold/15 hover:border-viking-gold/40 hover:text-white"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentsSearch(f.search);
+                                  setPaymentsStatusFilter(f.status);
+                                  setPaymentsDelayDays(f.delayDays || 0);
+                                  showToast(`Filtro "${f.name}" aplicado!`, "info");
+                                }}
+                                className="cursor-pointer flex items-center gap-1.5"
+                              >
+                                <span>{f.name}</span>
+                                {f.status !== "all" && (
+                                  <span
+                                    className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${
+                                      f.status === "Pago"
+                                        ? "bg-emerald-500/20 text-emerald-400"
+                                        : f.status === "Pendente"
+                                          ? "bg-amber-500/20 text-amber-400"
+                                          : "bg-red-500/20 text-red-400"
+                                    }`}
+                                  >
+                                    {f.status}
+                                  </span>
+                                )}
+                                {!!f.delayDays && (
+                                  <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                                    &gt;{f.delayDays}d
+                                  </span>
+                                )}
+                                {f.search && (
+                                  <span className="text-[9px] text-viking-silver/60 max-w-[90px] truncate italic">
+                                    "{f.search}"
+                                  </span>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSavedFilter(f.id);
+                                }}
+                                title="Excluir filtro salvo"
+                                className="text-viking-silver/40 hover:text-red-400 cursor-pointer p-0.5 transition-colors ml-0.5 rounded hover:bg-red-500/10"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+
+                        {savedFinancialFilters.length === 0 && (
+                          <span className="text-[11px] text-viking-silver/50 italic">
+                            Nenhum filtro salvo. Selecione status/busca/atraso e clique em "Salvar Filtro Atual".
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Modal para nomear o novo Filtro Salvo */}
+                    {showSaveFilterModal && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+                        <div className="bg-[#120d0b] border border-viking-gold/30 rounded-2xl p-5 w-full max-w-sm space-y-4 shadow-2xl animate-in fade-in zoom-in duration-150">
+                          <div className="flex items-center justify-between border-b border-viking-gold/15 pb-2.5">
+                            <h4 className="text-xs font-black text-viking-gold uppercase tracking-wider flex items-center gap-2">
+                              <Filter className="w-4 h-4 text-viking-gold" />
+                              Salvar Novo Filtro
+                            </h4>
+                            <button
+                              type="button"
+                              onClick={() => setShowSaveFilterModal(false)}
+                              className="text-viking-silver/60 hover:text-white text-xs cursor-pointer p-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <p className="text-xs text-viking-silver/80">
+                              Dê um nome para identificar e aplicar esta combinação com 1 clique:
+                            </p>
+
+                            <div className="bg-[#0d0908] p-3 rounded-xl border border-viking-gold/15 text-xs text-viking-silver/90 space-y-1">
+                              <div>
+                                <span className="text-viking-silver/60">Status:</span>{" "}
+                                <strong className="text-viking-gold">
+                                  {paymentsStatusFilter === "all" ? "Todos os Status" : paymentsStatusFilter}
+                                </strong>
+                              </div>
+                              <div>
+                                <span className="text-viking-silver/60">Termo de Busca:</span>{" "}
+                                <strong className="text-viking-gold">
+                                  {paymentsSearch || "(Nenhum filtro de texto)"}
+                                </strong>
+                              </div>
+                            </div>
+
+                            <input
+                              type="text"
+                              placeholder="Ex: Pendente - Alto Valor..."
+                              value={newFilterNameInput}
+                              onChange={(e) => setNewFilterNameInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveCurrentFilter();
+                              }}
+                              autoFocus
+                              className="w-full px-3 py-2 bg-[#0d0908] border border-viking-gold/30 hover:border-viking-gold focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white outline-none"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-viking-gold/10">
+                            <button
+                              type="button"
+                              onClick={() => setShowSaveFilterModal(false)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-viking-silver hover:text-white bg-viking-silver/10 hover:bg-viking-silver/20 cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveCurrentFilter}
+                              className="px-4 py-1.5 rounded-xl text-xs font-black text-black bg-viking-gold hover:bg-viking-gold-light transition-colors cursor-pointer"
+                            >
+                              Salvar Filtro
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Tabela de Alunos / Financeira (#financialTable) */}
                     <div id="financialTable" className="space-y-3">
                       {(() => {
+                        const rawTerm = paymentsSearch.toLowerCase().trim();
+                        const tokens = rawTerm.split(/\s+/).filter(Boolean);
+
                         const filtered = Object.keys(studentsData).filter(
                           (email) => {
                             const s = studentsData[email];
                             if (!s) return false;
 
-                            // Filter by Dropdown Status
+                            const daysOverdue = getDaysOverdue(s.dueDate, s.status);
+
+                            // Filter by Dropdown / Badge Status
                             if (
                               paymentsStatusFilter !== "all" &&
                               s.status !== paymentsStatusFilter
@@ -18104,12 +18453,20 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               return false;
                             }
 
-                            // Filter by search term (combined search: matches all entered tokens across name, email, plan, or status)
-                            const rawTerm = paymentsSearch.toLowerCase().trim();
+                            // Filter by Delay Interval
+                            if (paymentsDelayDays > 0) {
+                              if (daysOverdue < paymentsDelayDays) {
+                                return false;
+                              }
+                            }
+
+                            // Filter by Search string
                             if (!rawTerm) return true;
 
-                            const tokens = rawTerm.split(/\s+/).filter(Boolean);
-                            const searchableText = `${s.name || ""} ${email} ${s.plan || ""} ${s.status || ""}`.toLowerCase();
+                            const formattedDate = s.dueDate
+                              ? s.dueDate.split("-").reverse().join("/")
+                              : "";
+                            const searchableText = `${s.name || ""} ${email} ${s.plan || ""} ${s.status || ""} ${s.dueDate || ""} ${formattedDate} ${daysOverdue > 0 ? daysOverdue + "d atraso" : ""}`.toLowerCase();
 
                             return tokens.every((token) =>
                               searchableText.includes(token),
@@ -18117,27 +18474,66 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           },
                         );
 
-                        if (filtered.length === 0) {
-                          return (
-                            <div className="py-8 text-center text-viking-silver/60 bg-[#0d0908]/40 rounded-2xl border border-viking-gold/10">
-                              <Search className="w-8 h-8 mx-auto text-viking-silver/30 mb-2" />
-                              <p className="text-xs font-semibold text-viking-gold">
-                                Nenhum guerreiro encontrado
-                              </p>
-                              <p className="text-[11px] mt-0.5 text-viking-silver/50">
-                                {paymentsStatusFilter !== "all"
-                                  ? `Nenhum atleta com status "${paymentsStatusFilter}" para a busca atual.`
-                                  : `Nenhum atleta corresponde à busca "${paymentsSearch}".`}
-                              </p>
-                            </div>
-                          );
-                        }
+                        const totalCount = Object.keys(studentsData).length;
 
                         return (
-                          <div className="overflow-x-auto rounded-2xl border border-viking-gold/20 bg-[#0d0908]/80 shadow-md">
-                            <table className="w-full text-left border-collapse">
-                              <thead>
-                                <tr className="border-b border-viking-gold/20 bg-viking-gold/10 text-viking-gold text-[10px] uppercase font-black tracking-wider">
+                          <div className="space-y-2.5">
+                            {/* Real-time Filter Result Counter Bar */}
+                            <div className="flex items-center justify-between px-1.5 py-1 bg-[#0d0908]/60 border border-viking-gold/15 rounded-xl text-[11px] font-bold text-viking-silver/80">
+                              <div className="flex items-center gap-2">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-viking-gold opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-viking-gold"></span>
+                                </span>
+                                <span>
+                                  Exibindo <strong className="text-viking-gold font-black">{filtered.length}</strong> de{" "}
+                                  <strong className="text-white">{totalCount}</strong> guerreiros
+                                  {paymentsStatusFilter !== "all" && (
+                                    <span className="text-viking-gold/90 ml-1">
+                                      ({paymentsStatusFilter})
+                                    </span>
+                                  )}
+                                  {paymentsDelayDays > 0 && (
+                                    <span className="text-red-400 font-black ml-1">
+                                      (&gt; {paymentsDelayDays} {paymentsDelayDays === 1 ? "dia" : "dias"} em atraso)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              {(paymentsSearch || paymentsStatusFilter !== "all" || paymentsDelayDays > 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentsSearch("");
+                                    setPaymentsStatusFilter("all");
+                                    setPaymentsDelayDays(0);
+                                  }}
+                                  className="text-[10px] text-viking-gold/80 hover:text-viking-gold hover:underline cursor-pointer transition-colors"
+                                >
+                                  Limpar filtros
+                                </button>
+                              )}
+                            </div>
+
+                            {filtered.length === 0 ? (
+                              <div className="py-8 text-center text-viking-silver/60 bg-[#0d0908]/40 rounded-2xl border border-viking-gold/10">
+                                <Search className="w-8 h-8 mx-auto text-viking-silver/30 mb-2" />
+                                <p className="text-xs font-semibold text-viking-gold">
+                                  Nenhum guerreiro encontrado
+                                </p>
+                                <p className="text-[11px] mt-0.5 text-viking-silver/50">
+                                  {paymentsDelayDays > 0
+                                    ? `Nenhum atleta com atraso superior a ${paymentsDelayDays} dias.`
+                                    : paymentsStatusFilter !== "all"
+                                      ? `Nenhum atleta com status "${paymentsStatusFilter}" para a busca atual.`
+                                      : `Nenhum atleta corresponde à busca "${paymentsSearch}".`}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto rounded-2xl border border-viking-gold/20 bg-[#0d0908]/80 shadow-md">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-viking-gold/20 bg-viking-gold/10 text-viking-gold text-[10px] uppercase font-black tracking-wider">
                                   <th className="p-3">Atleta</th>
                                   <th className="p-3">Plano</th>
                                   <th className="p-3">Valor</th>
@@ -18155,11 +18551,13 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                     ? s.dueDate.split("-").reverse().join("/")
                                     : "N/A";
 
-                                  const isOverdue = s.status === "Atrasado";
+                                  const daysOverdue = getDaysOverdue(s.dueDate, s.status);
+                                  const isOverdueByDate = daysOverdue > 0 || s.status === "Atrasado";
                                   const isPending = s.status === "Pendente";
+                                  const isOverdue = isOverdueByDate;
 
                                   const customWaText = isOverdue
-                                    ? `Saudações, guerreiro ${s.name}! Identificamos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force encontra-se ATRASADA (Vencimento: ${formattedDueDate}). Por favor, regularize sua situação o quanto antes para manter seu acesso ativo aos treinos! 💪⚔️`
+                                    ? `Saudações, guerreiro ${s.name}! Identificamos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force encontra-se ATRASADA${daysOverdue > 0 ? ` há ${daysOverdue} dias` : ""} (Vencimento: ${formattedDueDate}). Por favor, regularize sua situação o quanto antes para manter seu acesso ativo aos treinos! 💪⚔️`
                                     : `Saudações, guerreiro ${s.name}! Lembramos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force consta como PENDENTE de pagamento (Vencimento: ${formattedDueDate}). Por favor, envie o comprovante assim que possível! Qualquer dúvida estamos à disposição. 💪⚔️`;
 
                                   const mailSubject = isOverdue
@@ -18167,19 +18565,30 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                     : `Lembrete de Pagamento - Viking Force`;
 
                                   const mailBody = isOverdue
-                                    ? `Saudações, guerreiro ${s.name}!\n\nIdentificamos que a mensalidade do seu plano (${s.plan}) na Viking Force encontra-se ATRASADA (Vencimento: ${formattedDueDate}).\nPor favor, efetue o pagamento para manter seu acesso ativo aos treinos.\n\nAtenciosamente,\nEquipe Viking Force`
+                                    ? `Saudações, guerreiro ${s.name}!\n\nIdentificamos que a mensalidade do seu plano (${s.plan}) na Viking Force encontra-se ATRASADA${daysOverdue > 0 ? ` há ${daysOverdue} dias` : ""} (Vencimento: ${formattedDueDate}).\nPor favor, efetue o pagamento para manter seu acesso ativo aos treinos.\n\nAtenciosamente,\nEquipe Viking Force`
                                     : `Saudações, guerreiro ${s.name}!\n\nLembramos que a mensalidade do seu plano (${s.plan}) na Viking Force consta como PENDENTE (Vencimento: ${formattedDueDate}).\nPor favor, envie o comprovante de pagamento assim que possível.\n\nAtenciosamente,\nEquipe Viking Force`;
 
                                   return (
                                     <tr
                                       key={email}
                                       onClick={() => setSelectedPaymentStudent(email)}
-                                      className="hover:bg-viking-gold/5 transition-colors cursor-pointer group"
+                                      className={`transition-colors cursor-pointer group border-b border-viking-gold/10 ${
+                                        isOverdueByDate
+                                          ? "bg-red-950/40 hover:bg-red-900/50 border-l-4 border-l-red-500 shadow-[inset_0_0_12px_rgba(239,68,68,0.2)]"
+                                          : "hover:bg-viking-gold/5"
+                                      }`}
                                     >
                                       <td className="p-3">
-                                        <p className="font-extrabold text-white group-hover:text-viking-gold transition-colors">
-                                          {s.name}
-                                        </p>
+                                        <div className="flex items-center gap-2">
+                                          <p className={`font-extrabold transition-colors ${isOverdueByDate ? "text-red-200 group-hover:text-red-400" : "text-white group-hover:text-viking-gold"}`}>
+                                            {s.name}
+                                          </p>
+                                          {isOverdueByDate && (
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/30 text-red-300 border border-red-500/50 animate-pulse shrink-0">
+                                              Atrasado
+                                            </span>
+                                          )}
+                                        </div>
                                         <p className="text-[10px] text-viking-silver/50 truncate max-w-[140px]">
                                           {email}
                                         </p>
@@ -18194,21 +18603,54 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                           maximumFractionDigits: 2,
                                         })}
                                       </td>
-                                      <td className="p-3 text-[11px] font-medium text-viking-gold/80">
-                                        {formattedDueDate}
+                                      <td className="p-3 text-[11px] font-medium">
+                                        <div className="flex flex-col">
+                                          <span className={isOverdueByDate ? "text-red-400 font-extrabold flex items-center gap-1.5" : "text-viking-gold/80"}>
+                                            {formattedDueDate}
+                                            {isOverdueByDate && (
+                                              <span className="relative flex h-2 w-2">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                              </span>
+                                            )}
+                                          </span>
+                                          {daysOverdue > 0 && (
+                                            <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md bg-red-500/30 text-red-300 border border-red-500/50 shadow-sm w-fit mt-0.5">
+                                              <Clock className="w-2.5 h-2.5 text-red-400 shrink-0" />
+                                              {daysOverdue} {daysOverdue === 1 ? "dia" : "dias"} em atraso
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
-                                      <td className="p-3 text-center">
-                                        <span
-                                          className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border inline-block ${
+                                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                          value={s.status || "Pendente"}
+                                          onChange={(e) => {
+                                            e.stopPropagation();
+                                            handleQuickStatusChange(
+                                              email,
+                                              e.target.value as "Pago" | "Pendente" | "Atrasado",
+                                            );
+                                          }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border outline-none cursor-pointer transition-all shadow-sm ${
                                             s.status === "Pago"
-                                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 focus:ring-1 focus:ring-emerald-400"
                                               : s.status === "Pendente"
-                                                ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                                                : "bg-red-500/10 text-red-400 border-red-500/25"
+                                                ? "bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30 focus:ring-1 focus:ring-amber-400"
+                                                : "bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30 focus:ring-1 focus:ring-red-400"
                                           }`}
                                         >
-                                          {s.status}
-                                        </span>
+                                          <option value="Pago" className="bg-[#140e0c] text-emerald-400 font-bold">
+                                            Pago
+                                          </option>
+                                          <option value="Pendente" className="bg-[#140e0c] text-amber-400 font-bold">
+                                            Pendente
+                                          </option>
+                                          <option value="Atrasado" className="bg-[#140e0c] text-red-400 font-bold">
+                                            Atrasado
+                                          </option>
+                                        </select>
                                       </td>
                                       <td className="p-3 text-right">
                                         <div className="flex items-center justify-end gap-1.5">
@@ -18264,9 +18706,11 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               </tbody>
                             </table>
                           </div>
-                        );
-                      })()}
-                    </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
 
                     {/* JANELA DE GERENCIAMENTO DE PAGAMENTO (SUB-MODAL) */}
                     <AnimatePresence>
