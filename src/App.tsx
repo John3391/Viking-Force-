@@ -5861,7 +5861,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
     const updatedProfile: StudentProfile = {
       ...activeStudentProfile,
-      sessions: [session, ...(activeStudentProfile.sessions || [])],
+      sessions: activeStudentProfile.sessions?.some(s => s.id === session.id) 
+        ? activeStudentProfile.sessions.map(s => s.id === session.id ? session : s)
+        : [session, ...(activeStudentProfile.sessions || [])],
     };
 
     if (improvedLifts.length > 0) {
@@ -5874,8 +5876,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     }
 
     const studentEmail = (
-      currentUser?.email ||
       activeStudentProfile.email ||
+      currentUser?.email ||
       ""
     )
       .toLowerCase()
@@ -6214,8 +6216,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
     // Auto-save completed session & student feedback immediately to DB & Firebase
     const studentEmail = (
-      currentUser?.email ||
       activeStudentProfile.email ||
+      currentUser?.email ||
       ""
     )
       .toLowerCase()
@@ -9674,7 +9676,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     role={currentUser?.role || "student"}
                     onAddSession={(session) => {
                       handleUpdateStudentCardio(
-                        currentUser?.email || "",
+                        activeStudentProfile.email || currentUser?.email || "",
                         (p) => ({
                           cardioSessions: [
                             ...(p.cardioSessions || []),
@@ -9689,7 +9691,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     }}
                     onAddGoal={(goal) => {
                       handleUpdateStudentCardio(
-                        currentUser?.email || "",
+                        activeStudentProfile.email || currentUser?.email || "",
                         (p) => ({
                           cardioGoals: [...(p.cardioGoals || []), goal],
                         }),
@@ -9698,7 +9700,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     }}
                     onDeleteSession={(sessionId) => {
                       handleUpdateStudentCardio(
-                        currentUser?.email || "",
+                        activeStudentProfile.email || currentUser?.email || "",
                         (p) => ({
                           cardioSessions: (p.cardioSessions || []).filter(
                             (s) => s.id !== sessionId,
@@ -9709,7 +9711,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     }}
                     onDeleteGoal={(goalId) => {
                       handleUpdateStudentCardio(
-                        currentUser?.email || "",
+                        activeStudentProfile.email || currentUser?.email || "",
                         (p) => ({
                           cardioGoals: (p.cardioGoals || []).filter(
                             (g) => g.id !== goalId,
@@ -9720,7 +9722,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                     }}
                     onUpdateGoalStatus={(goalId, completed) => {
                       handleUpdateStudentCardio(
-                        currentUser?.email || "",
+                        activeStudentProfile.email || currentUser?.email || "",
                         (p) => {
                           const updatedGoals = (p.cardioGoals || []).map((g) =>
                             g.id === goalId
@@ -12123,6 +12125,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           ([email, student]: [string, any]) => {
                             if (
                               student &&
+                              !student.isDeleted &&
                               student.sessions &&
                               student.sessions.length > 0
                             ) {
@@ -12140,10 +12143,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         // Sort by date/id
                         allSessions.sort((a, b) => {
                           const aTime = a.id
-                            ? parseInt(a.id.split("_")[1] || "0")
+                            ? parseInt(a.id.split("_")[0] || "0")
                             : 0;
                           const bTime = b.id
-                            ? parseInt(b.id.split("_")[1] || "0")
+                            ? parseInt(b.id.split("_")[0] || "0")
                             : 0;
                           return bTime - aTime;
                         });
@@ -18872,6 +18875,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                           ([email, student]: [string, any]) => {
                             if (
                               student &&
+                              !student.isDeleted &&
                               student.sessions &&
                               student.sessions.length > 0
                             ) {
@@ -18888,10 +18892,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                         allSessions.sort((a, b) => {
                           const aTime = a.id
-                            ? parseInt(a.id.split("_")[1] || "0")
+                            ? parseInt(a.id.split("_")[0] || "0")
                             : 0;
                           const bTime = b.id
-                            ? parseInt(b.id.split("_")[1] || "0")
+                            ? parseInt(b.id.split("_")[0] || "0")
                             : 0;
                           return bTime - aTime;
                         });
@@ -23373,13 +23377,6 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       const copy = { ...studentsData };
                                       delete copy[email];
                                       saveStudentsToDB(copy);
-                                      deleteStudentFromFirebase(email).catch(
-                                        (err) =>
-                                          console.error(
-                                            "Firebase delete permanent error:",
-                                            err,
-                                          ),
-                                      );
                                       showToast(
                                         `Guerreiro ${s.name} banido definitivamente!`,
                                         "success",
