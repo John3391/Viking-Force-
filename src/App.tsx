@@ -4354,23 +4354,53 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
   const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && currentUser?.email && activeStudentProfile) {
-      if (file.size > 2 * 1024 * 1024) {
-        showToast("Escolha uma imagem de até 2MB.", "error");
+      if (file.size > 5 * 1024 * 1024) {
+        showToast("Escolha uma imagem de até 5MB.", "error");
         return;
       }
       const reader = new FileReader();
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
-          const updatedProfile = {
-            ...activeStudentProfile,
-            photoUrl: result,
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const MAX_WIDTH = 150;
+            const MAX_HEIGHT = 150;
+            let width = img.width;
+            let height = img.height;
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+            
+            const updatedProfile = {
+              ...activeStudentProfile,
+              photoUrl: dataUrl,
+            };
+            const studentEmail = currentUser.email.toLowerCase();
+            const updatedStudents = {
+              ...studentsData,
+              [studentEmail]: updatedProfile,
+            };
+            setStudentsData(updatedStudents);
+            saveStudentsToDB(updatedStudents);
+            saveStudentToFirebase(studentEmail, updatedProfile).catch(err => console.error(err));
+            showToast("Sua foto de perfil foi atualizada!", "success");
           };
-          saveStudentsToDB({
-            ...studentsData,
-            [currentUser.email.toLowerCase()]: updatedProfile,
-          });
-          showToast("Sua foto de perfil foi atualizada!", "success");
+          img.src = result;
         }
       };
       reader.readAsDataURL(file);
@@ -6209,107 +6239,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       },
     };
 
-    const updatedProfile: StudentProfile = {
-      ...activeStudentProfile,
-      sessions: [newSession, ...(activeStudentProfile.sessions || [])],
-    };
-
-    // Auto-save completed session & student feedback immediately to DB & Firebase
-    const studentEmail = (
-      activeStudentProfile.email ||
-      currentUser?.email ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-
-    if (studentEmail) {
-      const updatedStudents = {
-        ...studentsData,
-        [studentEmail]: updatedProfile,
-      };
-      setStudentsData(updatedStudents);
-      saveStudentsToDB(updatedStudents);
-      saveStudentToFirebase(studentEmail, updatedProfile).catch((err) =>
-        console.error("Erro no salvamento automático do treino no Firebase:", err)
-      );
-    }
-
     setPendingSession(newSession);
     setConfirmSessionModalOpen(true);
-
-    // Check for Wilks goal achievement
-    const oldTotal =
-      (activeStudentProfile.prs?.squat || 0) +
-      (activeStudentProfile.prs?.bench || 0) +
-      (activeStudentProfile.prs?.deadlift || 0);
-    const oldWilks = calculateWilks(
-      activeStudentProfile.gender || "male",
-      activeStudentProfile.bodyWeight || 0,
-      oldTotal,
-    );
-
-    const getTierIdx = (w: number) => {
-      let idx = 0;
-      for (let i = WILKS_LEVELS.length - 1; i >= 0; i--) {
-        if (w >= WILKS_LEVELS[i].minWilks) {
-          idx = i;
-          break;
-        }
-      }
-      return idx;
-    };
-
-    const oldTierIdx = getTierIdx(oldWilks);
-    const newTotal =
-      (updatedProfile.prs?.squat || 0) +
-      (updatedProfile.prs?.bench || 0) +
-      (updatedProfile.prs?.deadlift || 0);
-    const newWilks = calculateWilks(
-      updatedProfile.gender || "male",
-      updatedProfile.bodyWeight || 0,
-      newTotal,
-    );
-    const newTierIdx = getTierIdx(newWilks);
-
-    if (newTierIdx > oldTierIdx) {
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ["#d4af37", "#e0d3a8", "#ffffff"],
-      });
-      showToast(
-        `🏆 Parabéns! Você atingiu a meta Wilks: ${WILKS_LEVELS[newTierIdx].name}!`,
-        "success",
-      );
-    }
-
-    setWorkoutModalOpen(false);
-    setSessionRpeState({});
-    setExerciseFailureState({});
-    setExerciseSetsState({});
-    setExerciseWarmupState({});
-    setRestTimerActive(false);
-    setSessionNote("");
-
-    // Smooth scroll to top of screen
-    setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 50);
-
-    if (volumeDeficit > 0) {
-      showToast(
-        `Treino registrado! Alerta Viking de Volume: Déficit de ${volumeDeficit} reps. Estratégia de compensação gerada em seu Histórico!`,
-        "info",
-      );
-    } else {
-      showToast(
-        `Treino registrado! RPE Médio: ${avgRPE.toFixed(1)}. Seu feedback foi enviado ao John.`,
-        "success",
-      );
-    }
   };
+
 
   // --- LEADERBOARD LOGIC & HELPERS ---
   const calculateWilks = (
@@ -12143,10 +12076,10 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                         // Sort by date/id
                         allSessions.sort((a, b) => {
                           const aTime = a.id
-                            ? parseInt(a.id.split("_")[0] || "0")
+                            ? parseInt(a.id.split("_")[1] || "0")
                             : 0;
                           const bTime = b.id
-                            ? parseInt(b.id.split("_")[0] || "0")
+                            ? parseInt(b.id.split("_")[1] || "0")
                             : 0;
                           return bTime - aTime;
                         });
@@ -18892,10 +18825,10 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                         allSessions.sort((a, b) => {
                           const aTime = a.id
-                            ? parseInt(a.id.split("_")[0] || "0")
+                            ? parseInt(a.id.split("_")[1] || "0")
                             : 0;
                           const bTime = b.id
-                            ? parseInt(b.id.split("_")[0] || "0")
+                            ? parseInt(b.id.split("_")[1] || "0")
                             : 0;
                           return bTime - aTime;
                         });
@@ -23357,6 +23290,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       isDeleted: false,
                                     };
                                     saveStudentsToDB(copy);
+                                    saveStudentToFirebase(email, copy[email]).catch((err) => console.error("Firebase sync error on restore:", err));
                                     showToast(
                                       `Guerreiro ${s.name} restaurado com sucesso!`,
                                       "success",
@@ -23377,6 +23311,9 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       const copy = { ...studentsData };
                                       delete copy[email];
                                       saveStudentsToDB(copy);
+                                      deleteStudentFromFirebase(email).catch(
+                                        (err) => console.error("Firebase delete permanent error:", err)
+                                      );
                                       showToast(
                                         `Guerreiro ${s.name} banido definitivamente!`,
                                         "success",
@@ -26821,6 +26758,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         deletedAt: new Date().toISOString(),
                       };
                       saveStudentsToDB(copy);
+                      saveStudentToFirebase(email, copy[email]).catch((err) => console.error("Firebase sync error on soft delete:", err));
                       setDeletingStudentEmail(null);
                       showToast(
                         "Atleta movido para a Lixeira Virtual!",
