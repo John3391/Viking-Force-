@@ -2068,6 +2068,33 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     };
   }, []);
 
+  // Fallback Polling for Trainer Real-time Failover
+  useEffect(() => {
+    if (!isLoggedIn || currentUser?.role !== "trainer") return;
+
+    const fallbackInterval = setInterval(async () => {
+      try {
+        const remoteStudents = await fetchStudentsFromFirebase();
+        if (remoteStudents && Object.keys(remoteStudents).length > 0) {
+          setStudentsData((prev) => {
+            const prevStr = JSON.stringify(prev);
+            const currStr = JSON.stringify(remoteStudents);
+            if (prevStr !== currStr) {
+              console.log("[Fallback Polling] Sincronizando dados dos alunos com atraso (fallback)...");
+              localStorage.setItem("viking_students", currStr);
+              return remoteStudents;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn("[Fallback Polling] Erro ao sincronizar:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(fallbackInterval);
+  }, [isLoggedIn, currentUser]);
+
   // Firebase Cloud Messaging (FCM) Push Notifications State & Auto-Sync
   const [fcmPushStatus, setFcmPushStatus] = useState<"idle" | "enabled" | "denied" | "unsupported">("idle");
   const [fcmWizardStep, setFcmWizardStep] = useState<number>(1);
@@ -2944,6 +2971,61 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       console.error("Erro ao gerar PDF de treino:", err);
       showToast("Falha ao gerar PDF de treino.", "error");
       return false;
+    }
+  };
+
+  const handleAutomateWhatsAppReminders = () => {
+    let sentCount = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    Object.values(studentsData).forEach((s) => {
+      // @ts-ignore
+      if (s.status === "Atrasado") {
+        let daysDelayed = 0;
+        // @ts-ignore
+        if (s.dueDate) {
+          // @ts-ignore
+          const [year, month, day] = s.dueDate.split("-");
+          const due = new Date(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+          );
+          daysDelayed = Math.max(
+            0,
+            Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24)),
+          );
+        }
+
+        if (daysDelayed > 7) {
+          // @ts-ignore
+          const phoneClean = (s.phone || "").replace(/\D/g, "");
+          if (phoneClean) {
+            // @ts-ignore
+            const formattedDueDate = s.dueDate
+              // @ts-ignore
+              ? s.dueDate.split("-").reverse().join("/")
+              : "N/A";
+            // @ts-ignore
+            const customWaText = `Saudações, guerreiro ${s.name}! Identificamos que a mensalidade da sua assinatura no plano ${s.plan} na Viking Force encontra-se ATRASADA (Vencimento: ${formattedDueDate}). Por favor, regularize sua situação o quanto antes para manter seu acesso ativo aos treinos! 💪⚔️`;
+            window.open(
+              `https://wa.me/${phoneClean}?text=${encodeURIComponent(customWaText)}`,
+              "_blank",
+            );
+            sentCount++;
+          }
+        }
+      }
+    });
+
+    if (sentCount > 0) {
+      showToast(`${sentCount} lembretes enviados via WhatsApp!`, "success");
+    } else {
+      showToast(
+        "Nenhum guerreiro com mais de 7 dias de atraso ou sem telefone.",
+        "info",
+      );
     }
   };
 
@@ -8427,7 +8509,7 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}
                   />
-                  <span>{isOnline ? "Modo Online" : "Modo Offline"}</span>
+                  <span>{isOnline ? "Firebase Realtime (Ao Vivo)" : "Modo Offline"}</span>
                 </button>
 
                 {/* Theme Toggle Button (Forja Solar vs Noite de Valhalla) */}
@@ -17835,7 +17917,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       serviços de treinamento esportivo.
                     </p>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
                         onClick={handleExportFinancialSummary}
                         className="flex-1 px-3 py-2 rounded-xl bg-viking-gold/10 hover:bg-viking-gold/20 text-viking-gold border border-viking-gold/30 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
@@ -17852,6 +17934,106 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                       </button>
                     </div>
 
+                    {/* Automação de WhatsApp (Atrasados > 7 dias) */}
+                    <div className="bg-[#1ea453]/10 border border-[#1ea453]/30 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-[#1ea453]/20 flex items-center justify-center shrink-0">
+                          <MessageCircle className="w-4 h-4 text-[#1ea453]" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-white uppercase tracking-wider">
+                            Automação de Lembretes
+                          </p>
+                          <p className="text-[10px] text-viking-silver/70">
+                            Dispara WhatsApp para atrasados há mais de 7 dias.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleAutomateWhatsAppReminders}
+                        className="w-full sm:w-auto px-4 py-2 bg-[#1ea453] hover:bg-[#167d3e] text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-[#1ea453]/20 cursor-pointer shrink-0"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        Disparar Lembretes
+                      </button>
+                    </div>
+
+                    {/* Contadores de Status / Badges Interativas */}
+                    {(() => {
+                      const allStudentEntries = Object.keys(studentsData).map((email) => ({
+                        email,
+                        s: studentsData[email],
+                      }));
+                      const totalCount = allStudentEntries.length;
+                      const pagoCount = allStudentEntries.filter((item) => item.s?.status === "Pago").length;
+                      const pendenteCount = allStudentEntries.filter((item) => item.s?.status === "Pendente").length;
+                      const atrasadoCount = allStudentEntries.filter((item) => item.s?.status === "Atrasado").length;
+
+                      return (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentsStatusFilter("all")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                              paymentsStatusFilter === "all"
+                                ? "bg-viking-gold/25 text-viking-gold border-viking-gold/60 shadow-sm shadow-viking-gold/20"
+                                : "bg-[#0d0908]/60 text-viking-silver/70 border-viking-gold/15 hover:border-viking-gold/35 hover:text-white"
+                            }`}
+                          >
+                            <span>Todos</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-viking-gold/20 text-[10px] font-black text-viking-gold">
+                              {totalCount}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentsStatusFilter("Pago")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                              paymentsStatusFilter === "Pago"
+                                ? "bg-emerald-500/25 text-emerald-400 border-emerald-500/60 shadow-sm shadow-emerald-500/20"
+                                : "bg-[#0d0908]/60 text-emerald-400/80 border-emerald-500/20 hover:border-emerald-500/40 hover:text-emerald-300"
+                            }`}
+                          >
+                            <span>Pago</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-[10px] font-black text-emerald-300">
+                              {pagoCount}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentsStatusFilter("Pendente")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                              paymentsStatusFilter === "Pendente"
+                                ? "bg-amber-500/25 text-amber-400 border-amber-500/60 shadow-sm shadow-amber-500/20"
+                                : "bg-[#0d0908]/60 text-amber-400/80 border-amber-500/20 hover:border-amber-500/40 hover:text-amber-300"
+                            }`}
+                          >
+                            <span>Pendente</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-[10px] font-black text-amber-300">
+                              {pendenteCount}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentsStatusFilter("Atrasado")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                              paymentsStatusFilter === "Atrasado"
+                                ? "bg-red-500/25 text-red-400 border-red-500/60 shadow-sm shadow-red-500/20"
+                                : "bg-[#0d0908]/60 text-red-400/80 border-red-500/20 hover:border-red-500/40 hover:text-red-300"
+                            }`}
+                          >
+                            <span>Atrasado</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-red-500/20 text-[10px] font-black text-red-300">
+                              {atrasadoCount}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
                     {/* Controles de Filtro e Busca */}
                     <div className="flex flex-col sm:flex-row gap-2.5">
                       {/* Campo de busca em tempo real */}
@@ -17861,7 +18043,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                         </div>
                         <input
                           type="text"
-                          placeholder="Buscar guerreiro por nome ou email..."
+                          placeholder="Buscar por nome, email, plano ou status (ex: 'Pedro Pago')..."
                           value={paymentsSearch}
                           onChange={(e) => setPaymentsSearch(e.target.value)}
                           className="w-full pl-9 pr-8 py-2 bg-[#0d0908]/80 border border-viking-gold/20 hover:border-viking-gold/45 focus:border-viking-gold focus:ring-1 focus:ring-viking-gold rounded-xl text-xs text-white placeholder-viking-silver/45 outline-none transition-all"
@@ -17914,7 +18096,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             const s = studentsData[email];
                             if (!s) return false;
 
-                            // Filter by Status
+                            // Filter by Dropdown Status
                             if (
                               paymentsStatusFilter !== "all" &&
                               s.status !== paymentsStatusFilter
@@ -17922,13 +18104,15 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               return false;
                             }
 
-                            // Filter by search term
-                            const term = paymentsSearch.toLowerCase().trim();
-                            if (!term) return true;
-                            return (
-                              s.name.toLowerCase().includes(term) ||
-                              email.toLowerCase().includes(term) ||
-                              (s.plan && s.plan.toLowerCase().includes(term))
+                            // Filter by search term (combined search: matches all entered tokens across name, email, plan, or status)
+                            const rawTerm = paymentsSearch.toLowerCase().trim();
+                            if (!rawTerm) return true;
+
+                            const tokens = rawTerm.split(/\s+/).filter(Boolean);
+                            const searchableText = `${s.name || ""} ${email} ${s.plan || ""} ${s.status || ""}`.toLowerCase();
+
+                            return tokens.every((token) =>
+                              searchableText.includes(token),
                             );
                           },
                         );
