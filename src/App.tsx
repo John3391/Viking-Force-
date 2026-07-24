@@ -18366,6 +18366,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
 
                                   const daysOverdue = getDaysOverdue(s.dueDate, s.status);
                                   const isPastDue = (() => {
+                                    if (s.status === "Pago") return false;
                                     if (!s.dueDate) return false;
                                     const parts = s.dueDate.trim().split("-");
                                     if (parts.length !== 3) return false;
@@ -18398,7 +18399,7 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                       className={`transition-colors cursor-pointer group border-b border-viking-gold/10 ${
                                         isPastDue
                                           ? "bg-red-950/40 border-l-4 border-l-red-500"
-                                          : "hover:bg-viking-gold/5"
+                                          : "border-l-4 border-l-transparent hover:bg-viking-gold/5"
                                       }`}
                                     >
                                       <td className="p-3">
