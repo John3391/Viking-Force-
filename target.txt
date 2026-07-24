@@ -1,0 +1,6 @@
+
+    const updatedStudents = {
+      ...studentsData,
+      [studentEmail]: updatedProfile,
+    };
+

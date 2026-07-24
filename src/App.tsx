@@ -1,6 +1,5 @@
 import { CardioView } from "./components/CardioView";
 import { PrCalculator } from "./components/PrCalculator";
-import { VikingWeatherWidget } from "./components/VikingWeatherWidget";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -5913,21 +5912,19 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
       .toLowerCase()
       .trim();
 
-    const updatedStudents = {
-      ...studentsData,
-      [studentEmail]: updatedProfile,
-    };
-
-    saveStudentsToDB(updatedStudents);
-
-    if (studentEmail) {
-      saveStudentToFirebase(studentEmail, updatedProfile).catch((err) =>
-        console.error(
-          "Direct Firebase save error on workout completion:",
-          err,
-        ),
-      );
-    }
+    setStudentsData((prev) => {
+      const updated = {
+        ...prev,
+        [studentEmail]: updatedProfile,
+      };
+      localStorage.setItem("viking_students", JSON.stringify(updated));
+      if (studentEmail) {
+        saveStudentToFirebase(studentEmail, updatedProfile).catch((err) =>
+          console.error("Firebase save athlete error:", err)
+        );
+      }
+      return updated;
+    });
 
     // Check for Wilks goal achievement
     const oldTotal =
@@ -10402,7 +10399,6 @@ Com base nessa pontuação de força proporcional, ${warrior.name} conquistou a 
                           </div>
                         </div>
 
-                        <VikingWeatherWidget />
 
                         {/* PERFORMANCE STATS */}
                         {isAutoBackingUp && (

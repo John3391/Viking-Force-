@@ -297,11 +297,14 @@ export async function saveStudentToFirebase(email: string, student: StudentProfi
     
     console.log(`[Firebase Dirty Check] Student profile for ${cleanEmail} IS DIRTY (has changes). Writing to Firestore...`);
     
+    // Strip any undefined values to prevent Firestore errors
+    const payload = JSON.parse(JSON.stringify(student));
+
     // Direct setDoc with merge: true ensures atomic, complete sync
-    await setDoc(doc(db, 'students', cleanEmail), student, { merge: true });
+    await setDoc(doc(db, 'students', cleanEmail), payload, { merge: true });
     
     // Keep cache synchronized with newly written data
-    studentCache.set(cleanEmail, JSON.parse(JSON.stringify(student)));
+    studentCache.set(cleanEmail, payload);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `students/${email}`);
   }

@@ -1,9 +1,11 @@
-import re
-
 with open('src/App.tsx', 'r') as f:
     content = f.read()
 
-target_pattern = r"    const updatedStudents = \{\s*\.\.\.studentsData,\s*\[studentEmail\]: updatedProfile,\s*\};\s*saveStudentsToDB\(updatedStudents\);\s*if \(studentEmail\) \{\s*saveStudentToFirebase\(studentEmail, updatedProfile\)\.catch\(\(err\) =>\s*console\.error\(\s*\"Direct Firebase save error on workout completion:\",\s*err,\s*\),\s*\);\s*\}"
+target = """    const updatedStudents = {
+      ...studentsData,
+      [studentEmail]: updatedProfile,
+    };
+    saveStudentsToDB(updatedStudents);"""
 
 replacement = """    setStudentsData((prev) => {
       const updatedStudents = {
@@ -19,7 +21,7 @@ replacement = """    setStudentsData((prev) => {
       return updatedStudents;
     });"""
 
-new_content = re.sub(target_pattern, replacement, content, count=1)
+content = content.replace(target, replacement)
 
 with open('src/App.tsx', 'w') as f:
-    f.write(new_content)
+    f.write(content)
