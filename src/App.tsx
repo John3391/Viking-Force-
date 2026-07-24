@@ -93,6 +93,7 @@ import {
   CheckCircle2,
   Unlock,
   UserCheck,
+  ArrowUpDown,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import confetti from "canvas-confetti";
@@ -870,6 +871,8 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
     "all" | "Pago" | "Pendente" | "Atrasado"
   >("all");
   const [paymentsDelayDays, setPaymentsDelayDays] = useState<number>(0);
+  const [showOnlyVencidas, setShowOnlyVencidas] = useState(false);
+  const [vencimentoSortDir, setVencimentoSortDir] = useState<"asc" | "desc" | null>(null);
   const [savedFinancialFilters, setSavedFinancialFilters] = useState<
     Array<{
       id: string;
@@ -18273,6 +18276,21 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                               }
                             }
 
+                            // Filter by Vencidas
+                            if (showOnlyVencidas) {
+                              const isPastDue = (() => {
+                                if (s.status === "Pago") return false;
+                                if (!s.dueDate) return false;
+                                const parts = s.dueDate.trim().split("-");
+                                if (parts.length !== 3) return false;
+                                const due = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                return due.getTime() < today.getTime();
+                              })();
+                              if (!isPastDue) return false;
+                            }
+
                             // Filter by Search string
                             if (!rawTerm) return true;
 
@@ -18286,6 +18304,25 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                             );
                           },
                         );
+
+                        if (vencimentoSortDir) {
+                          filtered.sort((emailA, emailB) => {
+                            const dateA = studentsData[emailA]?.dueDate;
+                            const dateB = studentsData[emailB]?.dueDate;
+                            if (!dateA && !dateB) return 0;
+                            if (!dateA) return 1;
+                            if (!dateB) return -1;
+                            
+                            const timeA = new Date(dateA).getTime();
+                            const timeB = new Date(dateB).getTime();
+                            
+                            if (vencimentoSortDir === "asc") {
+                              return timeA - timeB;
+                            } else {
+                              return timeB - timeA;
+                            }
+                          });
+                        }
 
                         const totalCount = Object.keys(studentsData).length;
 
@@ -18313,13 +18350,14 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                   )}
                                 </span>
                               </div>
-                              {(paymentsSearch || paymentsStatusFilter !== "all" || paymentsDelayDays > 0) && (
+                              {(paymentsSearch || paymentsStatusFilter !== "all" || paymentsDelayDays > 0 || showOnlyVencidas) && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setPaymentsSearch("");
                                     setPaymentsStatusFilter("all");
                                     setPaymentsDelayDays(0);
+                                    setShowOnlyVencidas(false);
                                   }}
                                   className="text-[10px] text-viking-gold/80 hover:text-viking-gold hover:underline cursor-pointer transition-colors"
                                 >
@@ -18350,7 +18388,27 @@ Seu treinador acaba de preparar e atualizar a sua ficha de treino *{NOME_TREINO}
                                   <th className="p-3">Atleta</th>
                                   <th className="p-3">Plano</th>
                                   <th className="p-3">Valor</th>
-                                  <th className="p-3">Vencimento</th>
+                                  <th className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      Vencimento
+                                      <button
+                                        type="button"
+                                        onClick={() => setVencimentoSortDir(prev => prev === "asc" ? "desc" : prev === "desc" ? null : "asc")}
+                                        className={`p-0.5 rounded transition-colors ${vencimentoSortDir ? 'bg-viking-gold/20 text-viking-gold' : 'text-viking-silver/50 hover:text-viking-gold/80'}`}
+                                        title="Ordenar por data"
+                                      >
+                                        <ArrowUpDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowOnlyVencidas(!showOnlyVencidas)}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] transition-colors ${showOnlyVencidas ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-[#0d0908]/40 text-viking-silver hover:text-viking-gold border border-viking-gold/20'}`}
+                                        title="Mostrar apenas vencidas"
+                                      >
+                                        Vencidas
+                                      </button>
+                                    </div>
+                                  </th>
                                   <th className="p-3 text-center">Status do Plano</th>
                                   <th className="p-3 text-right">Ações</th>
                                 </tr>
